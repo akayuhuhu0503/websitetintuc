@@ -1,0 +1,12 @@
+@model IReadOnlyList<MenuCategory>
+<nav class="main-nav" aria-label="Điều hướng chính">
+    <div class="container nav-inner">
+        <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links">☰ <span>Danh mục</span></button>
+        <div id="primary-links" class="primary-links">
+            <a class="nav-home" href="/" aria-label="Trang chủ"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="m12 3 10 8h-3v10h-5v-6h-4v6H5V11H2z"/></svg><span>Trang chủ</span></a>
+            <details class="nav-dropdown"><summary>Giới thiệu</summary><div class="nav-panel introduction-menu"><a href="/gioi-thieu/lanh-dao-cuc">Lãnh đạo cục</a><a href="/gioi-thieu/chuc-nang-nhiem-vu">Chức năng nhiệm vụ</a><a href="/gioi-thieu/co-cau-to-chuc">Cơ cấu tổ chức</a></div></details>
+            <details class="nav-dropdown news-dropdown"><summary>Tin tức</summary><div class="nav-panel news-menu"><p class="menu-heading">CHUYÊN MỤC TIN TỨC</p><div class="menu-columns">@foreach (var category in Model) { <a href="/chuyen-muc/@category.Slug">@category.Name</a> }</div><a class="menu-all" href="/tin-tuc">Xem tất cả tin tức <span aria-hidden="true">→</span></a></div></details>
+            <a href="/thong-bao">Thông báo</a><a href="/van-ban">Văn bản pháp luật</a><a href="/du-thao">Dự thảo</a><a href="/video">Video</a><a href="/hoi-dap">Hỏi đáp</a><a href="/lien-he">Liên hệ</a><a href="/so-tay">Sổ tay đất đai</a>
+        </div>
+    </div>
+</nav>

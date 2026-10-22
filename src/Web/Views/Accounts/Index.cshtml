@@ -1,0 +1,9 @@
+@model UserListModel
+@{ Layout = "_AdminLayout"; ViewData["Title"] = "Tài khoản nội bộ"; }
+<div class="account-heading"><div><p class="eyebrow">QUẢN TRỊ</p><h1>Tài khoản nội bộ</h1><p>@Model.Total tài khoản. Không xóa chủ thể lịch sử; vô hiệu hóa tài khoản khi ngừng sử dụng.</p></div><a class="button" href="/admin/users/create">Tạo tài khoản</a></div>
+<form method="get" action="/admin/users" class="account-filter"><div class="form-field"><label for="q">Tên đăng nhập, email hoặc tên hiển thị</label><input id="q" name="q" value="@Model.Query" maxlength="200" /></div><button type="submit" class="button">Tìm tài khoản</button></form>
+<div class="table-scroll" tabindex="0" aria-label="Danh sách tài khoản, cuộn ngang khi cần"><table class="admin-table account-table"><thead><tr><th>Tài khoản</th><th>Tên hiển thị</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>@foreach (var item in Model.Items) { <tr><td>@item.UserName<br /><small>@item.Email</small></td><td>@item.DisplayName</td><td>@(item.Disabled ? "Vô hiệu hóa" : "Đang hoạt động") @if (item.MustChangePassword) { <br /><small>Phải đổi mật khẩu</small> }</td><td><a href="/admin/users/@Uri.EscapeDataString(item.Id)">Thông tin và quyền</a></td></tr> }</tbody></table></div>
+@if (Model.Items.Count == 0) { <p>Không có tài khoản phù hợp.</p> }
+<nav class="pagination" aria-label="Phân trang tài khoản">@if (Model.Page > 1) { <a href="/admin/users?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page - 1)">Trang trước</a> }<span>Trang @Model.Page / @Model.PageCount</span>@if (Model.Page < Model.PageCount) { <a href="/admin/users?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page + 1)">Trang sau</a> }</nav>
+
+@section Styles { <link rel="stylesheet" href="~/css/accounts.css" asp-append-version="true" /> }

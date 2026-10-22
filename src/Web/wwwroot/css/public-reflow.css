@@ -1,0 +1,2 @@
+/* Long identifiers and official document titles must wrap without widening the viewport. */
+.main-content h1,.main-content h2,.main-content h3,.main-content .card-content,.main-content .featured-content{overflow-wrap:anywhere;min-width:0}

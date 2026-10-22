@@ -1,0 +1,2 @@
+@model SiteMoveModel
+<form method="post" action="/admin/site/remove" class="site-inline-actions">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><input type="hidden" name="section" value="@Model.Section" /><input type="hidden" name="id" value="@Model.Id" /><button type="submit">Bỏ khỏi nháp</button></form>

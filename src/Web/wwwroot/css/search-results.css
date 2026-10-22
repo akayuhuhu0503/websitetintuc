@@ -1,0 +1,7 @@
+.search-results{min-width:0;display:grid;gap:1rem}
+.search-results .content-card{min-width:0;border:1px solid var(--line);border-radius:var(--radius);background:#fff;padding:1.25rem;overflow-wrap:anywhere}
+.search-results .card-body{min-width:0}
+.search-results h2{font-size:1.15rem;margin-bottom:.65rem}
+.search-results .eyebrow{font-size:.7rem;letter-spacing:.05em}
+.search-results p:last-child{margin-bottom:0}
+@media(max-width:600px){.search-results .content-card{padding:1rem}}

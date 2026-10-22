@@ -1,0 +1,5 @@
+@model LandPortal.Domain.ContentMetadata
+@inject LandPortal.Infrastructure.PortalDbContext Database
+@using Microsoft.EntityFrameworkCore
+@if(Model.DisclosureGroupId is string group){<dl class="document-metadata"><dt>Nhóm công khai</dt><dd>@LandPortal.Infrastructure.V05ContentPolicy.Groups.GetValueOrDefault(group)</dd><dt>Tỉnh/thành phố</dt><dd>@Model.Province</dd><dt>Năm</dt><dd>@Model.DisclosureYear</dd><dt>Nguồn phát hành</dt><dd>@Model.PublicationSource</dd><dt>Căn cứ phát hành</dt><dd>@Model.LegalBasisReference</dd></dl>}
+@if(Model.WeeklyYear!=null){var id=ViewData["WeeklyContentId"] as Guid?;var release=await Database.WeeklyScheduleReleases.AsNoTracking().Where(r=>r.ContentId==id&&Database.Contents.Any(c=>c.Id==id&&c.IsPublic&&!c.IsTrashed&&c.PublishedRevisionId==r.RevisionId)).OrderByDescending(x=>x.Version).FirstOrDefaultAsync();if(release!=null){<p>Phiên bản @release.Version – cập nhật lúc @release.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</p>}}

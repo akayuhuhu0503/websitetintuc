@@ -1,0 +1,17 @@
+@model LandPortal.Domain.ContentMetadata
+@if (!string.IsNullOrWhiteSpace(Model.SearchFields()) || Model.ConsultationStartDate is not null || Model.ConsultationStartUtc is not null || Model.PublicationDate is not null) {
+<dl class="document-metadata">
+    @if(Model.Number.Length != 0) { <dt>Số ký hiệu</dt><dd>@Model.Number</dd> }
+    @if(Model.DocumentType.Length != 0) { <dt>Loại văn bản</dt><dd>@Model.DocumentType</dd> }
+    @if(Model.IssuingBody.Length != 0) { <dt>Cơ quan ban hành</dt><dd>@Model.IssuingBody</dd> }
+    @if(Model.Signer.Length != 0) { <dt>Người ký</dt><dd>@Model.Signer</dd> }
+    @if(Model.Field.Length != 0) { <dt>Lĩnh vực</dt><dd>@Model.Field</dd> }
+    @if(Model.Unit.Length != 0) { <dt>Đơn vị</dt><dd>@Model.Unit</dd> }
+    @if(Model.IssuedDate is not null) { <dt>Ngày ban hành</dt><dd>@Model.IssuedDate?.ToString("dd/MM/yyyy")</dd> }
+    @if(Model.PublicationDate is not null) { <dt>Ngày đăng xác nhận</dt><dd>@Model.PublicationDate?.ToString("dd/MM/yyyy")</dd> }
+    @if(Model.EffectiveDate is not null) { <dt>Ngày hiệu lực xác nhận</dt><dd>@Model.EffectiveDate?.ToString("dd/MM/yyyy")</dd> }
+    @if(Model.EffectiveUntilDate is not null) { <dt>Ngày hết hiệu lực xác nhận</dt><dd>@Model.EffectiveUntilDate?.ToString("dd/MM/yyyy") · @(Model.EffectivenessBoundary=="StartOfVietnamDay"?"từ đầu ngày Việt Nam":Model.EffectivenessBoundary=="EndOfVietnamDay"?"sau hết ngày Việt Nam":"chưa xác nhận mốc biên")</dd> }
+    @if(Model.Number.Length!=0||Model.DocumentType.Length!=0) { <dt>Hiệu lực</dt><dd>@(Model.EffectiveStatusAt(DateTimeOffset.UtcNow) switch { "ConfirmedEffective" => "Đã xác nhận còn hiệu lực", "ConfirmedExpired" => "Đã xác nhận hết hiệu lực", "ConfirmedPartial" => "Đã xác nhận hiệu lực một phần", _ => "Chưa xác định" })</dd> }
+    @if(Model.ConsultationStartDate is not null || Model.ConsultationEndDate is not null) { <dt>Lấy ý kiến</dt><dd>@Model.ConsultationStartDate?.ToString("dd/MM/yyyy") – @Model.ConsultationEndDate?.ToString("dd/MM/yyyy") (hết ngày Việt Nam)</dd> }
+</dl>
+}

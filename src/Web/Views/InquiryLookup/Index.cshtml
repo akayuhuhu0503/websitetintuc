@@ -1,0 +1,10 @@
+@model InquiryLookupForm
+@{ViewData["Title"]="Tra cứu hồ sơ hỏi đáp";}
+<section class="interaction-panel"><h1>Tra cứu hồ sơ hỏi đáp</h1><p>Cần mã tiếp nhận, email đã gửi câu hỏi và mã OTP mới cho tra cứu. Mã gửi hồ sơ không dùng lại. Không có tài khoản công dân; OTP chỉ xác minh quyền kiểm soát email.</p>
+@if(!Model.Available){<p class="scope-note">Chưa có dịch vụ xác minh email tại môi trường này. Không thể mở hồ sơ bằng mã đơn thuần.</p>}
+@if(Model.Message!=""){<p role="status">@Model.Message</p>}
+<form method="post" action="@(Model.ChallengeId==null?"/tra-cuu-ho-so/ma":"/tra-cuu-ho-so/xac-minh")">@Html.AntiForgeryToken()<div asp-validation-summary="All" role="alert"></div><input asp-for="ChallengeId" type="hidden"/>
+<label asp-for="Receipt">Mã tiếp nhận32 ký tự</label><input asp-for="Receipt" maxlength="32" required autocomplete="off"/><label asp-for="Email">Email đã gửi hỏi đáp</label><input asp-for="Email" type="email" maxlength="254" required autocomplete="email"/>
+<div class="interaction-trap" aria-hidden="true"><label asp-for="Website">Website</label><input asp-for="Website" tabindex="-1" autocomplete="off"/></div>
+@if(Model.ChallengeId!=null){<label asp-for="Code">Mã OTP tra cứu6 chữ số</label><input asp-for="Code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"/><button disabled="@(!Model.Available)">Xác minh và tra cứu</button><button formaction="/tra-cuu-ho-so/ma" formnovalidate disabled="@(!Model.Available)">Yêu cầu mã mới</button>}else{<button disabled="@(!Model.Available)">Yêu cầu mã OTP tra cứu</button>}
+</form></section>

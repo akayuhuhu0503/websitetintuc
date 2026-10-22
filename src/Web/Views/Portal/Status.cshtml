@@ -1,0 +1,5 @@
+@model StatusModel
+@{ ViewData["Title"] = Model.Title; }
+<nav class="breadcrumbs" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><span>@Model.Title</span></nav>
+<div class="page-header"><p class="eyebrow">THÔNG TIN CHỨC NĂNG</p><h1>@Model.Title</h1></div>
+<section class="status-panel"><span class="status-badge">Phạm vi bản chạy thử</span><p>@Model.Message</p>@if (Model.SourceUrl is not null) { <a class="outline-link" href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">@(Model.SourceLabel ?? "Xem tại nguồn chính") ↗</a> }</section>

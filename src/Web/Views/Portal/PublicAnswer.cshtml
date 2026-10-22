@@ -1,0 +1,4 @@
+@model LandPortal.Infrastructure.PublicInteraction
+@{ ViewData["Title"] = "Hỏi đáp đã công khai"; }
+<nav class="breadcrumbs"><a href="/">Trang chủ</a><span>/</span><a href="/tuong-tac/hoi-dap-da-duyet">Hỏi đáp</a></nav>
+<article class="article-detail"><h1>Hỏi đáp đã công khai</h1><p>@Model.DisplayName · @Model.ApprovedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</p><p style="white-space:pre-wrap">@Model.Text</p><h2>Trả lời của Cục Quản lý đất đai</h2><p style="white-space:pre-wrap">@Model.AgencyAnswer</p></article>

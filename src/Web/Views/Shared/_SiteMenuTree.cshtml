@@ -1,0 +1,7 @@
+@model LandPortal.Web.Services.SiteMenuTreeModel
+@foreach (var item in Model.Items.Where(x => x.ParentId == Model.ParentId))
+{
+    var children = Model.Items.Where(x => x.ParentId == item.Id).ToList();
+    if (children.Count > 0) { <details class="site-menu-subgroup"><summary>@item.Label</summary><partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model.Items, item.Id)" /></details> }
+    else if (item.Url != null) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }
+}

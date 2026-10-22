@@ -1,0 +1,34 @@
+@model EditorModel
+@using LandPortal.Domain
+<fieldset class="settings-panel" disabled="@(!Model.CanSave)">
+    <legend>Thông tin @LandPortal.Web.Services.PublicContentQuery.KindLabel(Model.Kind)</legend>
+    <div class="form-field"><label asp-for="Metadata.PublicationDate">Ngày hiển thị/ngày đăng (nếu xác nhận)</label><input asp-for="Metadata.PublicationDate" type="date" asp-format="{0:yyyy-MM-dd}" /><span asp-validation-for="Metadata.PublicationDate"></span></div>
+    @if (Model.Kind == ContentKind.Announcement) {
+        <div class="form-field"><label asp-for="Metadata.Unit">Đơn vị</label><input asp-for="Metadata.Unit" maxlength="500" /></div>
+    }
+    @if (Model.Kind is ContentKind.LegalDocument or ContentKind.DraftDocument) {
+        <div class="form-field"><label asp-for="Metadata.Number">Số ký hiệu</label><input asp-for="Metadata.Number" maxlength="200" /><span asp-validation-for="Metadata.Number"></span></div>
+        <div class="form-field"><label asp-for="Metadata.DocumentType">Loại văn bản</label><input asp-for="Metadata.DocumentType" list="document-types" maxlength="300" /></div>
+        <div class="form-field"><label asp-for="Metadata.IssuingBody">Cơ quan ban hành</label><input asp-for="Metadata.IssuingBody" list="document-authorities" maxlength="500" /></div>
+        <div class="form-field"><label asp-for="Metadata.Field">Lĩnh vực</label><input asp-for="Metadata.Field" list="document-fields" maxlength="300" /></div>
+        <datalist id="document-types">@foreach(var v in Model.Vocabularies.Where(x=>x.Kind == "Type" && x.Active)) { <option value="@v.Label"></option> }</datalist>
+        <datalist id="document-authorities">@foreach(var v in Model.Vocabularies.Where(x=>x.Kind == "Authority" && x.Active)) { <option value="@v.Label"></option> }</datalist>
+        <datalist id="document-fields">@foreach(var v in Model.Vocabularies.Where(x=>x.Kind == "Field" && x.Active)) { <option value="@v.Label"></option> }</datalist>
+        <div class="form-field"><label asp-for="Metadata.MappingStatus">Rà soát danh mục</label><select asp-for="Metadata.MappingStatus"><option value="Unmapped">Chưa ánh xạ — giữ chữ gốc</option><option value="Reviewed">Đã rà soát</option></select></div>
+        @if (Model.Kind == ContentKind.LegalDocument) {
+            <div class="form-field"><label asp-for="Metadata.Signer">Người ký</label><input asp-for="Metadata.Signer" maxlength="300" /></div>
+            <div class="form-field"><label asp-for="Metadata.IssuedDate">Ngày ban hành</label><input asp-for="Metadata.IssuedDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
+            <div class="form-field"><label asp-for="Metadata.EffectiveDate">Ngày hiệu lực đã xác nhận</label><input asp-for="Metadata.EffectiveDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
+            <div class="form-field"><label asp-for="Metadata.EffectiveUntilDate">Ngày hết hiệu lực đã xác nhận</label><input asp-for="Metadata.EffectiveUntilDate" type="date" asp-format="{0:yyyy-MM-dd}" /><span asp-validation-for="Metadata.EffectiveUntilDate"></span></div>
+            <div class="form-field"><label asp-for="Metadata.EffectivenessBoundary">Mốc hết hiệu lực theo căn cứ đã xác nhận</label><select asp-for="Metadata.EffectivenessBoundary"><option value="">Chưa xác nhận quy tắc biên — không tự chuyển trạng thái</option><option value="StartOfVietnamDay">Đầu ngày ghi trên (00:00 UTC+7)</option><option value="EndOfVietnamDay">Hết ngày ghi trên (00:00 ngày kế tiếp UTC+7)</option></select><p class="form-help">Chỉ chọn mốc có căn cứ nghiệp vụ. Không mặc định đây là quy tắc pháp lý áp dụng cho mọi văn bản.</p></div>
+            <div class="form-field"><label asp-for="Metadata.EffectivenessStatus">Hiệu lực</label><select asp-for="Metadata.EffectivenessStatus"><option value="">Chưa xác định</option><option value="ConfirmedEffective">Đã xác nhận còn hiệu lực</option><option value="ConfirmedExpired">Đã xác nhận hết hiệu lực</option><option value="ConfirmedPartial">Đã xác nhận hiệu lực một phần</option></select></div>
+            <div class="form-field"><label asp-for="Metadata.EffectivenessEvidence">Căn cứ xác nhận hiệu lực</label><textarea asp-for="Metadata.EffectivenessEvidence" rows="3" maxlength="2000"></textarea></div>
+        } else {
+            <div class="form-field"><label asp-for="Metadata.ConsultationStartDate">Ngày bắt đầu lấy ý kiến</label><input asp-for="Metadata.ConsultationStartDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
+            <div class="form-field"><label asp-for="Metadata.ConsultationEndDate">Ngày kết thúc lấy ý kiến</label><input asp-for="Metadata.ConsultationEndDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
+            <div class="form-field"><label asp-for="Metadata.ConsultationDateEvidence">Bằng chứng khoảng lấy ý kiến</label><textarea asp-for="Metadata.ConsultationDateEvidence" rows="2" maxlength="2000"></textarea></div>
+            <p class="form-help">Ngày kết thúc được hiểu đến hết ngày Việt Nam (UTC+7); đây là quy ước ứng dụng. Tiếp nhận góp ý có kiểm duyệt thuộc 2C.</p>
+        }
+    }
+    <p class="form-help">Giữ trống trường chưa xác nhận. Metadata của bản sửa chỉ công khai sau xuất bản đúng revision.</p>
+</fieldset>

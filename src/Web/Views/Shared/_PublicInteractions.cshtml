@@ -1,0 +1,3 @@
+@model IReadOnlyList<LandPortal.Infrastructure.PublicInteraction>
+@if(Model.Count==0){<p>Chưa có nội dung được duyệt công khai.</p>}
+@foreach(var item in Model){<article class="approved-interaction"><strong>@item.DisplayName</strong><time>@item.ApprovedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</time><p>@item.Text</p>@if(item.AgencyAnswer!=""){<div class="agency-answer"><strong>Phản hồi của cơ quan</strong><p>@item.AgencyAnswer</p></div>}</article>}

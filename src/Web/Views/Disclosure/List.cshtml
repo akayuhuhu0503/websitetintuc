@@ -1,0 +1,5 @@
+@model ListingModel
+@{ViewData["Title"]=Model.Title;}
+<h1>@Model.Title</h1><form method="get"><label for="disclosure-q">Từ khóa</label><input id="disclosure-q" name="q" maxlength="200" value="@Model.Query"/><label for="province">Tỉnh/thành phố hoặc mã tỉnh</label><input id="province" name="province" maxlength="200" value="@ViewData["Province"]"/><label for="year">Năm</label><input id="year" name="year" type="number" min="1900" max="2200" value="@ViewData["Year"]"/><button>Lọc thông tin</button></form><p>@Model.Total kết quả · trang @Model.Page</p>
+@foreach(var item in Model.Items){<partial name="_Card" model="item"/>}
+@if(Model.Page>1){<a href="?page=@(Model.Page-1)&q=@Uri.EscapeDataString(Model.Query??"")&province=@Uri.EscapeDataString(ViewData["Province"] as string??"")&year=@ViewData["Year"]">Trang trước</a>}@if(Model.Page*10<Model.Total){<a href="?page=@(Model.Page+1)&q=@Uri.EscapeDataString(Model.Query??"")&province=@Uri.EscapeDataString(ViewData["Province"] as string??"")&year=@ViewData["Year"]">Trang sau</a>}

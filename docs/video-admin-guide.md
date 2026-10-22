@@ -1,0 +1,16 @@
+# Biên tập video nội bộ — 2D
+
+Mốc này chỉ mở upload trong **Development / LandPortal_Test / kho Test riêng**. Dev không được cấp thêm quyền; Production vẫn khóa. Video nguồn cũ còn thiếu tệp giữ nguyên metadata, không lấy fixture gán vào bài nguồn.
+
+1. Đăng nhập tài khoản Test được giao quyền CMS theo phạm vi, `video.manage` và quyền media hiện có. Vào `/admin/videos`, tạo metadata Video hoặc mở bản nháp bài viết. Các trường tiêu đề, sapo, tác giả, nguồn, chuyên mục và metadata dùng editor/revision hiện có. Không cần nhập lại bài cũ.
+2. Lưu nháp trước, chọn **Tải hoặc chọn video nội bộ**. Chọn MP4/MOV/WebM từ máy. Mỗi chunk tối đa8MiB, tệp mặc định tối đa1GiB; quota có thể chặn sớm. File được sniff, quét rồi probe; đuôi/MIME không chứng minh codec hợp lệ.
+3. **Tạo phiên và tải** tính manifest từng chunk bằng buffer nhỏ. Thanh tiến độ chỉ tính byte SQL đã xác nhận. Tạm dừng giữ chunk đã nhận; hủy phiên đóng quyền nhận byte. Sau refresh/restart, mở phiên của mình, chọn lại đúng tệp rồi **Tiếp tục**; trình duyệt đối chiếu toàn bộ manifest và hash chunk đã nhận trước khi gửi phần còn thiếu. Không tự khôi phục file handle của máy.
+4. Completed nghĩa là đã đủ byte và cách ly. Worker riêng mới quét, probe, chuyển MP4 và tạo poster. Pending/Scanning/Processing/Ready/Failed/Blocked hiển thị kết quả thật. Chỉ Ready mới hiện player preview. Retry chỉ lỗi phù hợp và tối đa3lần; Infected không tự retry. Hủy xử lý thu hồi lease ghi kết quả, không xóa original/revision; tiến trình native đang chạy còn chịu timeout.
+5. **Gắn tệp này vào revision nháp** hoặc chọn thư viện Ready. Chỉ thấy video của mình hoặc video đang có tham chiếu công khai hợp lệ. Trong editor có chú thích riêng cho revision và nút gỡ video cùng phụ đề khỏi nháp. Ảnh đại diện qua media picker cũ; poster mặc định là frame thật do worker tạo. Không dán iframe/YouTube hoặc đường dẫn quarantine vào HTML.
+6. Phụ đề tùy chọn: mở phiên đã Completed, chọn `.vtt` UTF-8 ≤1MiB. Chỉ WebVTT văn bản thuần, timestamp `HH:mm:ss.fff --> HH:mm:ss.fff`, không HTML/STYLE/REGION/cue settings. Tải xong còn NotScanned; worker quét riêng. Gắn video trước, rồi gắn phụ đề vào cùng nháp. Cue không được vượt thời lượng video quá0,5giây. Bản dịch khác/auto-subtitle nằm ngoài mốc này.
+7. Lưu, gửi duyệt, duyệt, xuất bản hoặc hẹn giờ theo đúng quyền/revision 2A/2B. Approval cũ không áp vào revision mới. Video/poster hoặc phụ đề chưa đủ bằng chứng, bị sửa byte hay thiếu file đều chặn publish. Khi sửa nháp, bản đang công khai giữ nguyên video/chú thích/phụ đề đến lần xuất bản tiếp theo.
+8. Gỡ bài qua workflow. Gỡ một trong hai bài dùng chung không xóa video của bài còn lại. Khi hết tham chiếu công khai, GET/HEAD/Range công khai bị từ chối; file gốc và lịch sử vẫn được giữ. Hệ thống không thu hồi được byte khách đã tải trước đó.
+
+Trang Test do launcher mở tại `http://127.0.0.1:5259/admin/videos`; E2E tự chạy cổng5249 và dừng đúng tiến trình của nó. Mật khẩu Test do runner tạo ngẫu nhiên nằm trong artifact local bị ignore; không có tài khoản/mật khẩu mặc định, không tự reset hoặc cấp quyền Dev.
+
+Xem [runbook worker](video-worker-runbook.md), [kiến trúc](video-media-architecture.md) và [báo cáo nghiệm thu](phase-2d-video-report.md). Video Test vô danh không được tính vào37nội dung/53tài nguyên nguồn.

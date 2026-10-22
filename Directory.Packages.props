@@ -1,0 +1,11 @@
+<Project><PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup><ItemGroup>
+<PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
+<PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+<PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
+<PackageVersion Include="AngleSharp" Version="1.8.4" />
+<PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
+<PackageVersion Include="SkiaSharp" Version="3.119.4" />
+<PackageVersion Include="PdfPig" Version="0.1.14" />
+<!-- .NET 10 shared framework wins over 9.x. Pin the patched 10.x app-local library. -->
+<PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+</ItemGroup></Project>

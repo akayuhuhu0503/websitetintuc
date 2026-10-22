@@ -1,0 +1,7 @@
+@model LandPortal.Web.ViewComponents.ArticleInteractionsModel
+@using LandPortal.Domain
+<section class="comment-status"><h2>@(Model.Kind==InteractionKind.Comment?"Bình luận":"Góp ý dự thảo")</h2>
+@if(Model.Kind==InteractionKind.Comment){<partial name="_PublicInteractions" model="Model.Comments"/>}
+@if(Model.Open){<a class="button" href="/tuong-tac/@Model.Kind/@Model.Id">@(Model.Kind==InteractionKind.Comment?"Gửi bình luận qua CAPTCHA":"Gửi góp ý qua CAPTCHA")</a>}
+else{<p>Hiện không tiếp nhận mới. Nội dung công khai đã duyệt vẫn được giữ theo trạng thái kiểm duyệt.</p>}
+</section>

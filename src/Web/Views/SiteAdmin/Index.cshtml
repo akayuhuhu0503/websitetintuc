@@ -1,0 +1,41 @@
+@model SiteAdminModel
+@section Styles { <link rel="stylesheet" href="~/css/site-config.css" asp-append-version="true" /> }
+@{ Layout = "_AdminLayout"; ViewData["Title"] = "Cấu hình cổng thông tin"; var r = Model.State.Revision; }
+<div class="admin-page-heading"><div><p class="eyebrow">QUẢN TRỊ CỔNG THÔNG TIN</p><h1>Cấu hình website</h1><p>Bản nháp <code>@r.Id.ToString()[..8]</code> · Live <code>@(Model.State.Header.LiveRevisionId?.ToString()[..8] ?? "Chưa có")</code> · mọi thay đổi lưu thành phiên bản bất biến.</p></div><div class="site-actions"><a class="outline-link" href="/admin/site/preview" target="_blank" rel="noopener">Xem trước nháp ↗</a>@if (Model.CanPublish) { <form method="post" action="/admin/site/publish">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><input type="hidden" name="revisionId" value="@r.Id" /><button class="primary-button" type="submit">Áp dụng bản nháp</button></form> }</div></div>
+<p class="editor-notice">Lưu nháp và khôi phục không thay public. Áp dụng kiểm tra đích đang công khai, policy media và phiên bản hiện thời; tài nguyên vẫn giữ trạng thái quét thực.</p>
+@if (Model.CanSave && Model.Section == "menus") { <form method="post" action="/admin/site/disclosure-menu">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><button type="submit">Thêm nhóm Công khai thông tin vào nháp</button><p>Ba đích FR-17 được chuẩn bị; tên nhóm thứ hai chờ PO/pháp chế, không hiển thị trên menu public.</p></form> }
+<nav class="site-admin-tabs" aria-label="Vùng cấu hình">@foreach (var tab in new[] { ("contact", "Liên hệ & nhận diện"), ("categories", "Chuyên mục"), ("menus", "Menu & liên kết"), ("banners", "Banner"), ("blocks", "Trang chủ"), ("vocabulary", "Danh mục văn bản"), ("history", "Phiên bản") }) { <a aria-current="@(Model.Section == tab.Item1 ? "page" : null)" href="/admin/site?section=@tab.Item1">@tab.Item2</a> }</nav>
+@if (Model.Section == "contact")
+{
+    <section class="site-admin-panel"><h2>Thông tin công khai trong bản nháp</h2><dl><dt>Cơ quan</dt><dd>@r.OrganizationName</dd><dt>Địa chỉ</dt><dd>@r.ContactAddress</dd><dt>Điện thoại / Đường dây nóng</dt><dd>@r.ContactPhone / @r.ContactHotline</dd><dt>Email</dt><dd>@r.ContactEmail</dd><dt>Chân trang</dt><dd>@r.FooterText</dd></dl>@if (r.LogoAssetId.HasValue) { <img class="site-admin-image" src="/admin/site/media/@r.LogoAssetId" alt="Logo trong bản nháp" /> }@if (Model.CanSave) { <a class="primary-button" href="/admin/site/edit?section=contact">Sửa bản nháp</a> }</section>
+}
+else if (Model.Section == "history")
+{
+    <p>50 phiên bản gần nhất. Khôi phục tạo phiên bản nháp mới, không sửa lịch sử.</p><div class="table-scroll"><table class="admin-table"><thead><tr><th>Phiên bản</th><th>Thời gian Việt Nam</th><th>Hash</th><th>Thao tác</th></tr></thead><tbody>@foreach (var item in Model.History) { <tr><td><code>@item.Id.ToString()[..8]</code></td><td>@item.CreatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm:ss")</td><td><code>@item.Hash[..Math.Min(12, item.Hash.Length)]</code></td><td><a href="/admin/site/preview?revisionId=@item.Id" target="_blank" rel="noopener">Xem trước</a>@if (Model.CanSave) { <form method="post" action="/admin/site/restore">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><input type="hidden" name="revisionId" value="@item.Id" /><button type="submit">Khôi phục thành nháp</button></form> }</td></tr> }</tbody></table></div>
+}
+else
+{
+    @if (Model.CanSave) { <p><a class="primary-button" href="/admin/site/edit?section=@Model.Section">Thêm mục vào bản nháp</a></p> }
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>Tên</th><th>Thông tin</th><th>Thứ tự</th><th>Thao tác trong nháp</th></tr></thead><tbody>
+    @if (Model.Section == "categories")
+    {
+        foreach (var item in r.Categories.OrderBy(x => x.SortOrder).ThenBy(x => x.CategoryId))
+        {
+            <tr><td>@item.DisplayName @if (Model.ProtectedCategoryIds.Contains(item.CategoryId)) { <span class="status-badge">Mục nguồn</span> }</td><td>ID @item.CategoryId · /chuyen-muc/@item.Slug<br />@item.Description</td><td>@item.SortOrder</td><td>
+            @if (Model.CanSave)
+            {
+                <a href="/admin/site/edit?section=categories&amp;categoryId=@item.CategoryId">Sửa</a>
+                @if (!Model.ProtectedCategoryIds.Contains(item.CategoryId))
+                {
+                    <form method="post" action="/admin/site/remove">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><input type="hidden" name="section" value="categories" /><input type="hidden" name="categoryId" value="@item.CategoryId" /><button type="submit">Bỏ mục bổ sung</button></form>
+                }
+            }
+            </td></tr>
+        }
+    }
+    @if (Model.Section == "menus") { foreach (var item in r.Menus.OrderBy(x => x.Position).ThenBy(x => x.SortOrder).ThenBy(x => x.Id)) { <tr><td>@item.Label @if (item.SystemProtected) { <span class="status-badge">Mục nguồn</span> }</td><td>@item.Position · @item.TargetKind @item.RouteKey @item.ExternalUrl<br />@(item.ParentId.HasValue ? "↳ " + r.Menus.FirstOrDefault(x => x.Id == item.ParentId)?.Label : "Gốc")</td><td>@item.SortOrder</td><td>@if (Model.CanSave) { <a href="/admin/site/edit?section=menus&amp;id=@item.Id">Sửa</a><partial name="_SiteMove" model='new SiteMoveModel(Model.RowVersion, "menus", item.Id)' />@if (!item.SystemProtected) { <partial name="_SiteRemove" model='new SiteMoveModel(Model.RowVersion, "menus", item.Id)' /> } }</td></tr> } }
+    @if (Model.Section == "banners") { foreach (var item in r.Banners.OrderBy(x => x.SortOrder)) { <tr><td><img class="site-admin-image" src="/admin/site/media/@item.MediaAssetId" alt="@item.Alt" />@item.Label</td><td>@item.Position<br />Từ @(item.StartUtc?.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm") ?? "Không giới hạn")<br />Đến @(item.EndUtc?.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm") ?? "Không giới hạn")</td><td>@item.SortOrder</td><td>@if (Model.CanSave) { <a href="/admin/site/edit?section=banners&amp;id=@item.Id">Sửa</a><partial name="_SiteRemove" model='new SiteMoveModel(Model.RowVersion, "banners", item.Id)' /> }</td></tr> } }
+    @if (Model.Section == "blocks") { foreach (var item in r.Blocks.OrderBy(x => x.SortOrder)) { <tr><td>@item.Title</td><td>@item.Type · tối đa @item.Limit nội dung · @(item.Enabled ? "Hiển thị" : "Tắt khối")<br />@r.Pins.Count(x => x.BlockId == item.Id) nội dung ghim</td><td>@item.SortOrder</td><td>@if (Model.CanSave) { <a href="/admin/site/edit?section=blocks&amp;id=@item.Id">Sửa</a><partial name="_SiteMove" model='new SiteMoveModel(Model.RowVersion, "blocks", item.Id)' /><partial name="_SiteRemove" model='new SiteMoveModel(Model.RowVersion, "blocks", item.Id)' /> }</td></tr> } }
+    @if (Model.Section == "vocabulary") { foreach (var item in r.Vocabularies.OrderBy(x => x.Kind).ThenBy(x => x.SortOrder)) { <tr><td>@item.Label</td><td>@item.Kind · @(item.Active ? "Đang cho chọn" : "Ngừng cho chọn; giữ lịch sử")</td><td>@item.SortOrder</td><td>@if (Model.CanSave) { <a href="/admin/site/edit?section=vocabulary&amp;id=@item.Id">Sửa</a> }</td></tr> } }
+    </tbody></table></div>
+}

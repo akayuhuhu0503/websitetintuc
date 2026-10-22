@@ -1,0 +1,43 @@
+import { solveLoginCaptcha } from './login-captcha.mjs';
+import { chromium } from 'playwright';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const fixture = JSON.parse(await readFile(resolve(root, '.local/tests/phase2b/site-ui.json'), 'utf8'));
+if (fixture.database !== 'LandPortal_Test' || new URL(fixture.baseUrl).hostname !== '127.0.0.1') throw new Error('Site UI requires SQL Test loopback.');
+const evidence = resolve(process.env.LandPortal__EvidenceRoot || resolve(root, '.local/evidence'), 'phase2b/site/ui'); await mkdir(evidence, { recursive: true });
+const report = { utc: new Date().toISOString(), database: fixture.database, pageChecks: [], actions: [], pageErrors: [], offOriginRequests: [], limitations: ['Headless Edge emulation; no physical mobile/UAT/WCAG certification.'] };
+const browser = await chromium.launch({ channel: 'msedge', headless: true }); const administrator = await browser.newContext(); const guest = await browser.newContext();
+for (const context of [administrator, guest]) await context.route('**/*', async route => { const uri = new URL(route.request().url()); if (uri.origin !== new URL(fixture.baseUrl).origin) { report.offOriginRequests.push(uri.origin); await route.abort(); } else await route.continue(); });
+const page = await administrator.newPage(); const publicPage = await guest.newPage();
+for (const current of [page, publicPage]) current.on('pageerror', error => report.pageErrors.push(error.message));
+function assert(value, message) { if (!value) throw new Error(message); }
+async function submit(name) { const response = page.waitForResponse(r => r.request().method() === 'POST'); await page.getByRole('button', { name, exact: true }).click(); const posted = await response; assert(posted.status() === 302, `${name} refused HTTP ${posted.status()}`); await page.waitForLoadState('networkidle'); }
+async function screenshot(name, width, path, current = page) {
+  await current.setViewportSize({ width, height: 900 }); const response = await current.goto(fixture.baseUrl + path, { waitUntil: 'networkidle' });
+  const layout = await current.evaluate(() => ({ viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth, heading: document.querySelector('h1')?.textContent.trim(), unlabelled: [...document.querySelectorAll('input:not([type=hidden]),textarea,select')].filter(x => x.getClientRects().length && !x.labels?.length && !x.getAttribute('aria-label')).map(x => x.name || x.id) }));
+  const pass = response?.status() === 200 && layout.scrollWidth <= width + 1 && layout.unlabelled.length === 0;
+  report.pageChecks.push({ name, width, path, status: response?.status(), pass, ...layout }); await current.screenshot({ path: resolve(evidence, `${name}-${width}.png`), fullPage: true }); assert(pass, `${name} ${width}px failed form/reflow check.`);
+}
+try {
+  await page.goto(fixture.baseUrl + '/admin/login'); await page.locator('[name=UserName]').fill(fixture.user); await page.locator('[name=Password]').fill(fixture.password); await solveLoginCaptcha(page); await Promise.all([page.waitForNavigation(), page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()]);
+  const routes = [['contact', '/admin/site'], ['categories', '/admin/site?section=categories'], ['menus', '/admin/site?section=menus'], ['banners', '/admin/site?section=banners'], ['blocks', '/admin/site?section=blocks'], ['vocabulary', '/admin/site?section=vocabulary'], ['history', '/admin/site?section=history'], ['contact-edit', '/admin/site/edit?section=contact'], ['category-edit', '/admin/site/edit?section=categories&categoryId=75'], ['menu-edit', '/admin/site/edit?section=menus'], ['banner-edit', '/admin/site/edit?section=banners'], ['block-edit', '/admin/site/edit?section=blocks'], ['vocabulary-edit', '/admin/site/edit?section=vocabulary']];
+  for (const width of [390, 1440]) { for (const [name, path] of routes) await screenshot(name, width, path); await screenshot('homepage', width, '/', publicPage); }
+  for (const width of [360, 768, 1024]) { await screenshot('menus', width, '/admin/site?section=menus'); await screenshot('homepage', width, '/', publicPage); }
+  await page.setViewportSize({ width: 390, height: 900 }); await page.goto(fixture.baseUrl + '/admin/site/edit?section=contact');
+  const secret = 'QA UI nháp cấu hình ' + Date.now(); const footer = page.locator('[name="Contact.FooterText"]'); await footer.focus(); assert(await footer.evaluate(x => x === document.activeElement), 'Contact editor cannot receive keyboard focus.'); await footer.fill(secret); await submit('Lưu phiên bản nháp');
+  await publicPage.goto(fixture.baseUrl + '/'); assert(!(await publicPage.locator('body').innerText()).includes(secret), 'Draft UI contact leaked to public.');
+  await page.goto(fixture.baseUrl + '/admin/site/preview'); assert((await page.locator('body').innerText()).includes(secret), 'Private preview did not render draft contact.'); await page.screenshot({ path: resolve(evidence, 'draft-preview-390.png'), fullPage: true }); report.actions.push({ name: 'Keyboard edits contact; saves SQL draft; public excludes it and private preview renders it', pass: true });
+  await page.goto(fixture.baseUrl + '/admin/site'); await submit('Áp dụng bản nháp'); await publicPage.goto(fixture.baseUrl + '/'); assert((await publicPage.locator('body').innerText()).includes(secret), 'Applied configuration did not reach public.'); report.actions.push({ name: 'Explicit apply switches header/navigation/footer configuration via real UI', pass: true });
+  const label = 'QA UI liên kết ' + Date.now(); await page.goto(fixture.baseUrl + '/admin/site/edit?section=menus'); await page.locator('[name="Menu.Label"]').fill(label); await page.locator('[name="Menu.Position"]').selectOption('footer'); await page.locator('[name="Menu.TargetKind"]').selectOption('External'); await page.locator('[name="Menu.ExternalUrl"]').fill('https://example.invalid/verified-link'); await submit('Lưu phiên bản nháp');
+  await publicPage.goto(fixture.baseUrl + '/'); assert(await publicPage.getByRole('link', { name: label, exact: true }).count() === 0, 'Draft menu leaked.'); await page.goto(fixture.baseUrl + '/admin/site'); await submit('Áp dụng bản nháp'); await publicPage.goto(fixture.baseUrl + '/'); assert(await publicPage.getByRole('link', { name: label, exact: true }).count() === 1, 'Menu typed form did not persist and publish.'); report.actions.push({ name: 'Typed menu picker stores a verified HTTP(S) target without server fetch; draft/live is distinct', pass: true });
+  await page.goto(fixture.baseUrl + '/admin/site/edit?section=vocabulary'); const vocabulary = 'QA UI lĩnh vực ' + Date.now(); await page.locator('[name="Vocabulary.Kind"]').selectOption('Field'); await page.locator('[name="Vocabulary.Label"]').fill(vocabulary); await submit('Lưu phiên bản nháp'); assert((await page.locator('body').innerText()).includes(vocabulary), 'Vocabulary did not reload its SQL draft.'); await page.goto(fixture.baseUrl + '/admin/site'); await submit('Áp dụng bản nháp'); report.actions.push({ name: 'Vocabulary form saves and explicitly applies a typed field catalog', pass: true });
+  await publicPage.goto(fixture.baseUrl + '/'); const links = await publicPage.locator('a[href^="/chuyen-muc/"]').evaluateAll(nodes => nodes.map(x => x.getAttribute('href')));
+  assert(fixture.categories.length === 14 && fixture.categories.every(c => typeof c.Slug === 'string' && links.includes('/chuyen-muc/' + c.Slug)), 'Fourteen source categories are not reachable from navigation.');
+  for (const key of ['/gioi-thieu/co-cau-to-chuc', '/hoi-dap', '/lien-he', '/so-tay', '/van-ban-chi-dao-dieu-hanh', '/quy-hoach-su-dung-dat', '/lich-tuan']) assert((await publicPage.locator(`a[href="${key}"]`).count()) > 0, 'A source navigation route is missing: ' + key);
+  report.actions.push({ name: 'All fourteen source categories and supplementary source items remain reachable', pass: true });
+  assert(report.pageErrors.length === 0 && report.offOriginRequests.length === 0, 'Site browser errors or off-origin asset requests.');
+} catch (error) { report.failure = error.message; process.exitCode = 1; }
+finally { await browser.close(); await writeFile(resolve(evidence, 'ui-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify({ pages: report.pageChecks.length, passingPages: report.pageChecks.filter(x => x.pass).length, actions: report.actions.length, failures: report.failure ? 1 : 0, errors: report.pageErrors.length })); }

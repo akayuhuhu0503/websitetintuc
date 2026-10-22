@@ -1,0 +1,9 @@
+@model IReadOnlyList<LandPortal.Web.Services.SiteNavigationItem>
+<nav class="main-nav" aria-label="Điều hướng chính"><div class="container nav-inner"><button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links">☰ <span>Danh mục</span></button><div id="primary-links" class="primary-links">
+@foreach (var item in Model.Where(x => x.Position == "main" && x.ParentId == null))
+{
+    var children = Model.Where(x => x.ParentId == item.Id).ToList();
+    if (children.Count > 0) { <details class="nav-dropdown"><summary>@item.Label</summary><div class="nav-panel site-menu-panel"><partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model, item.Id)" /></div></details> }
+    else if (item.Url != null) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }
+}
+</div></div></nav>

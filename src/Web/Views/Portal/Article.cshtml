@@ -1,0 +1,20 @@
+@model ArticleModel
+@{ ViewData["Title"] = Model.Content.Title; ViewData["Description"] = Model.Content.Summary; }
+<nav class="breadcrumbs" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span aria-hidden="true">/</span>@if (Model.Content.CategorySlug is not null) { <a href="/chuyen-muc/@Model.Content.CategorySlug">@Model.Content.CategoryName</a> } else { <a href="/tin-tuc">@Model.Content.Kind</a> }<span aria-hidden="true">/</span><span>Chi tiết</span></nav>
+<div class="article-layout"><article class="article-detail"><header><p class="eyebrow">@(Model.Content.CategoryName ?? Model.Content.Kind)</p><h1>@Model.Content.Title</h1><p class="article-meta">@Model.Content.DisplayDate @if (Model.Author is not null) { <span>· @Model.Author</span> }</p>@if (Model.Content.Summary is not null) { <p class="article-summary">@Model.Content.Summary</p> }</header>
+<nav class="reading-tools" aria-label="Công cụ đọc bài">
+    <div><span>Cỡ chữ</span><button type="button" data-font-size="decrease" aria-label="Giảm cỡ chữ">A−</button><button type="button" data-font-size="reset" aria-label="Đặt lại cỡ chữ">A</button><button type="button" data-font-size="increase" aria-label="Tăng cỡ chữ">A+</button></div>
+    <button type="button" data-print-article>In bài</button><button type="button" data-copy-link>Sao chép liên kết</button><button type="button" data-share-article>Chia sẻ</button>
+</nav><p class="reading-feedback sr-only" role="status" aria-live="polite"></p>
+<partial name="_DocumentMetadata" model="Model.Metadata" />
+@{ViewData["WeeklyContentId"]=Model.Content.Id;}
+<partial name="_V05PublicMetadata" model="Model.Metadata" />
+@if(Model.IsDraftDocument) { <p class="scope-note">Tiếp nhận ý kiến: @Model.ConsultationState. Góp ý gắn với phiên bản dự thảo đang công khai.</p> }
+@if (Model.CoverUrl is not null) { <img class="article-cover" src="@Model.CoverUrl" alt="Ảnh đại diện bài viết" /> }
+<div class="article-body">@Html.Raw(Model.BodyHtml)</div>
+
+@if (Model.Attachments.Count > 0) { <section class="attachments"><h2>Tài liệu đính kèm</h2><ul>@foreach (var file in Model.Attachments) { <li><strong>@file.Name</strong><small>@file.ContentType · @((file.Bytes / 1024d).ToString("N0")) KB</small><div class="attachment-links"><a href="/media/@file.Id" target="_blank" rel="noopener noreferrer">Xem tài liệu ↗</a><a href="/media/@file.Id?download=true"><span aria-hidden="true">↓</span> Tải về</a></div></li> }</ul></section> }
+@if (Model.SourceName is not null || Model.SourceUrl is not null) { <p class="article-source">Nguồn: @Model.SourceName @if (Model.SourceUrl is not null) { <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">Đối chiếu bài gốc ↗</a> }</p> }
+@await Component.InvokeAsync("InternalVideos",new{id=Model.Content.Id,showMissing=Model.IsVideo})
+@await Component.InvokeAsync("ArticleInteractions",new{id=Model.Content.Id})
+</article><aside class="article-aside"><div class="section-heading"><h2>Thông tin liên quan</h2></div>@if (Model.Related.Count > 0) { @foreach (var item in Model.Related) { <partial name="_Card" model="item" /> } } else { <p class="empty-note">Chưa có bài liên quan trong tập mẫu.</p> }<a class="aside-service" href="/van-ban"><strong>Tra cứu văn bản</strong><span>Tìm quy định và văn bản pháp luật →</span></a><a class="aside-service" href="/du-thao"><strong>Văn bản dự thảo</strong><span>Theo dõi tài liệu lấy ý kiến →</span></a></aside></div>

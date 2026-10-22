@@ -1,0 +1,8 @@
+@model ListingModel
+@{ ViewData["Title"] = Model.Title; }
+<nav class="breadcrumbs" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><span>@Model.Title</span></nav>
+<div class="page-header"><p class="eyebrow">CỔNG THÔNG TIN QUẢN LÝ ĐẤT ĐAI</p><h1>@Model.Title</h1>@if (Model.Description is not null) { <p>@Model.Description</p> }</div>
+<form class="listing-filter" method="get"><label for="list-q">Từ khóa</label><input id="list-q" type="search" name="q" value="@Model.Query" placeholder="Tìm trong danh sách này" maxlength="200" /><button class="button" type="submit">Tìm kiếm</button></form>
+<p class="result-count">@Model.Total nội dung công khai @if (!string.IsNullOrWhiteSpace(Model.Query)) { <span>cho “@Model.Query”</span> }</p>
+@if (Model.Items.Count == 0) { <div class="empty-state"><h2>Chưa tìm thấy nội dung</h2><p>Chuyên mục được giữ đầy đủ. Tập mẫu hiện tại có thể chưa bao gồm nội dung của mục này.</p><a href="/tin-tuc">Xem các tin tức đã nhập →</a></div> } else { <div class="listing-grid">@foreach (var item in Model.Items) { <partial name="_Card" model="item" /> }</div> }
+@if (Model.PageCount > 1) { <nav class="pagination" aria-label="Phân trang">@if (Model.Page > 1) { <a href="?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page - 1)">← Trước</a> }<span>Trang @Model.Page / @Model.PageCount</span>@if (Model.Page < Model.PageCount) { <a href="?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page + 1)">Tiếp →</a> }</nav> }

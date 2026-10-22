@@ -1,0 +1,3 @@
+@model MfaCodeModel
+@{Layout="~/Views/Shared/_Layout.cshtml";ViewData["Title"]="Xác thực hai bước";}
+<section class="panel"><h1>Xác thực hai bước</h1><p>Nhập mã từ ứng dụng xác thực hoặc một mã khôi phục đã lưu. Mỗi mã chỉ dùng một lần.</p><form method="post" action="/admin/mfa">@Html.AntiForgeryToken()<div asp-validation-summary="All" role="alert"></div><label asp-for="Code">Mã xác thực</label><input asp-for="Code" autocomplete="one-time-code" maxlength="32" required /><label><input asp-for="Recovery" /> Dùng mã khôi phục</label><button type="submit">Xác thực</button></form><a href="/admin/login">Đăng nhập lại</a></section>

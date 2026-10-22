@@ -1,0 +1,19 @@
+# Kiến trúc và quyết định
+
+Các đoạn Giai đoạn 1 dưới đây giữ lịch sử quyết định. CMS 2A bổ sung vùng draft, snapshot metadata/chuyên mục/cover, approval đúng revision, workflow và quyền hiện thời. 2B mở rộng metadata theo revision, Identity administration, cấu hình draft/live, search projection SQL và worker lịch đăng độc lập; xem [kiến trúc CMS hiện tại](cms-architecture.md). Editor vẫn dùng Jodit MIT tự host để sửa bảng/chú thích; không đổi ASP.NET Core 10 MVC/Razor, EF Core/Identity hoặc SQL Server.
+
+Hiện tại public đọc published/live pointers từ SQL mỗi request, với snapshot cấu hình chỉ trong phạm vi request; không có cache public giữ dữ liệu qua process. Worker đổi SQL qua cùng workflow nên request web kế tiếp thấy trạng thái mới. Job/lease/generation/attempt/heartbeat lưu bền vững ở SQL. Snapshot metadata chuyên biệt và search projection không thay payload/ID/alias/tệp nguồn. Các lời mô tả Giai đoạn 1 chưa có taxonomy/scheduler phía dưới là lịch sử, không phải giới hạn của phần code 2B hiện tại. Tình trạng nghiệm thu thực phải đọc PROJECT_STATE và báo cáo 2B, không suy ra PASS từ tài liệu này.
+
+Một ứng dụng ASP.NET Core 10 MVC render phía server; Identity cookie và policy permission cho admin. Domain/Application/Infrastructure/Web/MigrationCli/Worker được tách theo trách nhiệm. SQL Server Express 2022 được xác minh, provider EF Core chính thức; kiểm chứng compatibility của CSDL đích trước migration. Không dùng database thay thế.
+
+NuGet khóa bản ổn định 10.0.12 (EF/Identity), lock files; SDK 10.0.112 và runtime 10.0.12 cài riêng trong `.local/dotnet`, SHA512 archive Microsoft đã đối chiếu. `global.json` không cho roll-forward hoặc preview. Không thay SDK/runtime của dự án khác. Lưu nguồn thô ngoài public; nội dung clean, revision biên tập và revision public tách biệt. Source+kind+id unique, hash/alias URL; media theo SHA256, endpoint chỉ mở tài nguyên của revision public.
+
+Importer CLI độc lập, 1 connection, ít nhất 2 giây/request, budget và checkpoint; SQL lưu tiến trình; snapshot và media trong .local được gitignore. HTML sanitize phía server. Search normalized Unicode, bỏ dấu và đ/d, query SQL có phân trang; chưa dùng full-text.
+
+Giai đoạn 1 triển khai draft/pending/publish ban đầu; worker video, chunk upload và toàn bộ workflow/tương tác thuộc Giai đoạn 2, chưa có UI giả. Cutover cờ SQL bền vững chặn importer. Chạy local loopback, không triển khai Sites/Cloudflare/IIS hoặc tên miền.
+
+SQL thực: `LandPortal_Dev`, `LandPortal_Test` trên `.\SQLEXPRESS`; SQL Server Express 16.0.1000.6, compatibility 160. Chỉ hai CSDL này được tạo, không truy vấn dữ liệu CSDL khác. Migration `20261012055549_InitialPortal` chạy tường minh. Local server chỉ bật Windows authentication, nên không thay auth mode toàn máy để tạo SQL login. Kết nối runtime kích hoạt SQL application role `LandPortalRuntime` qua RPC `sp_setapprole`, quyền DML trong CSDL dự án, không ALTER, không UPDATE/DELETE audit. Pooling tắt để không tái sử dụng session role vào kết nối operator. Migration dùng kết nối operator riêng; production cần login/service identity quyền tối thiểu và pooling phù hợp hạ tầng, chưa nghiệm thu vận hành.
+
+Quyền public nằm ở `PublishedRevisionId`, không ở revision hiện tại. Lưu nháp trên bài đã công khai giữ nguyên revision public và asset relations. Trong Giai đoạn 1 chưa cho đổi chuyên mục bài đã đăng (cần revision taxonomy ở Giai đoạn 2); server báo lỗi rõ ràng. Bootstrap Identity chạy lệnh riêng một lần từ `.env` ignored, không mật khẩu mặc định và không ghi secret ra log/chat. `.env` được đọc tường minh, environment ưu tiên hơn file.
+
+Asset nguồn được kiểm tra chữ ký, kích thước và SHA256 trước nhập; chưa có scanner nên `NotScanned` vẫn là blocker production. Chỉ bản thử local cho phục vụ ảnh/PDF gốc đã công khai ở nguồn. Video ngoài allowlist không được coi là đã chuyển, metadata/poster không thay thế video. Chưa tạo rendition, chưa xác nhận malware-clean, chưa triển khai upload video mới.

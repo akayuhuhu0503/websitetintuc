@@ -1,0 +1,28 @@
+@model LandPortal.Web.Models.InteractionForm
+@using LandPortal.Domain
+@{var label=Model.Input.Kind switch{InteractionKind.Comment=>"Gửi bình luận",InteractionKind.Inquiry=>"Gửi câu hỏi",InteractionKind.Contact=>"Hòm thư góp ý và liên hệ",_=>"Góp ý dự thảo"};ViewData["Title"]=label;}
+<section class="interaction-panel"><h1>@label</h1>
+<p>Thông tin được lưu riêng tư để xử lý. Bình luận/câu hỏi chỉ xuất hiện sau kiểm duyệt và đồng ý công khai. Góp ý và liên hệ giữ riêng tư. Thời hạn lưu giữ đang chờ đơn vị xác nhận.</p>
+<p>Email chưa được xác minh. Vui lòng kiểm tra địa chỉ để nhận phản hồi; CAPTCHA chỉ giúp chống gửi tự động.</p>
+@if(Model.Message!=""){<p role="status">@Model.Message</p>}
+<form method="post" enctype="multipart/form-data" action="/tuong-tac/gui">
+@Html.AntiForgeryToken()<div asp-validation-summary="All" role="alert"></div>
+<input type="hidden" asp-for="Input.Kind"/><input type="hidden" asp-for="Input.ContentId"/><input type="hidden" asp-for="Input.PublishedRevisionId"/>
+@if(Model.Input.Kind is InteractionKind.Inquiry or InteractionKind.Contact){
+    @if(Model.Input.Kind==InteractionKind.Inquiry){<label asp-for="Input.Field">Lĩnh vực hỏi đáp</label><input asp-for="Input.Field" maxlength="120" required/>}
+    <label for="inquiry-attachment">Một tệp riêng (PDF/JPEG/PNG, tối đa10 MiB)</label><input id="inquiry-attachment" type="file" name="attachment" accept="application/pdf,image/jpeg,image/png"/>
+    <p>Tệp lưu cách ly; chỉ cán bộ có quyền được tải sau khi quét sạch đúng byte. Khi gửi lỗi, hãy chọn lại tệp.</p>
+}
+<label asp-for="Input.Name">Họ tên</label><input asp-for="Input.Name" autocomplete="name" maxlength="120" required/>
+<label asp-for="Input.Email">Email nhận phản hồi</label><input asp-for="Input.Email" type="email" autocomplete="email" maxlength="254" required/>
+@if(Model.Input.Kind is InteractionKind.Inquiry or InteractionKind.Contact){<label asp-for="Input.Phone">Điện thoại (không bắt buộc)</label><input asp-for="Input.Phone" maxlength="30"/><label asp-for="Input.Title">Tiêu đề</label><input asp-for="Input.Title" maxlength="200" required/>}
+<label asp-for="Input.Text">Nội dung</label><textarea asp-for="Input.Text" rows="7" maxlength="8000" required></textarea>
+@if(Model.Input.Kind is InteractionKind.Comment or InteractionKind.Inquiry){<label class="interaction-consent"><input asp-for="Input.PublicConsent"/> Tôi đồng ý công khai bản nội dung đã biên tập và tên hiển thị sau khi duyệt; email và điện thoại vẫn riêng tư.</label>}
+<div class="interaction-trap" aria-hidden="true"><label asp-for="Input.Website">Website</label><input asp-for="Input.Website" tabindex="-1" autocomplete="off"/></div>
+<fieldset><legend>Xác thực chống gửi tự động</legend><input type="hidden" asp-for="CaptchaId"/>
+<p id="captcha-question">@Model.CaptchaQuestion</p><label asp-for="CaptchaAnswer">Kết quả câu hỏi (hiệu lực tối đa5 phút, dùng một lần)</label>
+<input asp-for="CaptchaAnswer" inputmode="numeric" autocomplete="off" maxlength="3" aria-describedby="captcha-question captcha-help" required/>
+<p id="captcha-help">Có thể dùng bàn phím và trình đọc màn hình. Chọn câu hỏi mới nếu cần; nội dung đã nhập vẫn được giữ.</p>
+<button type="submit" formaction="/tuong-tac/lam-moi" formnovalidate>Câu hỏi xác thực mới</button></fieldset>
+<button type="submit" disabled="@(Model.CaptchaId==Guid.Empty)">Gửi nội dung để kiểm duyệt</button>
+</form>@if(Model.Input.Kind==InteractionKind.Inquiry){<a href="/tra-cuu-ho-so">Thông tin về tra cứu hồ sơ riêng tư</a>}</section>

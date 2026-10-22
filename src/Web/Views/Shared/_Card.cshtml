@@ -1,0 +1,5 @@
+@model ContentCard
+<article class="news-card">
+    @if (!string.IsNullOrWhiteSpace(Model.ThumbnailUrl)) { <a class="card-image" href="@Model.Url" tabindex="-1" aria-hidden="true"><img src="@Model.ThumbnailUrl" alt="" loading="lazy" /></a> }
+    <div class="card-content"><p class="item-meta">@(Model.CategoryName ?? Model.Kind) @if (Model.DisplayDate is not null) { <span>· @Model.DisplayDate</span> }</p><h3><a href="@Model.Url">@Model.Title</a></h3>@if (!string.IsNullOrWhiteSpace(Model.Summary)) { <p class="card-summary">@Model.Summary</p> }</div>
+</article>

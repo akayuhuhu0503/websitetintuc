@@ -1,0 +1,68 @@
+@model SiteEditModel
+@section Styles { <link rel="stylesheet" href="~/css/site-config.css" asp-append-version="true" /> }
+@{ Layout = "_AdminLayout"; ViewData["Title"] = "Sửa cấu hình nháp"; var isBanner = Model.Section == "banners"; var target = isBanner ? (SiteMenuInput)Model.Banner : Model.Menu; var prefix = isBanner ? "Banner" : "Menu"; }
+<div class="admin-page-heading"><div><p class="eyebrow">BẢN NHÁP CẤU HÌNH</p><h1>Sửa @(Model.Section switch { "contact" => "liên hệ & nhận diện", "categories" => "chuyên mục", "menus" => "menu & liên kết", "banners" => "banner", "blocks" => "khối trang chủ", "vocabulary" => "danh mục văn bản", _ => "cấu hình" })</h1></div><a href="/admin/site?section=@Model.Section">← Quay lại</a></div>
+@if (Model.SystemProtected) { <p class="editor-notice">Mục nguồn được bảo vệ: giữ tên, slug, cấu trúc và đích. Chỉ chỉnh mô tả/thứ tự phù hợp; server kiểm tra lại mọi trường.</p> }
+@if (Model.Section is "menus" or "banners" or "blocks" or "contact") { <details class="site-admin-panel"><summary>Tìm nội dung/ảnh trong picker trước khi sửa</summary><form method="get" action="/admin/site/edit"><input type="hidden" name="section" value="@Model.Section" /><input type="hidden" name="id" value="@Model.ItemId" /><label for="contentSearch">Từ khóa nội dung công khai</label><input id="contentSearch" name="contentSearch" value="@Model.ContentSearch" maxlength="200" /><label for="mediaSearch">Tên ảnh</label><input id="mediaSearch" name="mediaSearch" value="@Model.MediaSearch" maxlength="200" /><button type="submit">Tìm trong picker</button><p>Picker giới hạn 60 kết quả SQL; bản đang chọn được giữ. Tìm trước khi nhập để tránh mất thay đổi chưa lưu.</p></form></details> }
+<form method="post" action="/admin/site/save" class="site-admin-form" id="site-edit-form">
+@Html.AntiForgeryToken()<input type="hidden" asp-for="Section" /><input type="hidden" asp-for="RowVersion" /><input type="hidden" asp-for="ItemId" /><input type="hidden" asp-for="CategoryId" /><div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+@if (Model.Section == "contact")
+{
+    <label asp-for="Contact.OrganizationName">Tên cơ quan</label><input asp-for="Contact.OrganizationName" maxlength="300" required /><span asp-validation-for="Contact.OrganizationName"></span>
+    <label asp-for="Contact.ContactAddress">Địa chỉ công khai</label><input asp-for="Contact.ContactAddress" maxlength="1000" />
+    <div class="site-form-grid"><div><label asp-for="Contact.ContactPhone">Điện thoại</label><input asp-for="Contact.ContactPhone" maxlength="100" /></div><div><label asp-for="Contact.ContactHotline">Đường dây nóng</label><input asp-for="Contact.ContactHotline" maxlength="100" /></div></div>
+    <label asp-for="Contact.ContactEmail">Email công khai</label><input asp-for="Contact.ContactEmail" type="email" maxlength="254" />
+    <label asp-for="Contact.FooterText">Ghi chú chân trang (văn bản thuần)</label><textarea asp-for="Contact.FooterText" maxlength="5000" rows="4"></textarea>
+    <label asp-for="Contact.LogoAssetId">Logo đã xác minh trong kho riêng</label><select asp-for="Contact.LogoAssetId" class="site-image-select"><option value="">Không dùng logo</option>@foreach (var image in Model.Images) { <option value="@image.Value">@image.Label</option> }</select>
+}
+@if (Model.Section == "categories")
+{
+    <label asp-for="Category.DisplayName">Tên chuyên mục</label><input asp-for="Category.DisplayName" maxlength="300" required readonly="@(Model.SystemProtected)" />
+    <label asp-for="Category.Slug">Slug tuyến /chuyen-muc/</label><input asp-for="Category.Slug" maxlength="180" pattern="[a-z0-9]+(-[a-z0-9]+)*" required readonly="@(Model.CategoryId.HasValue)" /><p class="field-hint">Tuyến đã dùng giữ nguyên; không tạo alias mới trong mốc này.</p>
+    <label asp-for="Category.Description">Mô tả</label><textarea asp-for="Category.Description" maxlength="2000" rows="4"></textarea>
+    <label asp-for="Category.ParentCategoryId">Chuyên mục cha</label><select asp-for="Category.ParentCategoryId"><option value="">Không có cha</option>@foreach (var c in Model.Categories.Where(x => x.Value != Model.CategoryId?.ToString())) { <option value="@c.Value">@c.Label</option> }</select>
+    <label asp-for="Category.SortOrder">Thứ tự</label><input asp-for="Category.SortOrder" type="number" min="0" max="10000" />
+    <label class="checkbox-label"><input asp-for="Category.ShowInNavigation" /> Hiển thị trong điều hướng</label>
+}
+@if (Model.Section is "menus" or "banners")
+{
+    <label for="site_label">Nhãn</label><input id="site_label" name="@(prefix + ".Label")" value="@target.Label" maxlength="300" required readonly="@(Model.SystemProtected)" />
+    <label for="site_position">Vị trí</label><select id="site_position" name="@(prefix + ".Position")">@foreach (var position in isBanner ? LandPortal.Infrastructure.SiteConfigurationService.BannerPositions : LandPortal.Infrastructure.SiteConfigurationService.MenuPositions) { <option value="@position" selected="@(target.Position == position)">@position</option> }</select>
+    @if (!isBanner) { <label asp-for="Menu.ParentId">Nhóm cha (cùng vị trí)</label><select asp-for="Menu.ParentId"><option value="">Mục gốc</option>@foreach (var parent in Model.Parents) { <option value="@parent.Value">@parent.Label</option> }</select> }
+    <fieldset class="site-target-fields"><legend>Đích liên kết</legend><label for="site_targetKind">Loại đích</label><select id="site_targetKind" name="@(prefix + ".TargetKind")">@foreach (var kind in isBanner ? new[] { "Route", "Category", "Content", "External" } : new[] { "Route", "Category", "Content", "External", "Group" }) { <option value="@kind" selected="@(target.TargetKind == kind)">@(kind switch { "Route" => "Mục hệ thống", "Category" => "Chuyên mục", "Content" => "Nội dung công khai", "External" => "Liên kết ngoài HTTP(S)", _ => "Nhóm menu" })</option> }</select>
+    <label for="site_routeKey">Mục hệ thống</label><select id="site_routeKey" name="@(prefix + ".RouteKey")">@foreach (var route in LandPortal.Infrastructure.SiteConfigurationService.Routes) { <option value="@route.Key" selected="@(target.RouteKey == route.Key)">@route.Value.Label</option> }</select>
+    <label for="site_category">Chuyên mục đích</label><select id="site_category" name="@(prefix + ".CategoryId")"><option value="">Chọn chuyên mục</option>@foreach (var category in Model.Categories) { <option value="@category.Value" selected="@(target.CategoryId?.ToString() == category.Value)">@category.Label</option> }</select>
+    <label for="site_content">Nội dung đích</label><select id="site_content" name="@(prefix + ".ContentId")"><option value="">Chọn nội dung</option>@foreach (var content in Model.Contents) { <option value="@content.Value" selected="@(target.ContentId?.ToString() == content.Value)">@content.Label</option> }</select>
+    <label for="site_external">URL ngoài</label><input id="site_external" name="@(prefix + ".ExternalUrl")" value="@target.ExternalUrl" type="url" maxlength="2000" /><p class="field-hint">Chỉ trường của loại đích đã chọn được lưu. Hệ thống không fetch URL để kiểm tra.</p></fieldset>
+    <label class="checkbox-label"><input type="checkbox" name="@(prefix + ".OpenNewWindow")" value="true" checked="@target.OpenNewWindow" /> Mở tab mới</label><input type="hidden" name="@(prefix + ".OpenNewWindow")" value="false" />
+    <label for="site_order">Thứ tự</label><input id="site_order" name="@(prefix + ".SortOrder")" value="@target.SortOrder" type="number" min="0" max="10000" />
+    @if (isBanner)
+    {
+        <label asp-for="Banner.MediaAssetId">Ảnh banner trong kho riêng</label><select asp-for="Banner.MediaAssetId" class="site-image-select" required><option value="">Chọn ảnh</option>@foreach (var image in Model.Images) { <option value="@image.Value">@image.Label</option> }</select>
+        <label asp-for="Banner.Alt">Nội dung thay thế ảnh</label><input asp-for="Banner.Alt" maxlength="500" required />
+        <div class="site-form-grid"><div><label asp-for="Banner.StartVietnam">Bắt đầu (giờ Việt Nam UTC+7)</label><input asp-for="Banner.StartVietnam" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" /></div><div><label asp-for="Banner.EndVietnam">Kết thúc exclusive (UTC+7)</label><input asp-for="Banner.EndVietnam" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" /></div></div><p class="field-hint">Có thể bỏ trống mốc. Banner hết hạn sẽ ngừng hiển thị và không còn grant media riêng, kể cả worker tắt.</p>
+    }
+}
+@if (Model.Section == "blocks")
+{
+    <label asp-for="Block.Title">Tên khối</label><input asp-for="Block.Title" maxlength="300" required />
+    <label asp-for="Block.Type">Mẫu khối</label><select asp-for="Block.Type">@foreach (var type in LandPortal.Infrastructure.SiteConfigurationService.BlockTypes) { <option value="@type">@(type switch { "Featured" => "Tin nổi bật", "Recent" => "Tin mới", "Announcements" => "Thông báo", "Category" => "Chuyên mục", "LegalDocuments" => "Văn bản pháp luật", "DraftDocuments" => "Văn bản dự thảo", "Videos" => "Video (metadata hiện có)", _ => "Liên kết / sổ tay" })</option> }</select>
+    <label asp-for="Block.CategoryId">Chuyên mục (chỉ dành cho mẫu Chuyên mục)</label><select asp-for="Block.CategoryId"><option value="">Không chọn</option>@foreach (var category in Model.Categories) { <option value="@category.Value">@category.Label</option> }</select>
+    <div class="site-form-grid"><div><label asp-for="Block.Limit">Số nội dung</label><input asp-for="Block.Limit" type="number" min="1" max="12" /></div><div><label asp-for="Block.SortOrder">Thứ tự</label><input asp-for="Block.SortOrder" type="number" min="0" max="10000" /></div></div>
+    <label class="checkbox-label"><input asp-for="Block.Enabled" /> Hiển thị khối</label>
+    <label asp-for="Block.PinnedContentIds">Ghim nội dung đang public (Ctrl/Command chọn nhiều, tối đa 12)</label><select asp-for="Block.PinnedContentIds" multiple size="8">@foreach (var content in Model.Contents) { <option value="@content.Value">@content.Label</option> }</select><p class="field-hint">Pin lưu ID, không sao chép tiêu đề/ảnh. Nội dung bị gỡ tự biến mất và được bù bằng bản hợp lệ. Server kiểm tra đúng loại của khối.</p>
+}
+@if (Model.Section == "vocabulary")
+{
+    <label asp-for="Vocabulary.Kind">Loại danh mục</label><select asp-for="Vocabulary.Kind">@foreach (var kind in LandPortal.Infrastructure.SiteConfigurationService.VocabularyKinds) { <option value="@kind">@(kind switch { "Authority" => "Cơ quan ban hành", "Type" => "Loại văn bản", _ => "Lĩnh vực" })</option> }</select>
+    <label asp-for="Vocabulary.Label">Tên</label><input asp-for="Vocabulary.Label" maxlength="300" required /><label asp-for="Vocabulary.SortOrder">Thứ tự</label><input asp-for="Vocabulary.SortOrder" type="number" min="0" max="10000" /><label class="checkbox-label"><input asp-for="Vocabulary.Active" /> Cho chọn ở editor</label><p class="field-hint">Không hard-delete danh mục đang dùng. Giá trị nguồn chưa ánh xạ vẫn được giữ text gốc trong revision; đổi tên cấu hình chỉ công khai khi áp dụng.</p>
+}
+<div class="site-actions"><button class="primary-button" type="submit">Lưu phiên bản nháp</button><a href="/admin/site?section=@Model.Section">Hủy chỉnh sửa chưa lưu</a></div>
+</form>
+@if (Model.Section is "contact" or "banners")
+{
+    <section class="site-admin-panel"><h2>Ảnh cho cấu hình</h2><img id="site-image-preview" class="site-admin-image" alt="Ảnh chọn trong cấu hình nháp" hidden />
+    @if (Model.CanUpload) { <form id="site-image-upload"><label for="site-upload-file">Tải ảnh từ máy (JPEG/PNG/GIF/WebP)</label><input id="site-upload-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" required /><button type="submit">Tải vào kho riêng</button><progress id="site-upload-progress" max="100" value="0" hidden></progress><p id="site-upload-status" role="status">Ngoại lệ Development tường minh: ảnh vẫn NotScanned.</p></form> } else { <p>Upload cần media.manage và ngoại lệ Development local tường minh. Có thể chọn ảnh đã nhập; Production/Staging chưa mở upload khi chưa có scanner.</p> }
+    </section>
+}
+@section Scripts { <script src="~/js/site-admin.js" asp-append-version="true" defer></script> }

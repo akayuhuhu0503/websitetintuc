@@ -1,0 +1,6 @@
+@model LandPortal.Infrastructure.PublicInquiryPage
+<section class="interaction-panel"><h1>Hỏi đáp đã duyệt</h1><a href="/tuong-tac/Inquiry">Gửi câu hỏi qua CAPTCHA</a>
+<form method="get"><label for="question-q">Từ khóa trong câu hỏi/câu trả lời đã duyệt</label><input id="question-q" name="q" maxlength="200" value="@Model.Query"/><label for="question-field">Lĩnh vực</label><input id="question-field" name="field" maxlength="120" value="@Model.Field"/><button>Lọc hỏi đáp</button></form><p>@Model.Total hỏi đáp công khai · trang @Model.Page</p>
+<partial name="_PublicInteractions" model="Model.Items"/>
+@if(Model.Page>1){<a href="?page=@(Model.Page-1)&q=@Uri.EscapeDataString(Model.Query??"")&field=@Uri.EscapeDataString(Model.Field??"")">Trang trước</a>}@if(Model.Page*20<Model.Total){<a href="?page=@(Model.Page+1)&q=@Uri.EscapeDataString(Model.Query??"")&field=@Uri.EscapeDataString(Model.Field??"")">Trang sau</a>}
+</section>

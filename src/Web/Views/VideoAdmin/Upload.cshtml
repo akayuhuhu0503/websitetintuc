@@ -1,0 +1,19 @@
+@model VideoUploadModel
+@{Layout="_AdminLayout";ViewData["Title"]="Tải video từ máy";}
+@section Styles{<link rel="stylesheet" href="~/css/video.css" asp-append-version="true" />}
+<div id="video-upload" data-content-id="@Model.ContentId" data-row-version="@Model.RowVersion" data-max-bytes="@Model.MaxFileBytes" data-chunk-bytes="@Model.ChunkBytes">
+<a href="/admin/edit/@Model.ContentId">← Biên tập metadata và workflow</a><h1>Tải video từ máy</h1><h2>@Model.Title</h2>
+<p class="scope-note">Tệp giữ trong quarantine. Đủ byte upload chưa phải Ready. Chỉ xuất bản revision có bản phát và poster hợp lệ, sau quét thật.</p>
+<p>Bộ xử lý: <strong>@Model.Processor</strong>. Nếu chưa sẵn sàng, worker ghi BLOCKED với mã lỗi thật.</p>
+@Html.AntiForgeryToken()
+<div class="video-panel"><label for="video-file">Chọn tệp MP4, MOV hoặc WebM</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm" /><p>Tối đa @((Model.MaxFileBytes/1024d/1024).ToString("N0")) MiB; mỗi chunk @(Model.ChunkBytes<1024*1024?(Model.ChunkBytes/1024d).ToString("N0")+" KiB":(Model.ChunkBytes/1024d/1024).ToString("N0")+" MiB"). Sau refresh, chọn lại đúng tệp; hệ thống kiểm hash từng chunk đã nhận trước khi tiếp tục.</p>
+<div class="video-actions"><button type="button" class="button" id="video-start">Tạo phiên và tải</button><button type="button" class="button secondary" id="video-pause" disabled>Tạm dừng</button><button type="button" class="button secondary" id="video-resume" disabled>Tiếp tục</button><button type="button" class="button danger" id="video-cancel" disabled>Hủy phiên tải</button></div>
+<label for="video-progress">Byte đã được SQL xác nhận</label><progress id="video-progress" value="0" max="100"></progress><p id="video-status" role="status" aria-live="polite">Chưa tải tệp.</p><p id="video-job" role="status" aria-live="polite"></p>
+<button type="button" class="button secondary" id="video-select" hidden>Gắn tệp này vào revision nháp</button><button type="button" class="button secondary" id="video-retry" hidden>Đưa lại vào hàng đợi (tối đa 3 lần)</button>
+<button type="button" class="button danger" id="video-cancel-job" hidden>Hủy xử lý tệp đã tải</button><div id="video-preview"></div>
+</div>
+<section class="video-panel"><h2>Phụ đề tiếng Việt (tùy chọn)</h2><label for="video-subtitle">Tệp WebVTT văn bản thuần, tối đa1 MiB</label><input id="video-subtitle" type="file" accept=".vtt,text/vtt" /><p>Dùng timestamp HH:mm:ss.fff, không HTML/STYLE/REGION hoặc cue settings. Tải sau khi video đủ byte; phụ đề có quét riêng và gắn revision riêng.</p><button id="video-subtitle-upload" class="button secondary" type="button">Tải phụ đề cho video đang mở</button><div id="video-subtitles" aria-live="polite"></div></section>
+<section class="video-panel"><h2>Phiên tải của tôi</h2><button type="button" class="button secondary" id="video-refresh">Tải lại trạng thái</button><div id="video-sessions"></div></section>
+<section class="video-panel"><h2>Chọn video nội bộ đã Ready</h2><p>Chỉ hiện video của bạn hoặc đang được một revision công khai sử dụng. Video được gắn cuối nội dung; quyền xuất bản kiểm tra lại tại server.</p><button type="button" class="button secondary" id="video-library-load">Mở bộ chọn</button><div id="video-library"></div></section>
+</div>
+@section Scripts{<script src="~/js/video-upload.js" asp-append-version="true" defer></script>}

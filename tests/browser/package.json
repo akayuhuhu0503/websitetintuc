@@ -1,0 +1,1 @@
+{"name":"land-portal-browser-qa","private":true,"type":"module","scripts":{"test":"node ui-check.mjs"},"devDependencies":{"playwright":"1.64.0"}}

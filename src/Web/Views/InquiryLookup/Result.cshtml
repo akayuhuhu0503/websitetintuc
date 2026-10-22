@@ -1,0 +1,5 @@
+@model LandPortal.Infrastructure.InquiryLookupResult
+@{ViewData["Title"]="Kết quả tra cứu hồ sơ";}
+<section class="interaction-panel"><h1>Kết quả tra cứu hồ sơ</h1><dl><dt>Trạng thái</dt><dd>@InteractionLabels.State(Model.State)</dd><dt>Ngày tiếp nhận</dt><dd>@Model.ReceivedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</dd><dt>Hạn dự kiến</dt><dd>@(Model.DueUtc?.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")??"Chưa áp dụng") · @Model.SlaLabel</dd><dt>Tệp</dt><dd>@(Model.AttachmentStatus??"Không có tệp") — tệp riêng/cách ly không được mở tại trang tra cứu.</dd></dl>
+<h2>Câu trả lời dành cho người gửi</h2>@if(Model.Answer==""){<p>Chưa có câu trả lời.</p>}else{<p class="interaction-original">@Model.Answer</p>}
+<h2>Lịch sử trạng thái</h2><ul>@foreach(var item in Model.History){<li>@item</li>}</ul><p>Phiên tra cứu có hiệu lực15 phút. Thông tin phân công/ghi chú nội bộ và thông tin người khác không được trả về.</p><a href="/tra-cuu-ho-so">Yêu cầu phiên mới</a></section>

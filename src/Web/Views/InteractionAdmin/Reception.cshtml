@@ -1,0 +1,5 @@
+@model IReadOnlyList<LandPortal.Web.Models.CommentReceptionRow>
+@{Layout="_AdminLayout";ViewData["Title"]="Tiếp nhận bình luận";var enabled=ViewData["Enabled"] is true;}
+<section class="interaction-panel"><h1>Tiếp nhận bình luận</h1><p>Bật toàn site và bật từng bài để mở nhận mới. Tắt nhận mới vẫn giữ nội dung đã duyệt. Thao tác thay đổi live và có audit; cần quyền kiểm duyệt, cấu hình và sửa bài.</p>
+<form method="post">@Html.AntiForgeryToken()<input type="hidden" name="expectedEnabled" value="@enabled.ToString()"/><input type="hidden" name="enabled" value="@((!enabled).ToString())"/><button>@(enabled?"Tắt":"Bật") tiếp nhận toàn site</button></form>
+<h2>50 bài công khai gần nhất trong phạm vi quyền</h2>@foreach(var c in Model){<form method="post">@Html.AntiForgeryToken()<a href="/bai-viet/@c.Id">Xem bài @c.Id</a><input type="hidden" name="contentId" value="@c.Id"/><input type="hidden" name="rowVersion" value="@c.RowVersion"/><input type="hidden" name="expectedEnabled" value="@c.Enabled.ToString()"/><input type="hidden" name="enabled" value="@((!c.Enabled).ToString())"/><button>@(c.Enabled?"Tắt":"Bật") bình luận bài này</button></form>}</section>

@@ -1,0 +1,7 @@
+@model LandPortal.Web.Controllers.WeeklySchedulePage
+@using System.Globalization
+@{ViewData["Title"]="Lịch công tác tuần "+Model.Week+"/"+Model.Year;var monday=ISOWeek.ToDateTime(Model.Year,Model.Week,DayOfWeek.Monday);var prev=monday.AddDays(-7);var next=monday.AddDays(7);}
+<h1>Lịch công tác tuần @Model.Week/@Model.Year</h1><p>Ngày theo giờ Việt Nam · tuần ISO bắt đầu thứ Hai</p>
+<nav aria-label="Chọn tuần"><a href="?year=@ISOWeek.GetYear(prev)&week=@ISOWeek.GetWeekOfYear(prev)">Tuần trước</a> · <a href="?year=@ISOWeek.GetYear(next)&week=@ISOWeek.GetWeekOfYear(next)">Tuần sau</a></nav>
+@if(Model.Release is {} release&&Model.Metadata is {} metadata){<p>Phiên bản @release.Version – cập nhật lúc @release.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</p>@if(metadata.WeeklyOriginalAssetId is Guid original){<p><a href="/media/@original?download=true">Tải Word gốc của phiên bản @release.Version</a></p>}<div class="article-body">@Html.Raw(LandPortal.Infrastructure.V05ContentPolicy.Table(metadata))</div>}else{<p>Chưa có lịch được duyệt cho tuần này.</p>}
+<p><a href="/lich-tuan/nguon">Các nội dung lịch tuần đã nhập từ nguồn</a></p>

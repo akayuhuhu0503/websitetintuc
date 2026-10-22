@@ -1,0 +1,34 @@
+@model EditorModel
+@using LandPortal.Domain
+@if(Model.Kind==ContentKind.Article){
+<fieldset disabled="@(!Model.CanSave)"><legend>Công khai thông tin (FR-17)</legend>
+<p>Bài công khai thông tin luôn qua hai bước duyệt, không nhận bình luận. Tên nhóm còn chờ duyệt chưa được phát hành.</p>
+<label asp-for="Metadata.DisclosureGroupId">Nhóm thông tin</label><select asp-for="Metadata.DisclosureGroupId"><option value="">Bài tin thông thường</option>@foreach(var group in LandPortal.Infrastructure.V05ContentPolicy.Groups){<option value="@group.Key">@group.Value</option>}</select>
+<label asp-for="Metadata.Province">Tỉnh/thành phố theo nguồn chính thức</label><input asp-for="Metadata.Province" maxlength="200"/>
+<label asp-for="Metadata.ProvinceCode">Mã tỉnh theo danh mục được đơn vị xác nhận</label><input asp-for="Metadata.ProvinceCode" maxlength="20"/>
+<label asp-for="Metadata.DisclosureYear">Năm thông tin</label><input asp-for="Metadata.DisclosureYear" type="number" min="1900" max="2200"/>
+<label asp-for="Metadata.PublicationSource">Nguồn phát hành chính thức</label><input asp-for="Metadata.PublicationSource" maxlength="1000"/>
+<label asp-for="Metadata.LegalBasisReference">Căn cứ pháp lý/phát hành</label><textarea asp-for="Metadata.LegalBasisReference" maxlength="2000"></textarea>
+<label asp-for="Metadata.PublicationReviewEvidence">Xác nhận thẩm quyền và đã rà soát PII (nội bộ)</label><textarea asp-for="Metadata.PublicationReviewEvidence" maxlength="2000"></textarea>
+<p>Tài liệu PDF/Excel XLSX đi qua kho cách ly và scanner thật; dùng liên kết Tải / quét tài liệu sau khi lưu nháp. Tệp NotScanned chặn phát hành FR-17 kể cả ngoại lệ local. Không sao chép dữ liệu cá nhân chưa được phép công khai.</p>
+</fieldset>}
+@if(Model.Metadata.WeeklyYear!=null){
+<fieldset disabled="@(!Model.CanSave)"><legend>Lịch công tác tuần (ISO, ngày theo Việt Nam)</legend>
+<label asp-for="Metadata.WeeklyYear">Năm ISO</label><input asp-for="Metadata.WeeklyYear" type="number" min="2000" max="2200"/>
+<label asp-for="Metadata.WeeklyWeek">Tuần ISO</label><input asp-for="Metadata.WeeklyWeek" type="number" min="1" max="53"/>
+<input asp-for="Metadata.WeeklyOriginalAssetId" type="hidden" />
+@if(Model.Metadata.WeeklyOriginalAssetId != null){<p>Word gốc <code>@Model.Metadata.WeeklyOriginalAssetId</code> gắn với revision sau khi lưu. <a href="/admin/documents/file/@Model.Metadata.WeeklyOriginalAssetId">Tải riêng tư để rà soát</a></p><label asp-for="Metadata.WeeklyOriginalReviewEvidence">Xác nhận đã rà soát metadata/comments và được phép công khai Word gốc (nội bộ)</label><textarea asp-for="Metadata.WeeklyOriginalReviewEvidence" maxlength="2000"></textarea>}
+<label asp-for="Metadata.WeeklyChangeNote">Ghi chú thay đổi</label><input asp-for="Metadata.WeeklyChangeNote" maxlength="1000"/>
+<p>Điền từng dòng lịch; dòng để trống sẽ bỏ qua. Nội dung bảng thay cho phần thân bài. DOCX đã Clean có thể đọc vào preview, sửa dòng rồi lưu nháp; mẫu kỹ thuật chưa thay thế ba Word nghiệp vụ thật. Bản cũ được giữ trong lịch sử riêng tư.</p>
+@for(var i=0;i<Model.ScheduleRows.Count;i++){
+<details open="@(i<2||Model.ScheduleRows[i].Date!=null)"><summary>Dòng @(i+1)</summary>
+<label asp-for="ScheduleRows[i].Date">Ngày</label><input asp-for="ScheduleRows[i].Date" type="date"/>
+<label asp-for="ScheduleRows[i].Period">Buổi</label><select asp-for="ScheduleRows[i].Period"><option value="">Chọn buổi</option><option>Sáng</option><option>Chiều</option><option>Cả ngày</option></select>
+<label asp-for="ScheduleRows[i].Time">Giờ</label><input asp-for="ScheduleRows[i].Time" maxlength="2000"/>
+<label asp-for="ScheduleRows[i].Content">Nội dung</label><textarea asp-for="ScheduleRows[i].Content" maxlength="2000"></textarea>
+<label asp-for="ScheduleRows[i].Chair">Chủ trì</label><input asp-for="ScheduleRows[i].Chair" maxlength="2000"/>
+<label asp-for="ScheduleRows[i].Attendees">Thành phần</label><input asp-for="ScheduleRows[i].Attendees" maxlength="2000"/>
+<label asp-for="ScheduleRows[i].Location">Địa điểm</label><input asp-for="ScheduleRows[i].Location" maxlength="2000"/>
+<label asp-for="ScheduleRows[i].Note">Ghi chú</label><input asp-for="ScheduleRows[i].Note" maxlength="2000"/>
+</details>}
+</fieldset>}
