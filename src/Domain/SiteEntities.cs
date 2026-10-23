@@ -17,6 +17,11 @@ public sealed class SiteConfigurationRevision
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public string OrganizationName { get; set; } = "CỤC QUẢN LÝ ĐẤT ĐAI";
     public string FooterText { get; set; } = "";
+    public string? EnglishName { get; set; }
+    public string? SupervisingAgency { get; set; }
+    public string? ResponsiblePerson { get; set; }
+    public string? LicenseNumber { get; set; }
+    public string? SeoDescription { get; set; }
     public string ContactAddress { get; set; } = "";
     public string ContactPhone { get; set; } = "";
     public string ContactHotline { get; set; } = "";
@@ -57,6 +62,7 @@ public sealed class SiteMenuItem
     public bool OpenNewWindow { get; set; }
     public int SortOrder { get; set; }
     public bool SystemProtected { get; set; }
+    public bool Enabled { get; set; } = true;
 }
 public sealed class SiteBanner
 {

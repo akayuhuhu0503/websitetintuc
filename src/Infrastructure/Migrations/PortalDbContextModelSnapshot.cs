@@ -934,6 +934,36 @@ namespace Infrastructure.Migrations
                     b.ToTable("InquiryExtensions");
                 });
 
+            modelBuilder.Entity("LandPortal.Domain.InquiryLookupAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ReceiptHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("SessionHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptHash", "CreatedUtc");
+
+                    b.HasIndex("SessionHash", "CreatedUtc");
+
+                    b.ToTable("InquiryLookupAttempt");
+                });
+
             modelBuilder.Entity("LandPortal.Domain.InquiryLookupChallenge", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1644,6 +1674,28 @@ namespace Infrastructure.Migrations
                     b.ToTable("PublicCaptchaChallenges");
                 });
 
+            modelBuilder.Entity("LandPortal.Domain.PublicVisit", b =>
+                {
+                    b.Property<string>("SessionHash")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset>("LastSeenUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("StartedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("SessionHash");
+
+                    b.HasIndex("LastSeenUtc");
+
+                    b.HasIndex("StartedUtc");
+
+                    b.ToTable("PublicVisit");
+                });
+
             modelBuilder.Entity("LandPortal.Domain.PublicationJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2009,16 +2061,36 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("EnglishName")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
                     b.Property<string>("FooterText")
                         .IsRequired()
                         .HasMaxLength(5000)
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LicenseNumber")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<Guid?>("LogoAssetId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("OrganizationName")
                         .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ResponsiblePerson")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SeoDescription")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("SupervisingAgency")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
@@ -2098,6 +2170,11 @@ namespace Infrastructure.Migrations
 
                     b.Property<Guid?>("ContentId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("ExternalUrl")
                         .IsRequired()
@@ -3003,6 +3080,9 @@ namespace Infrastructure.Migrations
                                 .HasMaxLength(80)
                                 .HasColumnType("nvarchar(80)");
 
+                            b1.Property<bool?>("Featured")
+                                .HasColumnType("bit");
+
                             b1.Property<string>("Field")
                                 .IsRequired()
                                 .HasMaxLength(300)
@@ -3058,6 +3138,10 @@ namespace Infrastructure.Migrations
                                 .IsRequired()
                                 .HasMaxLength(300)
                                 .HasColumnType("nvarchar(300)");
+
+                            b1.Property<string>("Tags")
+                                .HasMaxLength(500)
+                                .HasColumnType("nvarchar(500)");
 
                             b1.Property<string>("Unit")
                                 .IsRequired()
@@ -3172,6 +3256,9 @@ namespace Infrastructure.Migrations
                                 .HasMaxLength(80)
                                 .HasColumnType("nvarchar(80)");
 
+                            b1.Property<bool?>("Featured")
+                                .HasColumnType("bit");
+
                             b1.Property<string>("Field")
                                 .IsRequired()
                                 .HasMaxLength(300)
@@ -3227,6 +3314,10 @@ namespace Infrastructure.Migrations
                                 .IsRequired()
                                 .HasMaxLength(300)
                                 .HasColumnType("nvarchar(300)");
+
+                            b1.Property<string>("Tags")
+                                .HasMaxLength(500)
+                                .HasColumnType("nvarchar(500)");
 
                             b1.Property<string>("Unit")
                                 .IsRequired()

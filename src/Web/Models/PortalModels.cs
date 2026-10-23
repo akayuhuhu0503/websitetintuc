@@ -50,6 +50,10 @@ public sealed class ArticleModel
     public string? SourceName { get; init; }
     public string? SourceUrl { get; init; }
     public string? CoverUrl { get; init; }
+    public string? CoverCaption { get; init; }
+    public Guid? InlinePdfId { get; init; }
+    public long DocumentViews { get; init; }
+    public long DocumentDownloads { get; init; }
     public IReadOnlyList<AttachmentModel> Attachments { get; init; } = [];
     public IReadOnlyList<ContentCard> Related { get; init; } = [];
     public string? DocumentNumber { get; init; }
@@ -133,6 +137,7 @@ public sealed class EditorModel
     public Guid? CurrentRevisionId { get; set; }
     public int[] SecondaryCategoryIds { get; set; } = [];
     public Guid? CoverAssetId { get; set; }
+    [StringLength(2000),Display(Name="Chú thích ảnh đại diện")] public string? CoverCaption { get; set; }
     public Guid[] AttachmentIds { get; set; } = [];
     public Guid[] VideoAssetIds { get; set; } = [];
     public Guid[] SubtitleAssetIds { get; set; } = [];
@@ -198,6 +203,7 @@ public sealed class HistoryModel
 public sealed record HistoryAudit(string Actor, string Action, Guid? RevisionId, string Detail, DateTimeOffset CreatedUtc);
 public sealed class PreviewModel
 {
+    public string? CoverCaption { get; init; }
     public LandPortal.Domain.ContentMetadata Metadata { get; init; } = new();
     public required string Title { get; init; }
     public required string BodyHtml { get; init; }

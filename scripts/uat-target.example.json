@@ -1,0 +1,23 @@
+{
+  "TargetApproved": false,
+  "ApprovalReference": "",
+  "MachineName": "REPLACE_APPROVED_IIS_MACHINE",
+  "SqlServer": "REPLACE_APPROVED_SQL_INSTANCE",
+  "Database": "REPLACE_ALLOCATED_DATABASE",
+  "HostName": "REPLACE_APPROVED_HTTPS_HOST",
+  "SiteName": "LandPortal-Uat",
+  "AppPoolName": "LandPortal-Uat",
+  "CertificateThumbprint": "",
+  "DataHome": "D:\\LandPortal-Uat-Private",
+  "PublishRoot": "D:\\LandPortal-Uat-Code",
+  "ServiceAccount": "REPLACE_DOMAIN\\svc_landportal",
+  "ScannerHost": "127.0.0.1",
+  "ScannerPort": 3310,
+  "ScannerPolicyReference": "",
+  "SmtpHost": "",
+  "SmtpPort": 587,
+  "SmtpFrom": "",
+  "ScannerProvider": "MicrosoftDefenderOnPrem",
+  "DefenderPrivacyPolicyReference": "",
+  "DefenderBinarySha256": ""
+}

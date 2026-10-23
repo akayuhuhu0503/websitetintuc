@@ -21,6 +21,7 @@ public static class ContentMetadataModel
     }
     private static void ConfigureFields<TOwner>(OwnedNavigationBuilder<TOwner, ContentMetadata> m) where TOwner : class
     {
+        m.Property(x=>x.Tags).HasMaxLength(500);
         m.Property(x => x.WeeklyOriginalReviewEvidence).HasMaxLength(2000);
         m.Property(x => x.Number).HasMaxLength(200);
         m.Property(x => x.DocumentType).HasMaxLength(300);

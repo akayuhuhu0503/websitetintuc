@@ -1,10 +1,13 @@
-@model InquiryLookupForm
-@{ViewData["Title"]="Tra cứu hồ sơ hỏi đáp";}
-<section class="interaction-panel"><h1>Tra cứu hồ sơ hỏi đáp</h1><p>Cần mã tiếp nhận, email đã gửi câu hỏi và mã OTP mới cho tra cứu. Mã gửi hồ sơ không dùng lại. Không có tài khoản công dân; OTP chỉ xác minh quyền kiểm soát email.</p>
-@if(!Model.Available){<p class="scope-note">Chưa có dịch vụ xác minh email tại môi trường này. Không thể mở hồ sơ bằng mã đơn thuần.</p>}
-@if(Model.Message!=""){<p role="status">@Model.Message</p>}
-<form method="post" action="@(Model.ChallengeId==null?"/tra-cuu-ho-so/ma":"/tra-cuu-ho-so/xac-minh")">@Html.AntiForgeryToken()<div asp-validation-summary="All" role="alert"></div><input asp-for="ChallengeId" type="hidden"/>
-<label asp-for="Receipt">Mã tiếp nhận32 ký tự</label><input asp-for="Receipt" maxlength="32" required autocomplete="off"/><label asp-for="Email">Email đã gửi hỏi đáp</label><input asp-for="Email" type="email" maxlength="254" required autocomplete="email"/>
-<div class="interaction-trap" aria-hidden="true"><label asp-for="Website">Website</label><input asp-for="Website" tabindex="-1" autocomplete="off"/></div>
-@if(Model.ChallengeId!=null){<label asp-for="Code">Mã OTP tra cứu6 chữ số</label><input asp-for="Code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"/><button disabled="@(!Model.Available)">Xác minh và tra cứu</button><button formaction="/tra-cuu-ho-so/ma" formnovalidate disabled="@(!Model.Available)">Yêu cầu mã mới</button>}else{<button disabled="@(!Model.Available)">Yêu cầu mã OTP tra cứu</button>}
-</form></section>
+@model LandPortal.Web.Controllers.InquiryLookupForm
+@{ ViewData["Title"]="Tra cứu hỏi đáp"; }
+<header class="page-header"><p class="eyebrow">HỎI ĐÁP</p><h1>Tra cứu tình trạng câu hỏi</h1><p>Nhập mã tiếp nhận được cấp khi gửi câu hỏi và đúng email đã đăng ký. Không chia sẻ mã tiếp nhận.</p></header>
+@if(Model.Message!=null){<p class="form-message" role="status">@Model.Message</p>}
+@if(Model.Result!=null){<section class="content-panel" aria-label="Kết quả tra cứu"><h2>Kết quả tra cứu</h2><p>Trạng thái: @LandPortal.Web.Services.AdminLabels.State(Model.Result.State.ToString())</p>@if(Model.Result.Answer!=""){<h3>Trả lời</h3><p class="lookup-answer">@Model.Result.Answer</p>}else{<p>Chưa có câu trả lời.</p>}</section>}
+<form method="post" action="/tra-cuu-ho-so" class="interaction-form">
+@Html.AntiForgeryToken()
+<label asp-for="Receipt">Mã tiếp nhận</label><input asp-for="Receipt" required maxlength="32" autocomplete="off" spellcheck="false" />
+<label asp-for="Email">Email đã gửi câu hỏi</label><input asp-for="Email" type="email" required maxlength="254" autocomplete="off" />
+<input type="hidden" asp-for="CaptchaId" />
+@if(Model.CaptchaId!=Guid.Empty){<label asp-for="CaptchaAnswer">CAPTCHA: @Model.Question</label><input asp-for="CaptchaAnswer" required maxlength="3" inputmode="numeric" autocomplete="off" /><button type="submit">Tra cứu</button>}else{<p>Chưa thể cấp CAPTCHA. Vui lòng thử lại sau.</p>}
+<p>Kết quả chỉ hiện sau khi kiểm tra đầy đủ. Tệp đính kèm và thông tin cá nhân không hiển thị tại đây.</p>
+</form>

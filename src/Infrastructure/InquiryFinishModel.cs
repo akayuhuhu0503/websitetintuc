@@ -5,6 +5,11 @@ public static class InquiryFinishModel
 {
     public static void Configure(ModelBuilder b)
     {
+        var attempt=b.Entity<InquiryLookupAttempt>();
+        attempt.Property(x=>x.ReceiptHash).HasMaxLength(64).IsUnicode(false);
+        attempt.Property(x=>x.SessionHash).HasMaxLength(64).IsUnicode(false);
+        attempt.HasIndex(x=>new{x.ReceiptHash,x.CreatedUtc});
+        attempt.HasIndex(x=>new{x.SessionHash,x.CreatedUtc});
         var s=b.Entity<InteractionSubmission>();s.Property(x=>x.InquiryField).HasMaxLength(120);s.HasOne<InquiryCalendar>().WithMany().HasForeignKey(x=>x.InquiryCalendarId).OnDelete(DeleteBehavior.NoAction);s.HasIndex(x=>new{x.Kind,x.AssigneeId,x.InquiryDueUtc});
         var f=b.Entity<InquiryAttachment>();f.Property(x=>x.RowVersion).IsRowVersion();f.Property(x=>x.SessionHash).HasMaxLength(64).IsUnicode(false);f.Property(x=>x.StorageKey).HasMaxLength(200);f.Property(x=>x.Mime).HasMaxLength(80);f.Property(x=>x.Sha256).HasMaxLength(64).IsUnicode(false);f.Property(x=>x.ScannedSha256).HasMaxLength(64).IsUnicode(false);f.Property(x=>x.ScanError).HasMaxLength(80);f.Property(x=>x.EngineVersion).HasMaxLength(200);f.HasIndex(x=>x.SubmissionId).IsUnique().HasFilter("[SubmissionId] IS NOT NULL");f.HasIndex(x=>new{x.ScanState,x.AvailableUtc});f.HasIndex(x=>new{x.SessionHash,x.CreatedUtc});f.HasOne<InteractionSubmission>().WithMany().HasForeignKey(x=>x.SubmissionId).OnDelete(DeleteBehavior.NoAction);
         var l=b.Entity<InquiryLookupChallenge>();l.Property(x=>x.RowVersion).IsRowVersion();foreach(var name in new[]{"SessionHash","EmailHash","ReceiptHash","CodeHash"})l.Property<string>(name).HasMaxLength(64).IsUnicode(false);l.Property(x=>x.Purpose).HasMaxLength(40);l.HasIndex(x=>new{x.EmailHash,x.CreatedUtc});l.HasIndex(x=>new{x.SessionHash,x.CreatedUtc});

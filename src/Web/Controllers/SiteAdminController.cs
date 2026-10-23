@@ -36,11 +36,11 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         var r = state.Revision; var model = new SiteEditModel { Section = section, RowVersion = Convert.ToBase64String(state.Header.RowVersion), ItemId = id, CategoryId = categoryId, ContentSearch = contentSearch, MediaSearch = mediaSearch };
         switch (section)
         {
-            case "contact": model.Contact = new() { OrganizationName = r.OrganizationName, FooterText = r.FooterText, ContactAddress = r.ContactAddress, ContactPhone = r.ContactPhone, ContactHotline = r.ContactHotline, ContactEmail = r.ContactEmail, LogoAssetId = r.LogoAssetId }; break;
+            case "contact": model.Contact = new() { EnglishName=r.EnglishName,SupervisingAgency=r.SupervisingAgency,ResponsiblePerson=r.ResponsiblePerson,LicenseNumber=r.LicenseNumber,SeoDescription=r.SeoDescription,OrganizationName = r.OrganizationName, FooterText = r.FooterText, ContactAddress = r.ContactAddress, ContactPhone = r.ContactPhone, ContactHotline = r.ContactHotline, ContactEmail = r.ContactEmail, LogoAssetId = r.LogoAssetId }; break;
             case "categories":
                 if (categoryId.HasValue) { var x = r.Categories.SingleOrDefault(x => x.CategoryId == categoryId); if (x is null) return NotFound(); model.Category = new() { DisplayName = x.DisplayName, Slug = x.Slug, Description = x.Description, ParentCategoryId = x.ParentCategoryId, SortOrder = x.SortOrder, ShowInNavigation = x.ShowInNavigation }; model.SystemProtected = await db.Categories.AnyAsync(c => c.Id == categoryId && c.SourceUrl != ""); } break;
             case "menus":
-                if (id.HasValue) { var x = r.Menus.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Menu = new() { Label = x.Label, Position = x.Position, ParentId = x.ParentId, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder }; model.SystemProtected = x.SystemProtected; } break;
+                if (id.HasValue) { var x = r.Menus.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Menu = new() { Label = x.Label, Position = x.Position, ParentId = x.ParentId, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, Enabled=x.Enabled }; model.SystemProtected = false; } break;
             case "banners":
                 model.Banner.Position = "home";
                 if (id.HasValue) { var x = r.Banners.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Banner = new() { Label = x.Label, Alt = x.Alt, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, MediaAssetId = x.MediaAssetId, StartVietnam = x.StartUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime, EndVietnam = x.EndUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime }; } break;
@@ -59,11 +59,20 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         try
         {
             await sites.MutateAsync(await ActorAsync(), Version(rowVersion), SiteConfigurationService.AddDisclosureMenu, "AddDisclosureMenu");
-            TempData["Success"] = "Đã thêm nhóm và ba đích FR-17 vào cấu hình nháp. Nhóm chờ PO luôn bị loại khỏi menu công khai. Áp dụng bản nháp theo quyền để thay menu live.";
+            TempData["Success"] = "Đã thêm nhóm Công khai thông tin vào cấu hình nháp. Xác nhận danh mục nếu còn thiếu, xem trước rồi áp dụng bản nháp theo quyền để đổi menu công khai.";
             return Redirect("/admin/site?section=menus");
         }
         catch (SiteConfigurationException error) { return StatusCode(error.StatusCode, error.Message); }
         catch (DbUpdateConcurrencyException) { return Conflict("Cấu hình đã đổi. Tải lại trước khi thêm menu."); }
+    }
+    [HttpPost("admin/site/disclosure-catalog"),Authorize(Policy=Permissions.ManageSite),Authorize(Policy=Permissions.PublishSite)]
+    public async Task<IActionResult> DisclosureCatalog(string rowVersion,bool confirmed)
+    {
+        if(!confirmed)return BadRequest("Cần xác nhận ba tên chuyên mục đúng đặc tả trước khi kích hoạt.");
+        try{await sites.ConfirmDisclosureCatalogAsync(await ActorAsync(),Version(rowVersion));TempData["Success"]="Đã xác nhận ba tên danh mục. Chưa áp dụng menu nháp hoặc xuất bản bài viết.";return Redirect("/admin/site?section=menus");}
+        catch(UnauthorizedAccessException){return Forbid();}
+        catch(SiteConfigurationException e){return StatusCode(e.StatusCode,e.Message);}
+        catch(DbUpdateConcurrencyException){return Conflict("Danh mục đã thay đổi; tải lại để kiểm tra.");}
     }
     [HttpPost("admin/site/save"), Authorize(Policy = Permissions.ManageSite)]
     public async Task<IActionResult> Save(SiteEditModel model)
@@ -79,7 +88,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
             {
                 switch (model.Section)
                 {
-                    case "contact": r.OrganizationName = model.Contact.OrganizationName.Trim(); r.FooterText = model.Contact.FooterText.Trim(); r.ContactAddress = model.Contact.ContactAddress.Trim(); r.ContactPhone = model.Contact.ContactPhone.Trim(); r.ContactHotline = model.Contact.ContactHotline.Trim(); r.ContactEmail = model.Contact.ContactEmail.Trim(); r.LogoAssetId = model.Contact.LogoAssetId; break;
+                    case "contact": r.EnglishName=Optional(model.Contact.EnglishName);r.SupervisingAgency=Optional(model.Contact.SupervisingAgency);r.ResponsiblePerson=Optional(model.Contact.ResponsiblePerson);r.LicenseNumber=Optional(model.Contact.LicenseNumber);r.SeoDescription=Optional(model.Contact.SeoDescription);r.OrganizationName = model.Contact.OrganizationName.Trim(); r.FooterText = model.Contact.FooterText.Trim(); r.ContactAddress = model.Contact.ContactAddress.Trim(); r.ContactPhone = model.Contact.ContactPhone.Trim(); r.ContactHotline = model.Contact.ContactHotline.Trim(); r.ContactEmail = model.Contact.ContactEmail.Trim(); r.LogoAssetId = model.Contact.LogoAssetId; break;
                     case "categories":
                         var category = model.CategoryId.HasValue ? r.Categories.SingleOrDefault(x => x.CategoryId == model.CategoryId) : null;
                         if (model.CategoryId.HasValue && category is null) throw new SiteConfigurationException("Chuyên mục không có trong cấu hình.", 404);
@@ -90,7 +99,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
                         if (model.ItemId.HasValue && menu is null) throw new SiteConfigurationException("Menu không tồn tại.", 404);
                         menu ??= new(); if (!r.Menus.Contains(menu)) r.Menus.Add(menu);
                         menu.Label = model.Menu.Label.Trim(); menu.Position = model.Menu.Position; menu.ParentId = model.Menu.ParentId; menu.TargetKind = model.Menu.TargetKind;
-                        menu.CategoryId = model.Menu.TargetKind == "Category" ? model.Menu.CategoryId : null; menu.ContentId = model.Menu.TargetKind == "Content" ? model.Menu.ContentId : null; menu.RouteKey = model.Menu.TargetKind == "Route" ? model.Menu.RouteKey : ""; menu.ExternalUrl = model.Menu.TargetKind == "External" ? model.Menu.ExternalUrl.Trim() : ""; menu.OpenNewWindow = model.Menu.OpenNewWindow; menu.SortOrder = model.Menu.SortOrder; break;
+                        menu.CategoryId = model.Menu.TargetKind == "Category" ? model.Menu.CategoryId : null; menu.ContentId = model.Menu.TargetKind == "Content" ? model.Menu.ContentId : null; menu.RouteKey = model.Menu.TargetKind == "Route" ? model.Menu.RouteKey : ""; menu.ExternalUrl = model.Menu.TargetKind is "External" or "Internal" ? model.Menu.ExternalUrl.Trim() : ""; menu.OpenNewWindow = model.Menu.OpenNewWindow; menu.SortOrder = model.Menu.SortOrder; menu.Enabled=model.Menu.Enabled; break;
                     case "banners":
                         var banner = model.ItemId.HasValue ? r.Banners.SingleOrDefault(x => x.Id == model.ItemId) : null;
                         if (model.ItemId.HasValue && banner is null) throw new SiteConfigurationException("Banner không tồn tại.", 404);
@@ -141,7 +150,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
                 switch (section)
                 {
                     case "categories": r.Categories.RemoveAll(x => x.CategoryId == categoryId); break;
-                    case "menus": if (r.Menus.Any(x => x.ParentId == id)) throw new SiteConfigurationException("Chuyển menu con trước khi bỏ nhóm."); if (r.Menus.Any(x => x.Id == id && x.SystemProtected)) throw new SiteConfigurationException("Không bỏ mục điều hướng nguồn."); r.Menus.RemoveAll(x => x.Id == id); break;
+                    case "menus": if (r.Menus.Any(x => x.ParentId == id)) throw new SiteConfigurationException("Chuyển menu con trước khi bỏ nhóm."); r.Menus.RemoveAll(x => x.Id == id); break;
                     case "banners": r.Banners.RemoveAll(x => x.Id == id); break;
                     case "blocks": r.Blocks.RemoveAll(x => x.Id == id); r.Pins.RemoveAll(x => x.BlockId == id); break;
                     case "vocabulary": throw new SiteConfigurationException("Danh mục phụ không hard-delete; sửa để ngừng chọn, giữ tham chiếu lịch sử.");
@@ -189,14 +198,18 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         model.Parents = r.Menus.Where(x => x.TargetKind == "Group" && x.Id != model.ItemId).OrderBy(x => x.SortOrder).Select(x => new SiteSelectItem(x.Id.ToString(), x.Position + " · " + x.Label)).ToList();
         var selected = new[] { model.Menu.ContentId, model.Banner.ContentId }.Where(x => x.HasValue).Select(x => x!.Value).Concat(model.Block.PinnedContentIds).ToArray();
         var rows = query.Published(); if (model.ContentSearch.Length > 0) rows = query.Filter(rows, model.ContentSearch[..Math.Min(200, model.ContentSearch.Length)]);
-        var choices = await PublicContentQuery.Recent(PublicContentQuery.ForDisplay(rows)).Take(60).ToListAsync();
-        var chosenIds = choices.Select(x => x.Id).ToArray(); if (selected.Length > 0) choices.AddRange(await PublicContentQuery.ForDisplay(query.Published().Where(x => selected.Contains(x.Id) && !chosenIds.Contains(x.Id))).Take(12).ToListAsync());
+        // Picker needs identifiers/labels only. Do not materialize thumbnails,
+        // summaries and document metadata, or query articles at all for logo/contact.
+        var choices = model.Section is "menus" or "banners" or "blocks"
+            ? await PublicContentQuery.Recent(rows).Take(60).Select(x=>new{x.Id,x.Kind,x.Title}).ToListAsync()
+            : [];
+        var chosenIds = choices.Select(x => x.Id).ToArray(); if (selected.Length > 0) choices.AddRange(await query.Published().Where(x => selected.Contains(x.Id) && !chosenIds.Contains(x.Id)).Take(12).Select(x=>new{x.Id,x.Kind,x.Title}).ToListAsync());
         model.Contents = choices.Select(x => new SiteSelectItem(x.Id.ToString(), PublicContentQuery.KindLabel(x.Kind) + " · " + x.Title)).ToList();
         var images = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && x.MimeType.StartsWith("image/") && (x.UploadedByUserId == actor.UserId || db.ContentAssets.Any(a => a.MediaAssetId == x.Id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) || db.Set<SiteConfigurationRevision>().Any(v => v.LogoAssetId == x.Id) || db.Set<SiteBanner>().Any(b => b.MediaAssetId == x.Id)));
         if (model.MediaSearch.Length > 0) images = images.Where(x => x.OriginalName.Contains(model.MediaSearch));
-        model.Images = (await images.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Take(60).ToListAsync()).Where(options.CanServe).Select(x => new SiteSelectItem(x.Id.ToString(), x.OriginalName + " · " + x.ScanStatus)).ToList();
+        model.Images = model.Section is "contact" or "banners" ? (await images.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Take(60).ToListAsync()).Where(options.CanServe).Select(x => new SiteSelectItem(x.Id.ToString(), x.OriginalName + " · " + x.ScanStatus)).ToList() : [];
         if (model.Section == "categories" && model.CategoryId.HasValue) model.SystemProtected = await db.Categories.AnyAsync(x => x.Id == model.CategoryId && x.SourceUrl != "");
-        if (model.Section == "menus" && model.ItemId.HasValue) model.SystemProtected = r.Menus.Any(x => x.Id == model.ItemId && x.SystemProtected);
+        if (model.Section == "menus" && model.ItemId.HasValue) model.SystemProtected = false;
     }
     private async Task<IActionResult> Command(Func<Task<SiteConfigurationState>> command, string message, string section = "contact")
     {
@@ -205,6 +218,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         catch (InvalidOperationException) { return BadRequest("Mục cấu hình đã đổi hoặc không tồn tại; tải lại."); }
     }
     private static DateTimeOffset? Vietnam(DateTime? value) => value.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified), TimeSpan.FromHours(7)).ToUniversalTime() : null;
+    private static string? Optional(string? value)=>string.IsNullOrWhiteSpace(value)?null:value.Trim();
     private static void Normalize(SiteEditModel m)
     {
         m.Contact.OrganizationName ??= ""; m.Contact.FooterText ??= ""; m.Contact.ContactAddress ??= ""; m.Contact.ContactPhone ??= ""; m.Contact.ContactHotline ??= ""; m.Contact.ContactEmail ??= "";

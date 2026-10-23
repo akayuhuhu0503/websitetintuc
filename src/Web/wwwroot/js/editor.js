@@ -243,7 +243,7 @@
             const response = await fetch('/admin/workflow/' + field('Id').value, { method: 'POST', body: payload, headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' }, credentials: 'same-origin' });
             if (response.status === 401) {
                 requireSession();
-                notify('Cần xác thực lại. Thao tác workflow chưa được xác nhận.', true);
+                notify('Cần xác thực lại. Thao tác xử lý bài chưa được xác nhận.', true);
                 return;
             }
             if (!response.ok) {
@@ -375,7 +375,7 @@
                 const name = document.createElement('strong');
                 name.textContent = asset.originalName;
                 const status = document.createElement('span');
-                status.textContent = Math.ceil(asset.byteLength / 1024) + ' KB · ' + (asset.scanStatus === 'NotScanned' ? 'Chưa quét mã độc' : asset.scanStatus);
+                status.textContent = Math.ceil(asset.byteLength / 1024) + ' KB · ' + (window.landPortalStateLabel(asset.scanStatus));
                 button.append(name, status);
                 button.addEventListener('click', () => selectMedia(asset));
                 mediaItems.append(button);

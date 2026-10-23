@@ -60,7 +60,7 @@ public sealed class AdminSchedulerController(PortalDbContext db, CurrentPermissi
                 if (model.RevisionId == Guid.Empty) throw new InvalidOperationException("Lưu nội dung thành phiên bản trước khi đặt lịch.");
                 await scheduler.ScheduleAsync(model.ContentId, model.RevisionId, SchedulerService.VietnamToUtc(model.DueVietnam!.Value), model.Direct, actor,
                     Convert.FromBase64String(model.ContentVersion), model.ReplaceJobId, model.JobVersion == null ? null : Convert.FromBase64String(model.JobVersion));
-                TempData["Success"] = "Đã lưu lịch vào SQL. Worker kiểm tra lại quyền, phiên bản và tài nguyên khi thực thi."; return Redirect("/admin/schedules");
+                TempData["Success"] = "Đã lưu lịch vào SQL. Tác vụ nền kiểm tra lại quyền, phiên bản và tài nguyên khi thực thi."; return Redirect("/admin/schedules");
             }
             catch (UnauthorizedAccessException) { return Forbid(); }
             catch (DbUpdateConcurrencyException) { Response.StatusCode = 409; ModelState.AddModelError("", "Nội dung hoặc lịch đã thay đổi. Mở lại màn hình để xác nhận phiên bản mới."); }
@@ -73,7 +73,7 @@ public sealed class AdminSchedulerController(PortalDbContext db, CurrentPermissi
     public async Task<IActionResult> Cancel(Guid id, string version)
     {
         if (string.IsNullOrWhiteSpace(version) || version.Length > 100) return BadRequest();
-        try { var result = await scheduler.CancelAsync(id, await Actor(), Convert.FromBase64String(version)); TempData["Success"] = result.State == "Completed" ? result.Reason : "Trạng thái lịch: " + result.State + ". Bản đang công khai được giữ nguyên."; return Redirect("/admin/schedules"); }
+        try { var result = await scheduler.CancelAsync(id, await Actor(), Convert.FromBase64String(version)); TempData["Success"] = result.State == "Completed" ? result.Reason : "Trạng thái lịch: " + LandPortal.Web.Services.AdminLabels.State(result.State) + ". Bản đang công khai được giữ nguyên."; return Redirect("/admin/schedules"); }
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (FormatException) { return BadRequest(); }
         catch (DbUpdateConcurrencyException) { return Conflict("Lịch đã thay đổi; đọc lại trước khi hủy."); }

@@ -8,11 +8,12 @@ namespace LandPortal.Web.Controllers;
 public sealed class DisclosureController(PortalDbContext db,PublicContentQuery query):Controller
 {
     [HttpGet("")]
-    public async Task<IActionResult> Index()=>View(await db.DisclosureGroups.AsNoTracking().Where(x=>x.Status=="NameApproved").OrderBy(x=>x.Id).ToListAsync());
+    public async Task<IActionResult> Index()=>View(await db.DisclosureGroups.AsNoTracking().Where(x=>V05ContentPolicy.Groups.Keys.Contains(x.Id)).OrderBy(x=>x.Id).ToListAsync());
     [HttpGet("{group}")]
     public async Task<IActionResult> List(string group,string? province=null,int? year=null,string? q=null,int page=1)
     {
-        var definition=await db.DisclosureGroups.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==group&&x.Status=="NameApproved");if(definition==null)return NotFound();
+        if(!V05ContentPolicy.Groups.ContainsKey(group))return NotFound();
+        var definition=await db.DisclosureGroups.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==group);if(definition==null)return NotFound();
         if(province?.Length>200||q?.Length>200||year is <1900 or >2200||!ModelState.IsValid)return BadRequest();
         var revisions=db.Revisions.AsNoTracking().Where(r=>r.Metadata.DisclosureGroupId==group);
         if(!string.IsNullOrWhiteSpace(province)){var term=province.Trim();revisions=revisions.Where(r=>r.Metadata.ProvinceCode==term||EF.Functions.Collate(r.Metadata.Province!,"Vietnamese_100_CI_AI").Contains(term));}

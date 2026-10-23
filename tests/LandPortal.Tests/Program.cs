@@ -13,6 +13,20 @@ using Microsoft.Extensions.Configuration;
 // An executable risk-focused suite. It refuses to connect to any database except
 // LandPortal_Test; fixtures never become official-looking public production data.
 var root = PortalConfiguration.FindWorkspace();
+if(args.Contains("--nuke-cache-only"))
+{
+    await NukeRealTests.RunAsync(root);Console.WriteLine("PASS real cached NukeViet parsing/normalized private drafts; SQL/network NOT RUN");return 0;
+}
+if(args.Contains("--uat-offline-only"))
+{
+    var checks=new List<object>();var errors=0;
+    foreach(var risk in DeliveryTests.Cases(root,new ConfigurationBuilder().Build()).Where(x=>x.Name.StartsWith("Delivery isolated UAT")||x.Name.StartsWith("Delivery UAT allocated")||x.Name.StartsWith("Delivery SMTP explicit UAT")))
+    {try{await risk.Test();checks.Add(new{risk.Name,pass=true});Console.WriteLine("PASS "+risk.Name);}catch(Exception e){errors++;checks.Add(new{risk.Name,pass=false,error=e.GetType().Name});Console.WriteLine("FAIL "+risk.Name);}}
+    var reportAt=Array.IndexOf(args,"--report");if(reportAt<0||reportAt+1>=args.Length)throw new InvalidOperationException("--report required");
+    var path=Path.GetFullPath(args[reportAt+1],root);var allowed=Path.Combine(root,".local","evidence","phase3f")+Path.DirectorySeparatorChar;
+    if(!path.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)||File.Exists(path))throw new InvalidOperationException("New private report required");
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new{checks,failures=errors,sqlConnections=0,networkRequests=0,fullRegression="NOT RUN"}));return errors==0?0:1;
+}
 var config = PortalConfiguration.Load(root);
 var connection = DatabaseSettings.Connection(config);
 if (new SqlConnectionStringBuilder(connection).InitialCatalog != "LandPortal_Test")
@@ -20,6 +34,54 @@ if (new SqlConnectionStringBuilder(connection).InitialCatalog != "LandPortal_Tes
 var options = DatabaseSettings.Options(config, forMigration: true);
 var tests = new List<object>();
 var failed = 0;
+if(args.Contains("--srs12-only"))
+{
+    var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Verified Test backup required.");
+    await using(var backup=new PortalDbContext(options))await ApprovedBatchExecution.VerifyBackupAsync(backup,root,"LandPortal_Test",args[at+1]);
+    await Run("SRS1.2 exact role boundaries, menu workflow and private CAPTCHA lookup actual SQL/HTTP",()=>Srs12Tests.Http(root,config,options));
+    var folder=TestEvidencePaths.At(root);Directory.CreateDirectory(folder);await File.WriteAllTextAsync(Path.Combine(folder,"srs12-tests.json"),JsonSerializer.Serialize(new{tests,failures=failed,fullRegression="NOT RUN"}));return failed==0?0:1;
+}
+if(args.Contains("--uat-delivery-only")||args.Contains("--uat-template-only")||args.Contains("--uat-slider-only")||args.Contains("--uat-traffic-only"))
+{
+    var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Verified Test backup required.");
+    await using(var backup=new PortalDbContext(options))await ApprovedBatchExecution.VerifyBackupAsync(backup,root,"LandPortal_Test",args[at+1]);
+    var folder=TestEvidencePaths.At(root);Directory.CreateDirectory(folder);
+    if(args.Contains("--uat-delivery-only")||args.Contains("--uat-template-only"))await Run("SRS1.1 template required fields revision tags featured and source preservation boundary",()=>UatDeliveryTests.Template(options,config));
+    if(args.Contains("--uat-slider-only"))await Run("SRS1.1 actual Test desktop mobile slider and Vietnam clock",()=>UatDeliveryTests.SliderHttp(root,config,options));
+    if(args.Contains("--uat-traffic-only"))await Run("SRS1.1 SQL anonymous sessions concurrent dedup durable totals and Vietnam calendar",()=>UatDeliveryTests.TrafficSql(options));
+    if(args.Contains("--uat-delivery-only"))
+    {
+        await Run("UAT native scanner Test Production and unallocated target boundaries",()=>UatDeliveryTests.ScannerBoundaries(root,config));
+        await Run("Real Defender PDF Clean EICAR failure plus HTTP inline counters and private ACL",()=>UatDeliveryTests.PdfHttp(root,config,options));
+    }
+    await File.WriteAllTextAsync(Path.Combine(folder,"focused-tests.json"),JsonSerializer.Serialize(new{tests,failures=failed,database="LandPortal_Test",fullRegression="NOT_RUN",devBusinessWrites=0},new JsonSerializerOptions{WriteIndented=true}));return failed==0?0:1;
+}
+if(args.Contains("--ba-feedback-only"))
+{
+    var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Verified Test backup required.");
+    await using(var backup=new PortalDbContext(options))await ApprovedBatchExecution.VerifyBackupAsync(backup,root,"LandPortal_Test",args[at+1]);
+    await Run("BA Vietnamese date parsing and centralized permission/state labels",BaFeedbackTests.DatesAndLabels);
+    await Run("BA exact real week43 Word cells/provenance and 7/8-column safety compatibility",()=>BaFeedbackTests.RealWord(root));
+    foreach(var risk in V05FinishTests.Cases(root,options,config).Where(x=>x.Name.StartsWith("V05-Finish SQL FR17 menu")))await Run(risk.Name,risk.Test);
+    await Run("BA catalog activation rechecks current endpoint permissions",async()=>
+    {
+        await using var db=new PortalDbContext(options);var id=await InquiryFinishTests.User(db,Permissions.All,"BA permission revocation QA");var actor=await new CurrentPermissionService(db).GetAsync(id);
+        await db.UserClaims.Where(x=>x.UserId==id&&x.ClaimType=="permission"&&x.ClaimValue==Permissions.PublishSite).ExecuteDeleteAsync();
+        var site=new SiteConfigurationService(db,StorageOptions.FromConfiguration(config),MediaUploadOptions.FromConfiguration(config,"Development"));var state=(await site.ReadAsync(false))!;
+        await V05FinishTests.Denied<SiteConfigurationException>(()=>site.ConfirmDisclosureCatalogAsync(actor,state.Header.RowVersion));
+    });
+    await Run("BA actual HTTP SQL CAPTCHA privacy plus desktop/mobile forms and admin labels",()=>BaFeedbackTests.Http(root,config,options));
+    var folder=TestEvidencePaths.At(root);Directory.CreateDirectory(folder);await File.WriteAllTextAsync(Path.Combine(folder,"ba-tests.json"),JsonSerializer.Serialize(new{utc=DateTimeOffset.UtcNow,tests,failures=failed,database="LandPortal_Test",devWrites=0,fullRegression="NOT RUN"},new JsonSerializerOptions{WriteIndented=true}));return failed==0?0:1;
+}
+if(args.Contains("--p0-ready-only"))
+{
+    var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Fresh Test backup required.");
+    await using(var backup=new PortalDbContext(options))await ApprovedBatchExecution.VerifyBackupAsync(backup,root,"LandPortal_Test",args[at+1]);
+    await Run("P0 homepage BR03 empty/failed module privacy and global audit policy",P0ReadyTests.HomeAndAuditPolicy);
+    await Run("P0 initial UAT administrator matches Web password policy and rejects missing/weak credentials before writes",()=>P0ReadyTests.BootstrapPolicy(options));
+    await Run("P0 Test actual CAPTCHA/Identity SQL inbox audit plus native scanned Word release history and revocation",()=>V05FinishHttpTests.RunAsync(root,config,options,captureBrowser:false,verifyP0:true));
+    var folder=TestEvidencePaths.At(root);Directory.CreateDirectory(folder);await File.WriteAllTextAsync(Path.Combine(folder,"p0-tests.json"),JsonSerializer.Serialize(new{utc=DateTimeOffset.UtcNow,tests,failures=failed,database="LandPortal_Test",fullRegression="NOT_RUN",screenshots="NOT_RUN",devWrites=0},new JsonSerializerOptions{WriteIndented=true}));return failed==0?0:1;
+}
 if(args.Contains("--nuke-real-only"))
 {
     await Run("Real NukeViet root module 22-Oct snapshots exact SHA headline metadata canonical negatives",()=>NukeRealTests.RunAsync(root));

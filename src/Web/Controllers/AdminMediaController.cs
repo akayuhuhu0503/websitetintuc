@@ -52,7 +52,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         var rows = await assets.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return Json(new { items = rows.Select(x => Describe(x, contentId)), page, total, pageSize,
             uploadAvailable = options.UploadEnabled && actor.Has(Permissions.ManageMedia),
-            notice = options.NativeUatUploads?"UAT: ảnh được quét Clamd trước khi cấp quyền dùng; PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp upload được kiểm tra định dạng, chưa quét mã độc." : "Upload chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
+            notice = options.NativeUatUploads?"UAT: ảnh được quét Clamd trước khi cấp quyền dùng; PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp tải lên được kiểm tra định dạng, chưa quét mã độc." : "Tải lên chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
     }
 
     [HttpPost("admin/media/upload"), RequireUploadAntiforgeryHeader, DisableUploadFormValueModelBinding, RequestSizeLimit(67_174_400)]
@@ -60,19 +60,19 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
     {
         Response.Headers.CacheControl = "no-store, private";
         var actor = await permissions.GetAsync(UserId);
-        if (!actor.Has(Permissions.ManageMedia)) return StatusCode(403, new { error = "Quyền quản lý media hiện thời không cho phép upload." });
+        if (!actor.Has(Permissions.ManageMedia)) return StatusCode(403, new { error = "Quyền quản lý media hiện thời không cho phép tải lên." });
         if (!contentId.HasValue && !actor.Has(Permissions.Create) && !actor.Has(Permissions.EditOwn) && !actor.Has(Permissions.EditAll) && !actor.Has(Permissions.ManageSite))
-            return StatusCode(403, new { error = "Không có quyền tạo/sửa nội dung hoặc cấu hình để upload tài nguyên." });
+            return StatusCode(403, new { error = "Không có quyền tạo/sửa nội dung hoặc cấu hình để tải lên tài nguyên." });
         if (contentId.HasValue)
         {
             var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == contentId.Value, cancellationToken);
             if (content is null || (!CanEdit(actor, content)||!await permissions.CanAccessContentAsync(actor,content.Id))) return NotFound();
         }
         if (!options.UploadEnabled)
-            return StatusCode(503, new { error = "Thiếu máy quét mã độc. Chỉ mở upload với ngoại lệ Development được cấu hình tường minh trên loopback." });
+            return StatusCode(503, new { error = "Thiếu máy quét mã độc. Chỉ mở tải lên với ngoại lệ Development được cấu hình tường minh trên loopback." });
         if (!MediaTypeHeaderValue.TryParse(Request.ContentType, out var type)
             || !string.Equals(type.MediaType.Value, "multipart/form-data", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { error = "Yêu cầu upload phải là multipart/form-data." });
+            return BadRequest(new { error = "Yêu cầu tải lên phải là multipart/form-data." });
         var boundary = HeaderUtilities.RemoveQuotes(type.Boundary).Value;
         if (string.IsNullOrWhiteSpace(boundary) || boundary.Length > 200) return BadRequest(new { error = "Multipart boundary không hợp lệ." });
         try
@@ -85,7 +85,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
                 || HeaderUtilities.RemoveQuotes(disposition.Name).Value != "file")
                 return BadRequest(new { error = "Chỉ nhận một tệp trong trường file; contentId đặt trên query URL." });
             var fileName = HeaderUtilities.RemoveQuotes(disposition.FileNameStar.HasValue ? disposition.FileNameStar : disposition.FileName).Value;
-            if (string.IsNullOrWhiteSpace(fileName)) return BadRequest(new { error = "Chưa chọn tệp upload." });
+            if (string.IsNullOrWhiteSpace(fileName)) return BadRequest(new { error = "Chưa chọn tệp tải lên." });
             // The multipart body streams into a bounded project temporary file, without IFormFile buffering.
             var result = await media.UploadAsync(section.Body, fileName, section.ContentType ?? "application/octet-stream",
                 actor.UserId, actor.Has(Permissions.EditAll), cancellationToken,
@@ -99,14 +99,14 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
                 result.Asset.Id, result.Asset.OriginalName, result.Asset.MimeType, result.Asset.ByteLength,
                 result.Asset.Width, result.Asset.Height, result.Asset.ScanStatus, result.Asset.ValidationStatus,
                 url = "/media/" + result.Asset.Id, previewUrl = PreviewUrl(result.Asset.Id, contentId), result.Reused,
-                notice = options.NativeUatUploads?"Đã kiểm định và quét Clamd, lưu tệp Clean vào SQL/kho riêng. Chỉ công khai theo revision được xuất bản.":"Đã lưu vào SQL và kho riêng; kiểm tra định dạng đạt. Chưa quét mã độc (ngoại lệ Development), chưa cấp quyền công khai."
+                notice = options.NativeUatUploads?"Đã kiểm định và quét Clamd, lưu tệp Clean vào SQL/kho riêng. Chỉ công khai theo phiên bản được xuất bản.":"Đã lưu vào SQL và kho riêng; kiểm tra định dạng đạt. Chưa quét mã độc (ngoại lệ Development), chưa cấp quyền công khai."
             });
         }
         catch (MediaUploadException error) { return StatusCode(error.StatusCode, new { error = error.Message }); }
         catch (UnauthorizedAccessException) {return Forbid();}
-        catch (InvalidDataException) { return BadRequest(new { error = "Multipart bị lỗi hoặc vượt giới hạn upload." }); }
-        catch (IOException) { return StatusCode(503, new { error = "Không ghi được kho tệp; upload chưa được xác nhận thành công." }); }
-        catch (DbUpdateException) { return StatusCode(503, new { error = "SQL chưa lưu được tệp; upload chưa được xác nhận thành công." }); }
+        catch (InvalidDataException) { return BadRequest(new { error = "Multipart bị lỗi hoặc vượt giới hạn tải lên." }); }
+        catch (IOException) { return StatusCode(503, new { error = "Không ghi được kho tệp; tải lên chưa được xác nhận thành công." }); }
+        catch (DbUpdateException) { return StatusCode(503, new { error = "SQL chưa lưu được tệp; tải lên chưa được xác nhận thành công." }); }
     }
 
     [HttpGet("admin/media/{id:guid}/preview")]
@@ -166,7 +166,7 @@ public sealed class RequireUploadAntiforgeryHeaderAttribute : Attribute, IAuthor
     public void OnAuthorization(AuthorizationFilterContext context)
     {
         if (!context.HttpContext.Request.Headers.TryGetValue("X-CSRF-TOKEN", out var token) || string.IsNullOrWhiteSpace(token.ToString()))
-            context.Result = new BadRequestObjectResult(new { error = "Thiếu CSRF token trong header upload." });
+            context.Result = new BadRequestObjectResult(new { error = "Thiếu CSRF token trong header tải lên." });
     }
 }
 

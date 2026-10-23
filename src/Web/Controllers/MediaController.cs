@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LandPortal.Web.Controllers;
 
-public sealed class MediaController(PortalDbContext db, StorageOptions storage, MediaUploadOptions mediaOptions) : Controller
+public sealed class MediaController(PortalDbContext db, StorageOptions storage, MediaUploadOptions mediaOptions, DocumentUsage usage) : Controller
 {
     [HttpGet("media/{id:guid}")]
     [HttpHead("media/{id:guid}")]
-    public async Task<IActionResult> File(Guid id, bool download = false)
+    public async Task<IActionResult> File(Guid id, bool download = false, Guid? contentId=null)
     {
         // Recheck the current publication grant on every request, including conditional requests.
         Response.Headers.CacheControl = "no-store, private";
@@ -19,7 +19,7 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         if (asset.MimeType == "application/pdf" && asset.Origin is not ("Source" or "EditorialDocument")) return NotFound();
         if (asset.Origin == "EditorialDocument")
         {
-            async Task<bool> Grant() => await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && a.Usage == "Attachment"
+            async Task<bool> Grant() => asset.MimeType == OfficeDocumentPolicy.Docx && await WeeklySchedulePublication.HasOriginalGrantAsync(db,id) || await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && a.Usage == "Attachment"
                 && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)
                 && db.Revisions.Any(r => r.Id == a.RevisionId && (r.Metadata.DisclosureGroupId == null || db.DisclosureGroups.Any(g => g.Id == r.Metadata.DisclosureGroupId && g.Status == "NameApproved"))
                     && (asset.MimeType != OfficeDocumentPolicy.Docx || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
@@ -29,6 +29,7 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
             if (!await Grant()) { await stream.DisposeAsync(); return NotFound(); }
             Response.Headers["X-Content-Type-Options"] = "nosniff";
             Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+            if(asset.MimeType=="application/pdf"){Response.Headers["Content-Security-Policy"]="sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
             Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
             return base.File(stream, asset.MimeType, download || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
         }
@@ -53,14 +54,14 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
                 if (!await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) && !await PublicSiteService.HasPublicAssetGrantAsync(db,id,DateTimeOffset.UtcNow)) { await input.DisposeAsync(); return NotFound(); }
                 input.Position = 0;
                 Response.Headers["X-Content-Type-Options"] = "nosniff";
-                if (asset.MimeType == "application/pdf") Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+                if (asset.MimeType == "application/pdf") {Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
                 Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
                 return base.File(input, asset.MimeType, download ? Path.GetFileName(asset.OriginalName) : null, enableRangeProcessing: true);
             }
             catch (IOException) { return NotFound(); }
         }
         Response.Headers["X-Content-Type-Options"] = "nosniff";
-        if (asset.MimeType == "application/pdf") Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+        if (asset.MimeType == "application/pdf") {Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'; frame-ancestors "+(asset.ScanStatus=="Clean"?"'self'":"'none'");if(asset.ScanStatus=="Clean")Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
         Request.Headers.Remove("If-None-Match");
         Request.Headers.Remove("If-Modified-Since");
         Request.Headers.Remove("If-Range");

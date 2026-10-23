@@ -1,19 +1,23 @@
 @inject LandPortal.Web.Services.PublicSiteService Sites
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @inject LandPortal.Infrastructure.PublicUrlPolicy PublicUrls
-@{ var site = await Sites.GetAsync(); var canonical=PublicUrls.Absolute(ViewData["CanonicalPath"] as string ?? Context.Request.Path.Value ?? "/");var publicPage=site?.IsPreview != true && !Context.Request.Path.StartsWithSegments("/admin") && !Context.Request.Path.StartsWithSegments("/tuong-tac") && !Context.Request.Path.StartsWithSegments("/tra-cuu-ho-so"); }
+@inject LandPortal.Web.Services.PublicTraffic Traffic
+@{ var site = await Sites.GetAsync(); var englishName=LandPortal.Infrastructure.SitePresentation.EnglishName(site?.Revision.EnglishName); var canonical=PublicUrls.Absolute(ViewData["CanonicalPath"] as string ?? Context.Request.Path.Value ?? "/");var publicPage=site?.IsPreview != true && !Context.Request.Path.StartsWithSegments("/admin") && !Context.Request.Path.StartsWithSegments("/tuong-tac") && !Context.Request.Path.StartsWithSegments("/tra-cuu-ho-so"); }
+@{LandPortal.Web.Services.PublicTrafficCounts? traffic=null;if(publicPage){Traffic.RegisterSuccessfulPage(Context);traffic=await Traffic.ReadAsync();}}
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
-    <meta name="description" content="@(ViewData["Description"] ?? "Cổng thông tin Cục Quản lý đất đai — bản chạy thử tại môi trường phát triển.")" />
-    <title>@ViewData["Title"] — Cục Quản lý đất đai</title>
+    <meta name="description" content="@(ViewData["Description"] ?? site?.Revision.SeoDescription ?? "Cổng thông tin Cục Quản lý đất đai — bản chạy thử tại môi trường phát triển.")" />
+    <title>@ViewData["Title"] — Cục Quản lý đất đai | @englishName</title>
+    <meta name="application-name" content="@englishName" />
     @if(publicPage) {
+        <meta property="og:site_name" content="@(site?.Revision.OrganizationName ?? "Cục Quản lý đất đai") / @englishName" />
         <link rel="canonical" href="@canonical" />
         <meta property="og:type" content="@(ViewData["CanonicalPath"] is null ? "website" : "article")" />
-        <meta property="og:title" content="@ViewData["Title"]" />
+        <meta property="og:title" content="@ViewData["Title"] — Cục Quản lý đất đai | @englishName" />
         <meta property="og:description" content="@(ViewData["Description"] ?? "Thông tin và tài liệu công khai của Cục Quản lý đất đai.")" />
         <meta property="og:url" content="@canonical" />
         @if(ViewData["OpenGraphImage"] is string mediaPath) { <meta property="og:image" content="@PublicUrls.Absolute(mediaPath)" /> }
@@ -27,11 +31,11 @@
 </head>
 <body class="public-portal">
 <a class="skip-link" href="#main-content">Chuyển đến nội dung chính</a>
-<div class="utility-bar"><div class="container utility-inner"><span>BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG</span><a href="/admin">Dành cho biên tập viên <span aria-hidden="true">↗</span></a></div></div>
+<div class="utility-bar"><div class="container utility-inner"><span>BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG</span><time data-vietnam-clock datetime="@DateTimeOffset.UtcNow.ToString("O")">@DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).ToString("dddd, dd/MM/yyyy HH:mm:ss",System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</time><a href="/admin">Dành cho biên tập viên <span aria-hidden="true">↗</span></a></div></div>
 <header class="masthead">
     <div class="container masthead-inner">
         <a class="brand" href="/" aria-label="Cục Quản lý đất đai — Trang chủ">
-            @if (site?.LogoUrl != null) { <img class="brand-logo" src="@site.LogoUrl" alt="@site.Revision.OrganizationName" /> } else { <span class="brand-rule" aria-hidden="true"></span> }<span><span class="brand-eyebrow">CỔNG THÔNG TIN ĐIỆN TỬ</span><strong>@(site?.Revision.OrganizationName ?? "CỤC QUẢN LÝ ĐẤT ĐAI")</strong><span class="brand-subtitle">Thông tin · Chính sách · Quản lý đất đai</span></span>
+            @if (site?.LogoUrl != null) { <img class="brand-logo" src="@site.LogoUrl" alt="@site.Revision.OrganizationName" /> } else { <span class="brand-rule" aria-hidden="true"></span> }<span><span class="brand-eyebrow">CỔNG THÔNG TIN ĐIỆN TỬ</span><strong>@(site?.Revision.OrganizationName ?? "CỤC QUẢN LÝ ĐẤT ĐAI")</strong><span class="brand-subtitle" lang="en">@englishName</span><span class="brand-subtitle">Thông tin · Chính sách · Quản lý đất đai</span></span>
         </a>
         <form class="header-search" action="/tim-kiem" method="get" role="search">
             <label class="sr-only" for="header-query">Tìm kiếm trên cổng thông tin</label>
@@ -49,18 +53,16 @@
 <footer class="site-footer">
     @if (site != null)
     {
-        <div class="container footer-main"><div class="footer-identity"><p class="footer-kicker">CỔNG THÔNG TIN ĐIỆN TỬ</p><h2>@site.Revision.OrganizationName</h2><p>Bộ Nông nghiệp và Môi trường</p><address class="footer-contact">@site.Revision.ContactAddress<br />Điện thoại: @site.Revision.ContactPhone · Đường dây nóng: @site.Revision.ContactHotline<br />Email: @site.Revision.ContactEmail</address><p class="footer-note">@site.Revision.FooterText</p></div><nav aria-label="Liên kết chân trang"><h3>Thông tin &amp; tra cứu</h3>@foreach (var item in site.Menus.Where(x => x.Position == "footer" && x.Url != null)) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }</nav></div>
+        <div class="container footer-main"><div class="footer-identity"><p class="footer-kicker">CỔNG THÔNG TIN ĐIỆN TỬ</p><h2>@site.Revision.OrganizationName</h2><p lang="en">@englishName</p><p>Bộ Nông nghiệp và Môi trường</p><address class="footer-contact">@site.Revision.ContactAddress<br />Điện thoại: @site.Revision.ContactPhone · Đường dây nóng: @site.Revision.ContactHotline<br />Email: @site.Revision.ContactEmail</address><p class="footer-note">@site.Revision.FooterText</p></div><nav aria-label="Liên kết chân trang"><h3>Thông tin &amp; tra cứu</h3>@foreach (var item in site.Menus.Where(x => x.Position == "footer" && x.Url != null)) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }</nav></div>
         <nav class="container agency-links" aria-label="Liên kết cơ quan"><span>Liên kết cơ quan</span>@foreach (var item in site.Menus.Where(x => x.Position == "links" && x.Url != null)) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label ↗</a> }</nav>
     }
     else
     {
-    <div class="container footer-main">
-        <div class="footer-identity"><p class="footer-kicker">CỔNG THÔNG TIN ĐIỆN TỬ</p><h2>CỤC QUẢN LÝ ĐẤT ĐAI</h2><p>Bộ Nông nghiệp và Môi trường</p><address class="footer-contact">Số 10 Tôn Thất Thuyết, Phường Cầu Giấy, Hà Nội<br />Điện thoại: 024.3629.0211 · Đường dây nóng: 024.3629.0196<br />Email: vanphongcqldd@@mae.gov.vn</address><p class="footer-note">Bản chạy thử Giai đoạn 0–1. Thông tin nguồn và ngoại lệ chuyển dữ liệu được lưu trong hồ sơ dự án.</p></div>
-        <div><h3>Thông tin &amp; tra cứu</h3><a href="/van-ban">Văn bản quy phạm pháp luật</a><a href="/du-thao">Văn bản dự thảo</a><a href="/thong-bao">Thông báo</a><a href="/so-tay">Sổ tay điện tử đất đai</a></div>
-        <div><h3>Kết nối</h3><a href="/hoi-dap">Hỏi đáp</a><a href="/lien-he">Liên hệ</a><a href="https://qldd.mae.gov.vn/" target="_blank" rel="noopener noreferrer">Cổng thông tin nguồn ↗</a><a href="https://www.mae.gov.vn/" target="_blank" rel="noopener noreferrer">Bộ Nông nghiệp và Môi trường ↗</a></div>
-    </div>
-    <nav class="container agency-links" aria-label="Liên kết cơ quan đã xác minh tại nguồn"><span>Liên kết cơ quan</span><a href="https://nongnghiepmoitruong.vn/" target="_blank" rel="noopener noreferrer">Báo Nông nghiệp và Môi trường ↗</a><a href="https://www.ppd.gov.vn/" target="_blank" rel="noopener noreferrer">Cục Trồng trọt và Bảo vệ thực vật ↗</a><a href="https://vnforest.gov.vn/" target="_blank" rel="noopener noreferrer">Cục Lâm nghiệp và Kiểm lâm ↗</a><a href="https://dinre.mae.gov.vn/" target="_blank" rel="noopener noreferrer">Cục Chuyển đổi số ↗</a><a href="https://dwrm.monre.gov.vn" target="_blank" rel="noopener noreferrer">Cục quản lý tài nguyên nước ↗</a></nav>
+        <div class="container footer-main"><div class="footer-identity"><h2>Cục Quản lý đất đai</h2><p lang="en">@englishName</p><p>Bộ Nông nghiệp và Môi trường</p></div></div>
     }
+    <div class="container"><p>Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử này.</p></div>
+    @if(site!=null){<div class="container footer-legal">@if(!string.IsNullOrWhiteSpace(site.Revision.SupervisingAgency)){<p>Cơ quan chủ quản: @site.Revision.SupervisingAgency</p>}@if(!string.IsNullOrWhiteSpace(site.Revision.ResponsiblePerson)){<p>Người chịu trách nhiệm chính: @site.Revision.ResponsiblePerson</p>}@if(!string.IsNullOrWhiteSpace(site.Revision.LicenseNumber)){<p>Số giấy phép: @site.Revision.LicenseNumber</p>}</div>}
+    @if(traffic!=null){<section class="container public-traffic" aria-label="Thống kê truy cập"><h3>Thống kê truy cập</h3><p>Đang truy cập (5 phút): @traffic.Active · Hôm nay: @traffic.Today · Tháng này: @traffic.Month · Tổng: @traffic.Total</p><small>Số phiên truy cập từ khi hệ thống bắt đầu ghi nhận; không phải số người duy nhất. Phiên hết hạn sau 20 phút không hoạt động. Không thu địa chỉ IP, tài khoản hay email; dùng cookie ngẫu nhiên của website. Cập nhật lúc @traffic.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm:ss").</small></section>}
     <div class="footer-bottom"><div class="container">Nguồn nội dung: qldd.mae.gov.vn <span>Chỉ truy cập trong môi trường phát triển</span></div></div>
 </footer>
 <script src="~/js/site.js" asp-append-version="true" defer></script>

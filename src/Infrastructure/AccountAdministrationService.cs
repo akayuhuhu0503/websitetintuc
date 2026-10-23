@@ -213,5 +213,18 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
     private static void Require(ContentActor actor, string permission) { if (!actor.Has(permission)) throw new UnauthorizedAccessException("Thiếu quyền thực hiện thao tác."); }
     private static void CheckCatalog(IEnumerable<string> permissions) { if (permissions.Any(x => !Permissions.All.Contains(x, StringComparer.Ordinal))) throw new InvalidOperationException("Quyền ngoài catalog không được phép."); }
     private static void ValidateText(string value, int max, string label, bool required) { if (value.Length > max || (required && string.IsNullOrWhiteSpace(value)) || value.Any(char.IsControl)) throw new InvalidOperationException(label + " không hợp lệ."); }
-    private static void Check(IdentityResult result) { if (!result.Succeeded) throw new InvalidOperationException("Identity từ chối thao tác: " + string.Join(", ", result.Errors.Select(x => x.Code))); }
+    private static void Check(IdentityResult result)
+    {
+        if(result.Succeeded)return;
+        // Display only: keep Identity validators, error codes and rejection behavior.
+        static string Label(string code)=>code switch
+        {
+            "DuplicateUserName"=>"Tên đăng nhập đã được sử dụng.","DuplicateEmail"=>"Email đã được sử dụng.","DuplicateRoleName"=>"Tên nhóm quyền đã được sử dụng.",
+            "InvalidUserName"=>"Tên đăng nhập chưa hợp lệ.","InvalidEmail"=>"Địa chỉ email chưa hợp lệ.","InvalidRoleName"=>"Tên nhóm quyền chưa hợp lệ.",
+            "ConcurrencyFailure"=>"Thông tin đã thay đổi; tải lại trước khi thao tác.","UserAlreadyInRole"=>"Tài khoản đã thuộc nhóm quyền này.","UserNotInRole"=>"Tài khoản chưa thuộc nhóm quyền này.",
+            _ when code.StartsWith("Password",StringComparison.Ordinal)=>"Mật khẩu chưa đáp ứng chính sách bảo mật.",
+            _=>"Chưa thể hoàn tất thay đổi tài khoản; kiểm tra thông tin và thử lại."
+        };
+        throw new InvalidOperationException(string.Join(" ",result.Errors.Select(x=>Label(x.Code)).Distinct()));
+    }
 }

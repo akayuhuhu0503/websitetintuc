@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class PortalController(PortalDbContext db, PublicContentQuery query, PublicSiteService site,PublicUrlPolicy urls) : Controller
+public sealed class PortalController(PortalDbContext db, PublicContentQuery query, PublicSiteService site,PublicUrlPolicy urls,DocumentUsage usage) : Controller
 {
     [HttpGet("tin-tuc")]
     public Task<IActionResult> News(string? q, int page = 1) => List("Tin tức", query.Published().Where(x => x.Kind == ContentKind.Article), q, page);
@@ -55,15 +55,20 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         var related = await query.CardsPageAsync(PublicContentQuery.Recent(query.Published().Where(x => x.Id != id && x.Kind == row.Kind && (row.CategoryId == null || x.CategoryId == row.CategoryId))),0,4);
         var source = await db.SourceRecords.AsNoTracking().Where(x => x.ContentId == id).Select(x => x.CanonicalUrl).FirstOrDefaultAsync();
         var legal = revision.Metadata;
+        var isDocument=row.Kind is ContentKind.LegalDocument or ContentKind.DraftDocument;
+        var inlinePdf=isDocument?await db.ContentAssets.Where(x=>x.RevisionId==row.RevisionId&&x.MediaAsset.MimeType=="application/pdf"&&x.MediaAsset.ScanStatus=="Clean"&&!x.MediaAsset.IsQuarantined).OrderBy(x=>x.SortOrder).Select(x=>(Guid?)x.MediaAssetId).FirstOrDefaultAsync():null;
+        var counts=(Views:0L,Downloads:0L);
+        if(isDocument){await usage.ViewAsync(row.Id,row.RevisionId);counts=await usage.CountsAsync(row.Id);}
+        var coverCaption=revision.CoverAssetId is Guid coverId?await db.ContentAssets.Where(x=>x.RevisionId==row.RevisionId&&x.MediaAssetId==coverId).Select(x=>x.Caption).FirstOrDefaultAsync():null;
         ViewData["CanonicalPath"]="/bai-viet/"+id;
         ViewData["OpenGraphImage"]=revision.CoverAssetId is Guid cover?"/media/"+cover:null;
         var inlineCover = revision.CoverAssetId is not null && new HtmlParser().ParseDocument(revision.BodyHtml).QuerySelectorAll("img[src]").Any(x => string.Equals(x.GetAttribute("src"), "/media/" + revision.CoverAssetId, StringComparison.OrdinalIgnoreCase));
-        return View(new ArticleModel { Metadata = revision.Metadata, IsDraftDocument = row.Kind == ContentKind.DraftDocument, ConsultationState = row.Kind == ContentKind.DraftDocument ? revision.Metadata.ConsultationState(DateTimeOffset.UtcNow) : null, Content = PublicContentQuery.Card(row), BodyHtml = revision.BodyHtml, CoverUrl = revision.CoverAssetId is not null && !inlineCover ? $"/media/{revision.CoverAssetId}" : null, Author = PublicContentQuery.Empty(revision.Author), SourceName = PublicContentQuery.Empty(revision.SourceCredit), SourceUrl = source, Attachments = files, Related = related.Select(PublicContentQuery.Card).ToList(), DocumentNumber = PublicContentQuery.Empty(legal?.Number), IssuingAuthority = PublicContentQuery.Empty(legal?.IssuingBody), IssuedDate = legal?.IssuedDate?.ToString("dd/MM/yyyy"), IsVideo = row.Kind == ContentKind.Video, VideoFileId = files.FirstOrDefault(x => x.ContentType == "video/mp4")?.Id });
+        return View(new ArticleModel { CoverCaption=coverCaption, InlinePdfId=inlinePdf, DocumentViews=counts.Views, DocumentDownloads=counts.Downloads, Metadata = revision.Metadata, IsDraftDocument = row.Kind == ContentKind.DraftDocument, ConsultationState = row.Kind == ContentKind.DraftDocument ? revision.Metadata.ConsultationState(DateTimeOffset.UtcNow) : null, Content = PublicContentQuery.Card(row), BodyHtml = revision.BodyHtml, CoverUrl = revision.CoverAssetId is not null && !inlineCover ? $"/media/{revision.CoverAssetId}" : null, Author = PublicContentQuery.Empty(revision.Author), SourceName = PublicContentQuery.Empty(revision.SourceCredit), SourceUrl = source, Attachments = files, Related = related.Select(PublicContentQuery.Card).ToList(), DocumentNumber = PublicContentQuery.Empty(legal?.Number), IssuingAuthority = PublicContentQuery.Empty(legal?.IssuingBody), IssuedDate = legal?.IssuedDate?.ToString("dd/MM/yyyy"), IsVideo = row.Kind == ContentKind.Video, VideoFileId = files.FirstOrDefault(x => x.ContentType == "video/mp4")?.Id });
     }
     [HttpGet("van-ban")]
-    public Task<IActionResult> Documents(string? q, string? agency, string? type, int page = 1, string? field = null, DateOnly? issuedFrom = null, DateOnly? issuedTo = null, DateOnly? from = null, DateOnly? to = null, string sort = "relevant",string? signer=null,string? effectiveness=null) => DocumentList(false,q,agency,type,page,field,issuedFrom,issuedTo,from,to,sort,signer,effectiveness);
+    public Task<IActionResult> Documents(string? q, string? agency, string? type, int page = 1, string? field = null, [VietnameseFilterDate] DateOnly? issuedFrom = null, [VietnameseFilterDate] DateOnly? issuedTo = null, [VietnameseFilterDate] DateOnly? from = null, [VietnameseFilterDate] DateOnly? to = null, string sort = "relevant",string? signer=null,string? effectiveness=null) => DocumentList(false,q,agency,type,page,field,issuedFrom,issuedTo,from,to,sort,signer,effectiveness);
     [HttpGet("du-thao")]
-    public Task<IActionResult> Drafts(string? q, string? agency, string? type, int page = 1, string? field = null, DateOnly? issuedFrom = null, DateOnly? issuedTo = null, DateOnly? from = null, DateOnly? to = null, string sort = "relevant",string? signer=null,string? effectiveness=null) => DocumentList(true,q,agency,type,page,field,issuedFrom,issuedTo,from,to,sort,signer,effectiveness);
+    public Task<IActionResult> Drafts(string? q, string? agency, string? type, int page = 1, string? field = null, [VietnameseFilterDate] DateOnly? issuedFrom = null, [VietnameseFilterDate] DateOnly? issuedTo = null, [VietnameseFilterDate] DateOnly? from = null, [VietnameseFilterDate] DateOnly? to = null, string sort = "relevant",string? signer=null,string? effectiveness=null) => DocumentList(true,q,agency,type,page,field,issuedFrom,issuedTo,from,to,sort,signer,effectiveness);
     private async Task<IActionResult> DocumentList(bool draft,string? q,string? agency,string? type,int page,string? field,DateOnly? issuedFrom,DateOnly? issuedTo,DateOnly? from,DateOnly? to,string sort,string? signer,string? effectiveness)
     {
         if (!ModelState.IsValid || q?.Length>200 || agency?.Length>500 || type?.Length>300 || field?.Length>300 || signer?.Length>300 || issuedFrom>issuedTo || from>to || sort is not ("relevant" or "recent" or "oldest" or "title") || effectiveness is not (null or "" or "Unknown" or "ConfirmedEffective" or "ConfirmedExpired" or "ConfirmedPartial")) return InvalidFilter();
@@ -107,7 +112,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         if(to is not null) rows=rows.Where(x=>(x.SourceDate ?? (x.PublishedUtc == null ? (DateOnly?)null : DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date)))<=to);
         return rows;
     }
-    private IActionResult InvalidFilter(){Response.StatusCode=400;return View("Status",new StatusModel("Bộ lọc chưa hợp lệ","Kiểm tra định dạng, khoảng ngày và lựa chọn sắp xếp. Quay lại để sửa bộ lọc; chưa có thay đổi dữ liệu."));}
+    private IActionResult InvalidFilter(){Response.StatusCode=400;return View("Status",new StatusModel("Bộ lọc chưa hợp lệ","Nhập ngày theo dd/MM/yyyy (ví dụ 23/10/2026), kiểm tra ngày có thật và Từ ngày không sau Đến ngày. Kiểm tra lựa chọn sắp xếp. Quay lại để sửa bộ lọc; chưa có thay đổi dữ liệu."));}
     public static string EffectivenessLabel(string? value)=>value switch {"ConfirmedEffective"=>"Đã xác nhận còn hiệu lực","ConfirmedExpired"=>"Đã xác nhận hết hiệu lực","ConfirmedPartial"=>"Đã xác nhận hiệu lực một phần",_=>"Chưa xác định"};
     private static IOrderedQueryable<PublicRow> Ordered(IQueryable<PublicRow> rows,string sort,string? q=null) => sort switch {
         "relevant"=>PublicContentQuery.Relevant(rows,q),

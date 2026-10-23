@@ -1,0 +1,9 @@
+@model LandPortal.Web.Controllers.AuditPage
+@{Layout="_AdminLayout";ViewData["Title"]="Nhật ký hệ thống";}
+<h1>Nhật ký hệ thống</h1>
+<p>Chỉ quản trị toàn hệ thống. Hiển thị thời điểm, mã người thực hiện và thao tác; nội dung riêng tư trong chi tiết audit được bảo vệ.</p>
+<form method="get"><label for="eventCode">Thao tác</label><select id="eventCode" name="eventCode"><option value="">Tất cả</option>@foreach(var code in Model.EventCodes){<option value="@code" selected="@(Model.Action==code)">@AdminLabels.Action(code)</option>}</select><label for="from">Từ ngày (Việt Nam)</label><input id="from" name="from" type="date" value="@Model.From?.ToString("yyyy-MM-dd")"/><label for="to">Đến ngày</label><input id="to" name="to" type="date" value="@Model.To?.ToString("yyyy-MM-dd")"/><button>Lọc</button></form>
+<p>@Model.Total bản ghi · trang @Model.Page</p>
+<div class="table-scroll"><table><thead><tr><th>Thời điểm (Việt Nam)</th><th>Mã người thực hiện</th><th>Thao tác</th><th>Mã nội dung</th><th>Mã phiên bản</th></tr></thead><tbody>@foreach(var item in Model.Items){<tr><td>@item.CreatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm:ss")</td><td>@item.Actor</td><td>@AdminLabels.Action(item.Action)</td><td>@item.ContentId</td><td>@item.RevisionId</td></tr>}</tbody></table></div>
+@if(Model.Page>1){<a asp-action="Index" asp-route-page="@(Model.Page-1)" asp-route-eventCode="@Model.Action" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")">Trang trước</a>}
+@if(Model.Page*50<Model.Total){<a asp-action="Index" asp-route-page="@(Model.Page+1)" asp-route-eventCode="@Model.Action" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")">Trang sau</a>}

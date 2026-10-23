@@ -154,7 +154,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         const payload = new FormData(); payload.set('Action', button.dataset.workflow!); payload.set('RowVersion', field('RowVersion').value); payload.set('RevisionId', field('CurrentRevisionId').value); payload.set('Reason', reason); payload.set('RequestId', button.dataset.commandId);
         try {
             const response = await fetch('/admin/workflow/' + field('Id').value, { method: 'POST', body: payload, headers: { 'X-CSRF-TOKEN': csrf,'X-Editor-Request':'true' }, credentials: 'same-origin' });
-            if(response.status===401){requireSession();notify('Cần xác thực lại. Thao tác workflow chưa được xác nhận.',true);return;}
+            if(response.status===401){requireSession();notify('Cần xác thực lại. Thao tác xử lý bài chưa được xác nhận.',true);return;}
             if (!response.ok) { if (response.status < 500) delete button.dataset.commandId; if (response.status === 409 || response.status === 403) conflicted = true; notify(await errorMessage(response), true); return; }
             const result = await response.json() as SavedDraft; navigating = true; window.location.assign('/admin/edit/' + result.contentId);
         } catch { notify('Mất kết nối; chưa xác nhận thao tác thành công.', true); } finally { button.disabled = false; }
@@ -213,7 +213,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
                 const button = document.createElement('button'); button.type = 'button'; button.className = 'media-item';
                 if (asset.mimeType.startsWith('image/')) { const img = document.createElement('img'); img.src = asset.previewUrl; img.alt = ''; img.loading = 'lazy'; button.append(img); }
                 const name = document.createElement('strong'); name.textContent = asset.originalName;
-                const status = document.createElement('span'); status.textContent = Math.ceil(asset.byteLength / 1024) + ' KB · ' + (asset.scanStatus === 'NotScanned' ? 'Chưa quét mã độc' : asset.scanStatus);
+                const status = document.createElement('span'); status.textContent = Math.ceil(asset.byteLength / 1024) + ' KB · ' + ((window as unknown as {landPortalStateLabel:(code:string)=>string}).landPortalStateLabel(asset.scanStatus));
                 button.append(name, status); button.addEventListener('click', () => selectMedia(asset)); mediaItems.append(button);
             }
             const pagination = document.querySelector<HTMLElement>('#media-pagination')!; pagination.replaceChildren();

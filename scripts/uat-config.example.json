@@ -1,13 +1,65 @@
 {
-  "Deployment":{"Profile":"UAT","ExpectedSqlServer":"REPLACE_WITH_APPROVED_SQL_INSTANCE","ExpectedHost":"REPLACE_WITH_UAT_HTTPS_HOST"},
-  "Sql":{"ExpectedDatabase":"LandPortal_Uat","CompatibilityLevel":"160"},
-  "ConnectionStrings":{"Portal":"Server=REPLACE_WITH_APPROVED_SQL_INSTANCE;Database=LandPortal_Uat;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"},
-  "Public":{"BaseUrl":"https://REPLACE_WITH_UAT_HTTPS_HOST"},
-  "Storage":{"MediaRoot":"D:\\LandPortal-Uat-Private\\media","SnapshotRoot":"D:\\LandPortal-Uat-Private\\snapshots","TempRoot":"D:\\LandPortal-Uat-Private\\temp","KeysRoot":"D:\\LandPortal-Uat-Private\\keys"},
-  "Runtime":{"RolePassword":""},
-  "Media":{"AllowUnscannedDevelopmentUploads":"false"},
-  "Scanner":{"Provider":"Clamd","ClamdHost":"127.0.0.1","ClamdPort":"3310","PolicyReference":"","TimeoutSeconds":"120"},
-  "Mail":{"Transport":"Disabled","DeliveryEnabled":"false","Host":"","Port":"587","From":"","Tls":"StartTls","UserName":"","Password":"","PolicyReference":""},
-  "AdminSession":{"RequireMfa":"true"},
-  "Video":{"Enabled":"true","ProcessorApproved":"false","FfmpegPath":"","FfprobePath":"","FfmpegSha256":"","FfprobeSha256":"","LicenseReference":""}
+  "Deployment": {
+    "Profile": "UAT",
+    "OperatingOwner": "Trung tâm Dữ liệu và Thông tin đất đai (TTDL)",
+    "TargetApproved": "false",
+    "TargetApprovalReference": "",
+    "ExpectedSqlServer": "REPLACE_WITH_APPROVED_SQL_INSTANCE",
+    "ExpectedHost": "REPLACE_WITH_UAT_HTTPS_HOST"
+  },
+  "Sql": {
+    "ExpectedDatabase": "REPLACE_WITH_ALLOCATED_UAT_DATABASE",
+    "CompatibilityLevel": "160"
+  },
+  "ConnectionStrings": {
+    "Portal": "Server=REPLACE_WITH_APPROVED_SQL_INSTANCE;Database=REPLACE_WITH_ALLOCATED_UAT_DATABASE;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"
+  },
+  "Public": {
+    "BaseUrl": "https://REPLACE_WITH_UAT_HTTPS_HOST"
+  },
+  "Storage": {
+    "MediaRoot": "D:\\LandPortal-Uat-Private\\media",
+    "SnapshotRoot": "D:\\LandPortal-Uat-Private\\snapshots",
+    "TempRoot": "D:\\LandPortal-Uat-Private\\temp",
+    "KeysRoot": "D:\\LandPortal-Uat-Private\\keys"
+  },
+  "Runtime": {
+    "RolePassword": ""
+  },
+  "Media": {
+    "AllowUnscannedDevelopmentUploads": "false"
+  },
+  "Scanner": {
+    "Provider": "MicrosoftDefenderOnPrem",
+    "ClamdHost": "127.0.0.1",
+    "ClamdPort": "3310",
+    "PolicyReference": "",
+    "TimeoutSeconds": "120",
+    "DefenderPrivacyPolicyReference": "",
+    "DefenderBinarySha256": "",
+    "DefenderServiceIdentity": "REPLACE_APPROVED_SERVICE_IDENTITY"
+  },
+  "Mail": {
+    "Transport": "Disabled",
+    "DeliveryEnabled": "false",
+    "Host": "",
+    "Port": "587",
+    "From": "",
+    "Tls": "StartTls",
+    "UserName": "",
+    "Password": "",
+    "PolicyReference": ""
+  },
+  "AdminSession": {
+    "RequireMfa": "true"
+  },
+  "Video": {
+    "Enabled": "true",
+    "ProcessorApproved": "false",
+    "FfmpegPath": "",
+    "FfprobePath": "",
+    "FfmpegSha256": "",
+    "FfprobeSha256": "",
+    "LicenseReference": ""
+  }
 }

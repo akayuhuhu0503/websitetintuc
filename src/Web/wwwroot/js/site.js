@@ -1,5 +1,33 @@
 "use strict";
 (() => {
+    const clock = document.querySelector('[data-vietnam-clock]');
+    const serverTime = Date.parse(clock?.dateTime || '');
+    const started = performance.now();
+    const vietnamDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const tick = () => { if (clock && Number.isFinite(serverTime)) {
+        const now = new Date(serverTime + performance.now() - started);
+        clock.textContent = vietnamDate.format(now);
+        clock.dateTime = now.toISOString();
+    } };
+    if (clock) {
+        tick();
+        window.setInterval(tick, 1000);
+    }
+    document.querySelectorAll('[data-activity-slider]').forEach(slider => {
+        const slides = Array.from(slider.querySelectorAll('[data-slide]'));
+        let current = 0;
+        const controls = slider.querySelector('[data-slide-controls]');
+        const status = slider.querySelector('[data-slide-status]');
+        const show = (next) => { current = (next + slides.length) % slides.length; slides.forEach((slide, i) => { slide.hidden = i !== current; }); if (status)
+            status.textContent = `Ảnh ${current + 1} / ${slides.length}`; };
+        if (slides.length > 1) {
+            show(0);
+            if (controls)
+                controls.hidden = false;
+            slider.querySelector('[data-slide-prev]')?.addEventListener('click', () => show(current - 1));
+            slider.querySelector('[data-slide-next]')?.addEventListener('click', () => show(current + 1));
+        }
+    });
     const toggle = document.querySelector('.mobile-menu-toggle');
     const links = document.querySelector('#primary-links');
     toggle?.addEventListener('click', () => {

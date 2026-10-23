@@ -136,14 +136,18 @@ public static class V05FinishTests
         {
             await using var db = new PortalDbContext(options); var actor = await new CurrentPermissionService(db).GetAsync(await InquiryFinishTests.User(db, Permissions.All, "Finish menu QA"));
             var service = new SiteConfigurationService(db, StorageOptions.FromConfiguration(config), MediaUploadOptions.FromConfiguration(config, "Development")); var state = (await service.ReadAsync(false))!;
-            var categoryIds = state.Revision.Categories.Select(x => x.CategoryId).Order().ToArray(); var oldLive = state.Header.LiveRevisionId;
-            state = await service.MutateAsync(actor, state.Header.RowVersion, SiteConfigurationService.AddDisclosureMenu, "Finish template Test");
+            // Later real cached-source staging introduced categories 59/60 on Test.
+            // Explicit Test configuration reconciliation retains exact source fields;
+            // no production validator or protected-category guard is bypassed.
+            var missingCategories=await db.Categories.AsNoTracking().Where(x=>x.SourceUrl!="").ToListAsync();
+            var categoryIds = state.Revision.Categories.Select(x => x.CategoryId).Union(missingCategories.Select(x=>x.Id)).Order().ToArray(); var oldLive = state.Header.LiveRevisionId;
+            state = await service.MutateAsync(actor, state.Header.RowVersion, r=>{foreach(var c in missingCategories.Where(c=>r.Categories.All(x=>x.CategoryId!=c.Id)))r.Categories.Add(new(){CategoryId=c.Id,DisplayName=c.Name,Slug=c.Slug,ParentCategoryId=c.ParentId,SortOrder=c.SortOrder,ShowInNavigation=true});SiteConfigurationService.AddDisclosureMenu(r);}, "Finish template Test with exact protected source catalog");
             Check(state.Header.LiveRevisionId == oldLive && state.Revision.Menus.Count(x => x.RouteKey.StartsWith("Disclosure")) == 4 && state.Revision.Categories.Select(x => x.CategoryId).Order().SequenceEqual(categoryIds), "Menu draft changed live/source or lost group.");
             state = await service.MutateAsync(actor, state.Header.RowVersion, SiteConfigurationService.AddDisclosureMenu, "Finish idempotence");
             Check(state.Revision.Menus.Count(x => x.RouteKey.StartsWith("Disclosure")) == 4, "Template duplicated targets.");
             var publicService = new PublicSiteService(db, service, new(db), MediaUploadOptions.FromConfiguration(config, "Development"), new Microsoft.AspNetCore.Http.HttpContextAccessor());
             var preview = await publicService.BuildAsync(state.Revision, true);
-            Check(preview.Menus.Any(x => x.Url == "/cong-khai-thong-tin") && preview.Menus.Count(x => x.Url?.StartsWith("/cong-khai-thong-tin/") == true) == 2 && !preview.Menus.Any(x => x.Label.Contains("Người nước ngoài")), "Pending group exposed by menu preview.");
+            Check(preview.Menus.Any(x => x.Url == "/cong-khai-thong-tin") && preview.Menus.Count(x => x.Url?.StartsWith("/cong-khai-thong-tin/") == true) == 3 && preview.Menus.Any(x => x.Label == "Người nước ngoài định cư ở Việt Nam"), "SRS 1.1 official menu missing; content approval remains separately enforced.");
             await service.PublishAsync(actor, state.Header.RowVersion, state.Revision.Id);
             Check((await service.ReadAsync(true))!.Revision.Id == state.Revision.Id, "Template publication failed.");
             await Denied<SiteConfigurationException>(() => service.MutateAsync(new("no-rights", new HashSet<string>()), state.Header.RowVersion, SiteConfigurationService.AddDisclosureMenu, "denied"));

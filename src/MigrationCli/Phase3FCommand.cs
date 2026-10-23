@@ -68,7 +68,7 @@ public static class NukeVietBundle
         if(!Path.GetFullPath(folder).StartsWith(privateRoot,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Private Phase3F destination required.");
         SourceInventory.NoReparse(Path.Combine(folder,"guard"));
         if(input.Provenance is not("ProvidedSnapshot" or "OfficialExport" or "TechnicalFixture")||string.IsNullOrWhiteSpace(input.Reference)||input.Snapshots.Length is <1 or >100||input.Snapshots.Sum(x=>x.Files.Length)>200)throw new InvalidDataException("Finite bundle/provenance required; fixtures are not real source acceptance.");
-        var rows=new List<object>();var identities=new HashSet<string>();long total=0;
+        var rows=new List<object>();var drafts=new List<NukeVietDraftCandidate>();var identities=new HashSet<string>();long total=0;
         foreach(var snapshot in input.Snapshots)
         {
             if(!Uri.TryCreate(snapshot.Url,UriKind.Absolute,out var source)||source.Host!="gdla.gov.vn"||source.Scheme is not("http" or "https")||!source.IsDefaultPort||source.UserInfo.Length>0)throw new InvalidDataException("Only public gdla source snapshots accepted.");
@@ -100,10 +100,12 @@ public static class NukeVietBundle
             var rawPath=Path.Combine(folder,"snapshots",snapshot.Sha256+".html");Directory.CreateDirectory(Path.GetDirectoryName(rawPath)!);
             if(!File.Exists(rawPath)){await using var f=new FileStream(rawPath,FileMode.CreateNew);await f.WriteAsync(raw);}
             else if(SourceInventory.Hash(await File.ReadAllBytesAsync(rawPath))!=snapshot.Sha256)throw new InvalidDataException("Staged snapshot changed.");
+            drafts.Add(NukeVietDraftCandidate.Create(preview,snapshot.Files.Select(x=>x.Url)));
             rows.Add(new{Preview=preview,Files=files,MissingFiles=preview.AssetUrls.Except(snapshot.Files.Select(x=>x.Url)).ToArray(),
                 DuplicateReview=qldd.Items.Select(x=>new{QlddIdentity=x.Source.Kind+":"+x.Source.SourceId,Evidence=MigrationSourceIdentityPolicy.DuplicateEvidence(preview,x.Source)}).Where(x=>x.Evidence!="NO_MATCH").ToArray(),
                 UrlMapping=new{Old=preview.Url,Canonical=preview.CanonicalUrl,Target=(string?)null,Status="NEEDS_MAPPING_AND_DUPLICATE_REVIEW"},SqlImport="BLOCKED_MAPPING_SCANNER_SOURCE_ACCEPTANCE"});
         }
-        return new{SchemaVersion=1,input.Provenance,input.Reference,Source="gdla.gov.vn",Rows=rows,TotalBytes=total,SqlWrites=0,NetworkRequests=0,RealSourceAcceptance="NOT_VERIFIED",Mapping="NEEDS_BUSINESS_APPROVAL",Resume="Re-run exact input SHA into a new unique directory; content-addressed private files; no CMS commit"};
+        await MediaRecovery.WriteNewAsync(Path.Combine(folder,"draft-candidates.json"),new{Status="PRIVATE_NORMALIZED_CANDIDATES_NOT_CMS_IMPORT",Rows=drafts,SqlWrites=0,NetworkRequests=0,PublicAllowed=false});
+        return new{SchemaVersion=1,input.Provenance,input.Reference,Source="gdla.gov.vn",Rows=rows,DraftCandidates="draft-candidates.json",TotalBytes=total,SqlWrites=0,NetworkRequests=0,RealSourceAcceptance="NOT_VERIFIED",Mapping="NEEDS_BUSINESS_APPROVAL",Resume="Re-run exact input SHA into a new unique directory; content-addressed private files; no CMS commit"};
     }
 }

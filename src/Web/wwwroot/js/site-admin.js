@@ -17,7 +17,7 @@
             if (request.status < 200 || request.status >= 300) { status.textContent = result.error || 'Upload bị từ chối.'; return; }
             const id = result.id || result.Id; const name = result.originalName || result.OriginalName || file.name;
             if (!id || !select) { status.textContent = 'Phản hồi thiếu asset ID; chưa chọn vào cấu hình.'; return; }
-            let option = [...select.options].find(x => x.value === id); if (!option) { option = new Option(name + ' · NotScanned', id); select.add(option); } select.value = id; preview(); progress.value = 100;
+            let option = [...select.options].find(x => x.value === id); if (!option) { option = new Option(name + ' · Chưa quét an toàn', id); select.add(option); } select.value = id; preview(); progress.value = 100;
             status.textContent = result.notice + ' Lưu bản nháp để gắn ảnh; ảnh chưa public.';
         };
         request.onerror = () => { button.disabled = false; status.textContent = 'Mất kết nối; chưa xác nhận kết quả SQL. Kiểm tra kho ảnh trước khi tải lại.'; };

@@ -34,3 +34,15 @@ appsettings.Local.json
 .vs/
 TestResults/
 docs/evidence/
+
+# Private handoff inputs and generated evidence (keep outside source delivery)
+*.dpapi
+*.dpapi.active
+*.log
+/BA_SRS_*.zip
+/SRS_CTTDT-*.docx
+/AGENTS.md
+/MANIFEST_SHA256.json
+/docs/ba-input/
+/docs/bao-cao-tien-do/
+/docs/bao-cao-tien-do-*.zip

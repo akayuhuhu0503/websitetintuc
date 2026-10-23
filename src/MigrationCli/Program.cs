@@ -11,24 +11,38 @@ try
 {
     var command = args.FirstOrDefault() ?? "help";
     var workspace = PortalConfiguration.FindWorkspace();
-    var config = PortalConfiguration.Load(workspace);
-    var storage = StorageOptions.FromConfiguration(config);
     if(command=="schema-script")
     {
         // Offline artifact only: no connection is opened and no migration applied.
         var output=Path.GetFullPath(Option("--output")??throw new InvalidDataException("--output required"),workspace);
         var allowed=Path.GetFullPath(Path.Combine(workspace,".local/publish"))+Path.DirectorySeparatorChar;
         if(!output.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)||File.Exists(output))throw new InvalidDataException("New private publish SQL artifact required");
-        await using var offline=new PortalDbContext(DatabaseSettings.Options(config,forMigration:true));
+        // Model-only generation also works after a clean Git clone without .env,
+        // credentials or allocated SQL. This context is never opened/migrated.
+        await using var offline=new PortalDbContext(new DbContextOptionsBuilder<PortalDbContext>().UseSqlServer("Server=127.0.0.1;Database=LandPortal_OfflineSchemaOnly;Integrated Security=true;Encrypt=true").Options);
         var migrator=offline.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
-        var sql="IF DB_NAME() <> N'LandPortal_Uat'\nBEGIN\n    ;THROW 51000, 'UAT schema script requires exactly LandPortal_Uat; verify approved SQL instance before execution.', 1;\nEND\nGO\n"+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+        var sql=":ON ERROR EXIT\n;THROW 51000, 'UNALLOCATED UAT TARGET: bind a new SQLCMD artifact using prepare-uat-target.ps1 after operator approval. Do not execute this template.', 1;\nGO\n-- LANDPORTAL_SCHEMA_BODY\n"+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);await File.WriteAllTextAsync(output,sql);Console.WriteLine("Offline idempotent schema script generated; SQL execution NOT RUN.");return 0;
     }
+    var config = PortalConfiguration.Load(workspace);
+    var storage = StorageOptions.FromConfiguration(config);
+    if(command=="dev-demo-accounts"){await DevDemoAccounts.ExecuteAsync(args,config,workspace);return 0;}
+    if(command=="uat-preflight")return await UatPreflightCommand.ExecuteAsync(args,config);
     if(command is "source-detail-plan" or "nukeviet-bundle")return await Phase3FCommand.ExecuteAsync(args,workspace);
     if(command is "source-audit" or "nukeviet-preview")return await Phase3DCommand.OfflineAsync(args,workspace);
     var manifestPath = Path.GetFullPath(Option("--manifest") ?? Path.Combine(storage.SnapshotRoot, "sample-manifest.json"), workspace);
     if (command == "help") { Console.WriteLine("sample --limit 40 --request-budget 350 [--refresh]; import|verify|reconcile --manifest <path>; cutover; bootstrap; migrate; site-initialize; backfill-search"); return 0; }
-    await using var db = new PortalDbContext(DatabaseSettings.Options(config, forMigration: command == "migrate"||command.StartsWith("safe-",StringComparison.Ordinal)));
+    await using var db = new PortalDbContext(DatabaseSettings.Options(config, forMigration: command is "migrate" or "migrate-schema-only"||command.StartsWith("safe-",StringComparison.Ordinal)));
+    if(command=="migrate-schema-only")
+    {
+        var database=config["Sql:ExpectedDatabase"]!;
+        await SchemaManager.VerifyLocalProjectAsync(db,database);
+        await ApprovedBatchExecution.VerifyBackupAsync(db,workspace,database,Option("--backup-receipt")??throw new InvalidDataException("Verified project backup receipt required"));
+        var applied=(await db.Database.GetAppliedMigrationsAsync()).LastOrDefault();var pending=(await db.Database.GetPendingMigrationsAsync()).ToArray();
+        if(applied!=Option("--from")||pending.Length!=1||pending[0]!=Option("--migration"))throw new InvalidDataException("Schema differs from the exact reviewed additive migration; stop without schema/permission/backfill writes.");
+        await SchemaManager.MigrateAsync(db,database);
+        Console.WriteLine("Exact local schema migration applied: "+pending[0]+"; runtime grants, Identity, source backfill and content import NOT performed.");return 0;
+    }
     if(command=="name-decision-test")
     {
         await Phase3DCommand.ApplyNameDecisionTestAsync(db,config,workspace,Option("--decision")??throw new InvalidDataException("--decision required"),Option("--decision-sha")??throw new InvalidDataException("--decision-sha required"),Option("--backup-receipt")??throw new InvalidDataException("--backup-receipt required"));
@@ -40,12 +54,16 @@ try
     if (command.StartsWith("inventory-", StringComparison.Ordinal)) return await InventoryCommand.ExecuteAsync(args, workspace, config, db);
     if (command == "migrate") { await SchemaManager.MigrateAsync(db, config["Sql:ExpectedDatabase"]!); var created = await SearchProjectionService.BackfillAsync(db); await RuntimeRoleInterceptor.ProvisionAsync(db, config["Runtime:RolePassword"]!); Console.WriteLine("Project database migration applied; search projection backfill rows=" + created + "."); return 0; }
     if (command == "backfill-search") { await SchemaManager.VerifyLocalProjectAsync(db, config["Sql:ExpectedDatabase"]!); Console.WriteLine("Search projection rows created=" + await SearchProjectionService.BackfillAsync(db) + "; immutable source revisions unchanged."); return 0; }
-    if (command == "site-initialize") { await SchemaManager.VerifyLocalProjectAsync(db, config["Sql:ExpectedDatabase"]!); var result = await new SiteConfigurationService(db, storage, MediaUploadOptions.FromConfiguration(config, Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production")).InitializeAsync("migration-cli"); Console.WriteLine("Site configuration initialized=" + result + "; existing live/draft configuration is preserved."); return 0; }
+    if (command == "site-initialize") {
+        var media=MediaUploadOptions.FromConfiguration(config,Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")??"Production");
+        if(UatDeployment.Enabled(config)){await UatSiteInitialization.ExecuteAsync(args,config,db,media);return 0;}
+        await SchemaManager.VerifyLocalProjectAsync(db, config["Sql:ExpectedDatabase"]!); var result = await new SiteConfigurationService(db, storage,media).InitializeAsync("migration-cli"); Console.WriteLine("Site configuration initialized=" + result + "; existing live/draft configuration is preserved."); return 0;
+    }
     if (command == "bootstrap")
     {
         var services = new ServiceCollection(); services.AddLogging(); services.AddDataProtection();
         services.AddScoped<PortalDbContext>(_ => new PortalDbContext(DatabaseSettings.Options(config)));
-        services.AddIdentity<PortalUser, IdentityRole>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+        services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider = services.BuildServiceProvider(); await BootstrapIdentity.InitializeAsync(provider, config);
         Console.WriteLine("Explicit Identity bootstrap completed; no credentials logged."); return 0;
     }

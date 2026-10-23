@@ -21,14 +21,28 @@ public static class DeliveryTests
             var home=Path.Combine(root,".local/uat-technical-fixture");
             var d=new Dictionary<string,string?>{{"Deployment:Profile","UAT"},{"Deployment:ExpectedSqlServer","uat.invalid"},{"Deployment:ExpectedHost","uat.landportal.invalid"},{"DOTNET_ENVIRONMENT","Staging"},{"ASPNETCORE_ENVIRONMENT","Staging"},{"ConnectionStrings:Portal","Server=uat.invalid;Database=LandPortal_Uat;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"},{"Sql:ExpectedDatabase","LandPortal_Uat"},{"Public:BaseUrl","https://uat.landportal.invalid"},{"WorkspaceRoot",home},{"Scanner:Provider","Clamd"},{"Scanner:ClamdPort","3310"},{"Scanner:PolicyReference","Technical configuration fixture, no target connection"},{"Runtime:RolePassword",new string('x',32)}};
             foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})d["Storage:"+name]=Path.Combine(home,name);
+            d["Deployment:TargetApproved"]="true";d["Deployment:TargetApprovalReference"]="Technical fixture only, not operator authority";
             if(key.Length>0)d[key]=value;return new ConfigurationBuilder().AddInMemoryCollection(d).Build();
         }
         yield return("Delivery isolated UAT profile exact DB server TLS host private stores and no scanner bypass",()=>
         {
             Check(UatDeployment.Validate(Uat(),"Staging"),"Positive UAT guard");
+            UatSiteInitialization.RequireAuthority(["site-initialize","--confirm-target","LandPortal_Uat","--approval-reference","Technical fixture only, not operator authority"],Uat(),"Staging");
+            foreach(var confirm in new[]{Array.Empty<string>(),new[]{"--confirm-target","LandPortal_Dev","--approval-reference","Technical fixture only, not operator authority"},new[]{"--confirm-target","LandPortal_Uat","--approval-reference","wrong"}})
+            {var rejected=false;try{UatSiteInitialization.RequireAuthority(confirm,Uat(),"Staging");}catch(InvalidOperationException){rejected=true;}Check(rejected,"UAT initialization confirmation/authority failed open");}
             foreach(var pair in new[]{("DOTNET_ENVIRONMENT","Production"),("Sql:ExpectedDatabase","LandPortal_Dev"),("Deployment:ExpectedSqlServer","wrong.invalid"),("Scanner:Provider","DefenderTest"),("Media:AllowUnscannedDevelopmentUploads","true"),("Storage:KeysRoot",Path.Combine(root,"src/Web/wwwroot")),("Public:BaseUrl","http://uat.landportal.invalid"),("Storage:KeysRoot",Path.Combine(root,".local/uat-technical-fixture/MediaRoot/nested"))})
             {var denied=false;try{UatDeployment.Validate(Uat(pair.Item1,pair.Item2),"Staging");}catch(InvalidOperationException){denied=true;}Check(denied,"UAT negative guard: "+pair.Item1);}
             Check(UatDeployment.RequireMfa(Uat()),"UAT MFA mandatory");Check(!UatDeployment.Validate(source,"Development"),"Existing local profile preserved");return Task.CompletedTask;
+        });
+        yield return("Delivery UAT allocated database approval required and reserved targets denied",()=>
+        {
+            foreach(var name in new[]{"LandPortal_Dev","landportal_test","master","LandPortal_Restore3J_abcd","LandPortal_Production","REPLACE_APPROVED_DATABASE","unsafe];DROP",""})
+                Check(!UatDeployment.IsTargetDatabase(name),"Reserved/unsafe target denied");
+            foreach(var pair in new[]{("Deployment:TargetApproved","false"),("Deployment:TargetApprovalReference",""),("Deployment:ExpectedSqlServer","REPLACE_SERVER")})
+            {bool denied=false;try{UatDeployment.Validate(Uat(pair.Item1,pair.Item2),"Staging");}catch(InvalidOperationException){denied=true;}Check(denied,"Unallocated target denied");}
+            var allocated=new ConfigurationBuilder().AddConfiguration(Uat()).AddInMemoryCollection(new Dictionary<string,string?>{
+                ["Sql:ExpectedDatabase"]="AgencyPortal_UatAllocated",["ConnectionStrings:Portal"]="Server=uat.invalid;Database=AgencyPortal_UatAllocated;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"}).Build();
+            Check(UatDeployment.Validate(allocated,"Staging"),"Allocated name accepted only with matching private target profile");return Task.CompletedTask;
         });
         yield return("Delivery SMTP explicit UAT STARTTLS policy opt-in and test sink fences",()=>
         {

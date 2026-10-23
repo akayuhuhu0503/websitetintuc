@@ -1,6 +1,7 @@
 # Land Portal
 
 Cổng thông tin sử dụng **ASP.NET Core 10 MVC/Razor, EF Core và SQL Server**.
+Đặc tả chính thức: **SRS v1.2 ngày 23/10/2026**, thay v1.1.
 Repository chứa mã nguồn và công cụ vận hành; không chứa database, bài nguồn,
 media, snapshot crawler, tài khoản, chứng chỉ hoặc cấu hình bí mật của máy Dev.
 
@@ -8,7 +9,7 @@ media, snapshot crawler, tài khoản, chứng chỉ hoặc cấu hình bí mậ
 
 - Trang chủ, chuyên mục, bài viết, tìm kiếm tiếng Việt và tra cứu tài liệu.
 - CMS theo revision, phân quyền endpoint, gửi duyệt/duyệt/xuất bản, lịch xuất bản.
-- Bình luận, hỏi đáp, liên hệ, góp ý dự thảo có kiểm duyệt; OTP/CAPTCHA,
+- Bình luận, hỏi đáp, liên hệ, góp ý dự thảo có kiểm duyệt; CAPTCHA một lần,
   phân công, SLA, tệp private và outbox có đối soát.
 - Upload video trực tiếp, worker quét/xử lý, poster và HTTP Range.
 - Lịch tuần có phiên bản, đọc DOCX và preview trước xuất bản.
@@ -16,8 +17,14 @@ media, snapshot crawler, tài khoản, chứng chỉ hoặc cấu hình bí mậ
 - Crawler/import có checkpoint, chống trùng, manifest, chữ ký và verify/rollback.
 
 **CHƯA PRODUCTION READY.** Có chức năng còn chờ dữ liệu nghiệp vụ, quyền phê duyệt
-và nghiệm thu hạ tầng. Tra cứu chi tiết hồ sơ riêng tư vẫn khóa. Không coi việc
+và nghiệm thu hạ tầng. Tra cứu hỏi đáp dùng mã tiếp nhận + email + CAPTCHA,
+chỉ trả trạng thái/câu trả lời, không trả PII hoặc tệp riêng tư. Không coi việc
 clone/build thành công là bằng chứng đã chuyển dữ liệu hay đã nghiệm thu UAT.
+
+RB-01: đội phát triển bàn giao nguồn Git; Trưởng phòng build/cài đặt trên máy chủ
+TTDL theo [hướng dẫn UAT](scripts/uat-operator-steps.md). Không đưa `.env`, backup,
+private key hoặc mật khẩu vào Git. Tài khoản giả lập chỉ local Dev/Test, mật khẩu
+mã hóa CurrentUser; xem [hướng dẫn quản trị](docs/site-admin-guide.md).
 
 ## Yêu cầu máy phát triển
 
@@ -63,8 +70,10 @@ rtk proxy powershell -NoProfile -File scripts/package-uat.ps1 -RunId <UNIQUE_RUN
 
 Xem [hướng dẫn UAT](scripts/uat-operator-steps.md),
 [config mẫu](scripts/uat-config.example.json) và [launcher](scripts/uat-runtime.ps1).
-UAT dùng Staging, database `LandPortal_Uat`, config/kho private ngoài publish,
-SQL TLS hợp lệ, scanner Clamd và MFA bắt buộc. SMTP mặc định tắt.
+UAT dùng Staging; `LandPortal_Uat` chỉ là tên đề xuất, chưa được cấp database.
+Config/kho private nằm ngoài publish; SQL TLS hợp lệ và MFA bắt buộc. Scanner là
+Clamd hoặc MicrosoftDefenderOnPrem đã được đơn vị vận hành phê duyệt, pin đúng
+identity/hash và kiểm chứng tại đích. SMTP mặc định tắt.
 Gói publish không tự cài IIS/service, cấp quyền, migrate, gửi thư hoặc deploy.
 
 Media nguồn có policy phát hành riêng; proof Test không tự cấp quyền phát hành
@@ -84,6 +93,7 @@ backup SQL/media và guard chữ ký/scanner/target/preflight đạt.
 
 Các hướng dẫn có thể dẫn tới báo cáo/approval/evidence nội bộ không có trên GitHub.
 Không dùng ví dụ trong hướng dẫn làm quyền thực hiện thao tác ghi trên hệ thống thật.
-SRS, prompt, báo cáo nghiệm thu, dữ liệu crawler và bằng chứng nội bộ giữ ngoài
-phạm vi commit này. Chỉ fixture video tổng hợp không chứa dữ liệu nguồn được kèm
+SRS Word, báo cáo nghiệm thu, dữ liệu crawler và bằng chứng nội bộ giữ ngoài
+phạm vi bàn giao nguồn. `MASTER_PROMPT_LAND_PORTAL.md` là marker xác định workspace
+được công cụ hiện hành sử dụng; SRS v1.2 vẫn là đặc tả chính thức. Chỉ fixture video tổng hợp không chứa dữ liệu nguồn được kèm
 theo test; binary FFmpeg, database và media thật không được kèm theo.

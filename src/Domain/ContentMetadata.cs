@@ -4,6 +4,8 @@ namespace LandPortal.Domain;
 // Legacy LegalDocuments/DraftDocuments stay untouched as source provenance.
 public sealed class ContentMetadata
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public string? Tags { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public bool? Featured { get; set; }
     [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public Guid? WeeklyOriginalAssetId { get; set; }
     [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public string? WeeklyOriginalReviewEvidence { get; set; }
     [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public string? DisclosureGroupId { get; set; }
@@ -47,7 +49,7 @@ public sealed class ContentMetadata
             (EffectivenessBoundary=="StartOfVietnamDay"&&date>=last||EffectivenessBoundary=="EndOfVietnamDay"&&date>last);
         return ended && EffectivenessStatus is "ConfirmedEffective" or "ConfirmedPartial"?"ConfirmedExpired":EffectivenessStatus??"Unknown";
     }
-    public string SearchFields() => $"{Number} {DocumentType} {IssuingBody} {Signer} {Field} {Unit}"+(DisclosureGroupId==null?"":$" {Province} {ProvinceCode} {DisclosureYear} {PublicationSource}");
+    public string SearchFields() => $"{Number} {DocumentType} {IssuingBody} {Signer} {Field} {Unit}"+(DisclosureGroupId==null?"":$" {Province} {ProvinceCode} {DisclosureYear} {PublicationSource}")+(Tags==null?"":" "+Tags);
     public string ConsultationState(DateTimeOffset now)
     {
         var offset = TimeSpan.FromHours(7);

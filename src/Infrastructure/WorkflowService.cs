@@ -60,7 +60,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             if (c.State is not (WorkflowState.Draft or WorkflowState.Rejected) || c.CurrentRevisionId != expectedRevisionId)
                 throw new DbUpdateConcurrencyException("Phiên bản không còn ở trạng thái gửi duyệt.");
             var draft = await DraftAsync(c.Id) ?? throw new InvalidOperationException("Chưa có bản nháp làm việc.");
-            await ValidateRequiredAsync(c, draft.Title, draft.BodyHtml, draft.PrimaryCategoryId, draft.Assets.Count);
+            await ValidateRequiredAsync(c, draft.Title, draft.BodyHtml, draft.PrimaryCategoryId, draft.Assets.Count, draft.Summary, draft.Author, draft.CoverAssetId);
             c.CurrentRevisionId = await SnapshotAsync(c, draft, actor);
             c.SubmittedRevisionId = c.CurrentRevisionId; c.ApprovedRevisionId = null; c.ApprovalHash = null;
             c.State = WorkflowState.PendingReview;
@@ -132,7 +132,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             var draft = await DraftAsync(c.Id);
             if (draft is not null && Hash(draft) != revision.ContentHash)
                 throw new InvalidOperationException("Bản làm việc có thay đổi chưa lưu thành phiên bản; lưu và duyệt lại trước khi đăng.");
-            await ValidateRequiredAsync(c, revision.Title, revision.BodyHtml, revision.PrimaryCategoryId, revision.Assets.Count);
+            await ValidateRequiredAsync(c, revision.Title, revision.BodyHtml, revision.PrimaryCategoryId, revision.Assets.Count, revision.Summary, revision.Author, revision.CoverAssetId);
             if(c.Kind==ContentKind.Video&&!revision.IsSourceRevision&&!revision.Assets.Any(x=>x.Usage=="Video"))throw new InvalidOperationException("Video mới phải có tệp nội bộ đã xử lý; không xuất bản metadata như video đã chuyển.");
             foreach (var asset in revision.Assets)
             {
@@ -452,6 +452,11 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
     private static ContentMetadata ValidateMetadata(ContentMetadata value, ContentKind kind)
     {
         var m = value.Copy();
+        if(m.Tags?.Length>500||m.Tags?.Any(char.IsControl)==true)throw new InvalidOperationException("Từ khóa tối đa 500 ký tự, không chứa ký tự điều khiển.");
+        m.Tags=string.IsNullOrWhiteSpace(m.Tags)?null:string.Join(", ",m.Tags.Split([',',';'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase));
+        if(m.Tags!=null&&(m.Tags.Length>500||m.Tags.Split(',').Length>20||m.Tags.Split(',').Any(x=>x.Trim().Length>64)))throw new InvalidOperationException("Tối đa 20 từ khóa, mỗi từ khóa tối đa 64 ký tự và tổng sau chuẩn hóa tối đa 500 ký tự.");
+        if(m.Featured==false)m.Featured=null;
+        if(kind is not(ContentKind.Article or ContentKind.Announcement)&&(m.Tags!=null||m.Featured!=null))throw new InvalidOperationException("Từ khóa và tin nổi bật chỉ dùng cho tin bài hoặc thông báo.");
         m.Number ??= ""; m.DocumentType ??= ""; m.IssuingBody ??= ""; m.Signer ??= ""; m.Field ??= ""; m.Unit ??= ""; m.ConsultationDateEvidence ??= ""; m.EffectivenessEvidence ??= ""; m.MappingStatus ??= "Unmapped";
         if (m.Number.Length > 200 || m.DocumentType.Length > 300 || m.IssuingBody.Length > 500 || m.Signer.Length > 300 || m.Field.Length > 300 || m.Unit.Length > 500 || m.ConsultationDateEvidence.Length > 2000 || m.EffectivenessEvidence.Length > 2000) throw new InvalidOperationException("Metadata văn bản vượt giới hạn.");
         if (m.MappingStatus is not ("Unmapped" or "Reviewed")) throw new InvalidOperationException("Trạng thái ánh xạ không hợp lệ.");
@@ -472,7 +477,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         return m;
     }
     private static bool AllowedMime(string mime) => mime is "image/jpeg" or "image/png" or "image/gif" or "image/webp" || OfficeDocumentPolicy.IsDocument(mime);
-    private async Task ValidateRequiredAsync(Content content, string title, string body, int? category, int assets)
+    private async Task ValidateRequiredAsync(Content content, string title, string body, int? category, int assets, string summary, string author, Guid? cover)
     {
         // Do not force manual repair of missing source metadata. This exception is
         // limited to a proven imported identity whose public category was absent;
@@ -482,5 +487,18 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         if (string.IsNullOrWhiteSpace(title) || (category == null && !legacyMissingCategory) || (string.IsNullOrWhiteSpace(html.PlainText(body)) && assets == 0))
             throw new InvalidOperationException("Bài mới cần tiêu đề, chuyên mục chính và nội dung hoặc tài nguyên.");
         if(category is not null && await db.Set<SiteConfiguration>().AnyAsync(x=>x.Id == 1 && x.LiveRevisionId != null) && !await db.Set<SiteCategoryConfiguration>().AnyAsync(x=>x.CategoryId == category && db.Set<SiteConfiguration>().Any(s=>s.Id == 1 && s.LiveRevisionId == x.RevisionId))) throw new InvalidOperationException("Chuyên mục chính đã ngừng áp dụng; chọn chuyên mục hiện hành trước khi gửi duyệt hoặc đăng.");
+        if(content.Kind is ContentKind.Article or ContentKind.Announcement)
+        {
+            // Preserve only missing fields of the currently published, proven
+            // source revision. New content/clones and previously completed fields
+            // cannot obtain this exception by posting a metadata flag.
+            var source=content.PublishedRevisionId is Guid published&&await db.SourceRecords.AnyAsync(x=>x.ContentId==content.Id)
+                ?await db.Revisions.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==published&&x.ContentId==content.Id&&x.IsSourceRevision):null;
+            var hasBody=!string.IsNullOrWhiteSpace(html.PlainText(body))||new HtmlParser().ParseDocument(body).QuerySelector("img[src],video[src],a[href^='/media/']")!=null;
+            if(!hasBody&&(source==null||!string.IsNullOrWhiteSpace(html.PlainText(source.BodyHtml))))throw new InvalidOperationException("Nhập nội dung bài trước khi gửi duyệt hoặc xuất bản; ảnh đại diện không thay nội dung bài.");
+            if(string.IsNullOrWhiteSpace(summary)&&(source==null||!string.IsNullOrWhiteSpace(source.Summary)))throw new InvalidOperationException("Nhập sapo (mô tả ngắn) trước khi gửi duyệt hoặc xuất bản.");
+            if(string.IsNullOrWhiteSpace(author)&&(source==null||!string.IsNullOrWhiteSpace(source.Author)))throw new InvalidOperationException("Nhập tên tác giả trước khi gửi duyệt hoặc xuất bản; không dùng tên đăng nhập thay tác giả.");
+            if(cover==null&&(source==null||source.CoverAssetId!=null))throw new InvalidOperationException("Chọn ảnh đại diện đã được phép sử dụng trước khi gửi duyệt hoặc xuất bản.");
+        }
     }
 }

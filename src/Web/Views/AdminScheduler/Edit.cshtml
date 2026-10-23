@@ -1,9 +1,9 @@
 @model LandPortal.Web.Models.ScheduleForm
 @{ Layout="_AdminLayout"; ViewData["Title"]="Hẹn giờ xuất bản"; }
 @section Styles { <link rel="stylesheet" href="~/css/scheduler.css" asp-append-version="true" /> }
-<h1>Hẹn giờ xuất bản</h1><p>@Model.Title</p><p>Phiên bản được xác nhận: <code>@Model.RevisionId</code>. Worker không tự chuyển sang bản nháp mới hơn.</p>
+<h1>Hẹn giờ xuất bản</h1><p>@Model.Title</p><p>Đặt lịch cho phiên bản đã lưu đang chọn. Tác vụ nền không tự chuyển sang bản nháp mới hơn.</p>
 <form method="post" action="/admin/schedules/save" class="scheduler-form">@Html.AntiForgeryToken()<div asp-validation-summary="All" class="validation-message" role="alert"></div><input asp-for="ContentId" type="hidden"/><input asp-for="RevisionId" type="hidden"/><input asp-for="ReplaceJobId" type="hidden"/><input asp-for="ContentVersion" type="hidden"/><input asp-for="JobVersion" type="hidden"/>
 <label asp-for="DueVietnam">Ngày giờ Việt Nam (UTC+07:00)</label><input asp-for="DueVietnam" type="datetime-local" step="1" asp-format="{0:yyyy-MM-ddTHH:mm:ss}" required/><span asp-validation-for="DueVietnam"></span>
-<fieldset><legend>Căn cứ xuất bản</legend>@if(Model.CanApproved){<label><input type="radio" name="Direct" value="false" checked="@(!Model.Direct)"/>Phiên bản đã duyệt: kiểm tra ID/hash và quyền người duyệt khi chạy</label>}@if(Model.CanDirect){<label><input type="radio" name="Direct" value="true" checked="@Model.Direct"/>Đăng trực tiếp theo quyền hiện tại</label>}</fieldset>
-<p>Lịch trễ không quá @Model.CatchUpMinutes phút được kiểm tra để chạy bù theo cấu hình local. Lịch quá ngưỡng hoặc bị thu hồi quyền chuyển sang cần xem xét. Hủy/thay lịch không gỡ bản đang công khai.</p>
-<button type="submit" class="button">@(Model.ReplaceJobId==null?"Lưu lịch SQL":"Thay lịch và xác nhận phiên bản")</button><a href="/admin/schedules" class="button button-secondary">Danh sách lịch</a></form>
+<fieldset><legend>Căn cứ xuất bản</legend>@if(Model.CanApproved){<label><input type="radio" name="Direct" value="false" checked="@(!Model.Direct)"/>Phiên bản đã duyệt: kiểm tra đúng phiên bản và quyền người duyệt khi chạy</label>}@if(Model.CanDirect){<label><input type="radio" name="Direct" value="true" checked="@Model.Direct"/>Đăng trực tiếp theo quyền hiện tại</label>}</fieldset>
+<p>Lịch trễ không quá @Model.CatchUpMinutes phút được kiểm tra để chạy bù theo cấu hình môi trường. Lịch quá ngưỡng hoặc bị thu hồi quyền chuyển sang cần xem xét. Hủy/thay lịch không gỡ bản đang công khai.</p>
+<button type="submit" class="button">@(Model.ReplaceJobId==null?"Lưu lịch xuất bản":"Thay lịch và xác nhận phiên bản")</button><a href="/admin/schedules" class="button button-secondary">Danh sách lịch</a></form>

@@ -1,8 +1,38 @@
+# Bổ sung chính thức SRS v1.2 — 23/10/2026
+
+- Tên Anh: **Department of Land Administration**, cấu hình trong Nhận diện; fallback chính thức tập trung tại `SitePresentation`. Không sửa tên trong bài lịch sử. Logo chưa cần; bố cục có dấu nhận diện dự phòng.
+- `/admin/site?section=menus`: mọi menu đều thêm/sửa/xóa được, kể cả mục nguồn; danh mục/nội dung nguồn vẫn được bảo vệ riêng. Chọn loại đích: tuyến hệ thống, chuyên mục, bài công khai, URL nội bộ, HTTP(S) ngoài hoặc nhóm. Cấu hình cha/con, vị trí, thứ tự, Hiển thị và Mở tab mới. Tắt nhóm sẽ ẩn cả nhánh; URL/tên được kiểm tra server. Không HTML/script, javascript/data, URL có credential hoặc tuyến admin/private. Không thêm Dịch vụ công đến khi có URL thật. Thư điện tử theo SRS: https://mail.mae.gov.vn; URL vẫn sửa/xóa trong SQL qua workflow.
+- Lưu luôn tạo revision nháp. Xem trước rồi Áp dụng đúng revision/rowversion; cần `site.manage` và `site.publish` tương ứng, kiểm tra quyền mới từ SQL. Khôi phục tạo bản nháp mới. Helper Công khai thông tin tạo đúng ba mục FR17; xác nhận catalog bằng tài khoản có quyền trước khi cần công bố nội dung, không tự đăng hồ sơ.
+
+## Ba tài khoản giả lập — chỉ Development Dev/Test
+
+Tên: `dev-srs12-writer`, `dev-srs12-reviewer`, `dev-srs12-admin`. Hai tài khoản đầu có phạm vi chuyên mục được chỉ định lúc tạo; Người viết không đăng, Người duyệt có duyệt/đăng bản được duyệt/gỡ và không quản trị tài khoản/menu. Quản trị có quyền nghiệp vụ hiện hành, chỉ trên local Dev/Test. Hết hạn14ngày; lần đầu đổi mật khẩu. Giữ CAPTCHA/lockout/MFA; không bật/tắt cơ chế xác thực để tiện thử.
+
+Lệnh bootstrap tường minh, idempotent, cần backup và đúng target. Chuẩn bị biến môi trường private trước, không ghi secret vào lệnh/tài liệu:
+
+```powershell
+rtk proxy powershell -NoProfile -File scripts/bootstrap-dev-demo.ps1 -Cli <MigrationCli.dll> -Database LandPortal_Dev -ConfirmTarget '<physical-instance>/LandPortal_Dev' -BackupReceipt <verified-receipt.json> -CategoryId <assigned-category>
+```
+
+Mật khẩu ngẫu nhiên nằm tệp `.local/credentials/*.dpapi`, mã hóa Windows CurrentUser và ACL riêng; không log/clipboard/Git. Chỉ người vận hành cùng Windows user mở qua `scripts/show-dev-demo-credentials.ps1 -Path <absolute-private-file>`: hộp thoại riêng, không output console. Nếu có tệp `.active`, đó là mật khẩu sau đổi lần đầu, file ban đầu không còn đăng nhập được. Không gửi mật khẩu qua chat.
+
+Rerun không đổi mật khẩu/role/quyền/expiry hoặc mở khóa tài khoản đã có; trùng tên với tài khoản không mang marker sẽ dừng. Vô hiệu hóa trước vận hành: chạy cùng lệnh có `-Disable` (không cần category), hoặc khóa đúng3tài khoản qua admin. Không tự xóa tài khoản có audit. Chứng thực demo bị chặn ở Staging/Production ngay cả nếu cấu hình nhầm/copy DB; vẫn phải loại tài khoản khỏi dữ liệu bàn giao vận hành.
+
+## Tra cứu hỏi đáp
+
+Khách mở `/tra-cuu-ho-so`, nhập đủ mã tiếp nhận + đúng email + CAPTCHA. Sai mã/email cùng thông báo, CAPTCHA hết hạn/sai/dùng lại bị từ chối; không OTP/không cần SMTP để đọc kết quả. Không trả email/điện thoại/nội dung gốc/tệp/ghi chú nội bộ; kết quả POST không cache, câu trả lời hiển thị dạng chữ. Mã tiếp nhận phải giữ bí mật. Mục này thay quyết định khóa tra cứu ở tài liệu phiên bản cũ; workflow gửi, phân công và duyệt công khai giữ nguyên.
+
+---
+
+> Cập nhật BA/SRS v1.1: máy chủ vận hành chính thức thuộc TTDL, không phải máy chủ của Bộ. Giữ IIS + SQL Server + Web/Worker; hạ tầng đích chưa được cấp. Video mới tải trực tiếp lên hệ thống, không nhúng YouTube.
+
 # Quản trị cấu hình cổng thông tin — Giai đoạn 2B
 
 Phạm vi local, chưa production ready. Đọc `account-admin-guide.md` để quản trị tài khoản/nhóm và `scheduler-runbook.md` để vận hành lịch đăng. Không tự gán các quyền mới cho tài khoản vận hành.
 
 ## Quyền và màn hình
+
+SRS v1.1/FR-17: tại `/admin/site?section=menus`, người có **cả quyền Biên tập cấu hình website và Áp dụng cấu hình website** xác nhận ba tên danh mục theo SRS. Sau đó thêm nhóm Công khai thông tin vào nháp, xem trước và áp dụng đúng phiên bản. Tên “Người nước ngoài định cư ở Việt Nam” đã chốt; không hỏi lại tên. Thao tác xác nhận không xuất bản bài, không tự áp dụng menu và từ chối nếu phát hiện hồ sơ đang công khai cần rà soát. Dev hiện chưa có tài khoản hoạt động đủ hai quyền; cần quản trị có thẩm quyền xử lý, không dùng SQL hoặc migration để lách. Nhãn tiếng Việt chỉ phục vụ hiển thị, các mã quyền dưới đây giữ nguyên.
 
 `/admin/site` cần một trong `site.view`, `site.manage`, `site.publish`. `site.manage` cho lưu/khôi phục cấu hình nháp; `site.publish` cho áp dụng đúng phiên bản đang là nháp. Hai quyền không suy ra lẫn nhau và không suy ra từ `settings.manage`. Upload còn cần `media.manage` và policy môi trường. Các endpoint kiểm tra quyền hiện thời; ẩn nút không thay kiểm tra server.
 
@@ -47,3 +77,12 @@ Tạo/sửa cơ quan ban hành, loại văn bản và lĩnh vực qua mẫu, lư
 ## Phạm vi còn lại
 
 2C: tiếp nhận/kiểm duyệt câu hỏi, liên hệ, bình luận dưới bài và góp ý dự thảo; không có nút gửi thành công giả ở 2B. 2D: video upload trực tiếp từ máy và xử lý tệp. Chuyển toàn nguồn, scanner, MFA đặc quyền, restore toàn hệ, UAT và production thuộc các checkpoint sau. `RESTORE VERIFYONLY` không phải diễn tập restore toàn hệ.
+
+
+SRS1.1 — nhận diện và mẫu bài
+
+Tại /admin/site/edit?section=contact, nhập tên tiếng Anh, cơ quan chủ quản, người chịu trách nhiệm, số giấy phép và mô tả SEO từ dữ liệu Văn phòng Cục. Để trống khi chưa xác nhận; lưu nháp → preview → áp dụng đúng revision. Cần quyền site.manage/site.publish; Dev hiện không có tài khoản hoạt động đủ cả hai, không tự grant hoặc sửa SQL. Hướng dẫn menu3mục FR17 bên trên vẫn áp dụng.
+
+Bài/thông báo mới có thể lưu nháp thiếu trường; trước gửi duyệt/đăng phải có tiêu đề, chuyên mục, sapo, ảnh đại diện, nội dung và tên tác giả. Chú thích ảnh, từ khóa và cờ tin nổi bật thuộc revision; sửa nháp không đổi public, approval cũ không dùng cho sửa mới. Ngoại lệ thiếu trường chỉ giữ đúng phần đã thiếu của revision nguồn có SourceRecord; không áp cho clone/bài mới hoặc xóa trường nguồn đã có.
+
+Banner home từ cấu hình live được hiển thị thành slider có nút, không tự phát chuyển động; ảnh/đích/lịch hiệu lực vẫn qua ACL và workflow cũ. Thống kê là phiên ngẫu nhiên20phút, active5phút, ngày/tháng Việt Nam, SQL bền vững; không phải số người duy nhất. Không ghi IP/tài khoản/email/URL; số ban đầu tính từ thời điểm bắt đầu ghi, không nhập số giả.

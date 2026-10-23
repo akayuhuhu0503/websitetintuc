@@ -26,13 +26,7 @@ builder.Services.AddSingleton(publicUrls);
 builder.Services.AddSingleton(storage);
 builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => DatabaseSettings.Options(builder.Configuration));
 builder.Services.AddScoped<PortalDbContext>();
-builder.Services.AddIdentity<PortalUser, IdentityRole>(options =>
-{
-    options.User.RequireUniqueEmail = true;
-    options.Password.RequiredLength = 14;
-    options.Lockout.MaxFailedAccessAttempts = 5;
-    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-}).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+builder.Services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/admin/login";
@@ -55,7 +49,8 @@ builder.Services.ConfigureApplicationCookie(options =>
         var manager = context.HttpContext.RequestServices.GetRequiredService<UserManager<PortalUser>>();
         var user = await manager.GetUserAsync(context.Principal!);
         var stamp = context.Principal?.FindFirst(manager.Options.ClaimsIdentity.SecurityStampClaimType)?.Value;
-        if (user is null || user.IsDisabled || user.LockoutEnd > DateTimeOffset.UtcNow ||
+        var demoAllowed=user==null||DevDemoPolicy.Allowed(await manager.GetClaimsAsync(user),builder.Environment.EnvironmentName,builder.Configuration["Sql:ExpectedDatabase"]);
+        if (user is null || !demoAllowed || user.IsDisabled || user.LockoutEnd > DateTimeOffset.UtcNow ||
             string.IsNullOrEmpty(stamp) || !string.Equals(stamp, user.SecurityStamp, StringComparison.Ordinal)||AdminSessionPolicy.Expired(context.Properties,DateTimeOffset.UtcNow,idle))
         {
             context.RejectPrincipal();
@@ -87,8 +82,20 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 int appCaptchaLimit()=>int.TryParse(builder.Configuration["Captcha:AttemptsPer10Minutes"],out var limit)&&limit is >=1 and <=20?limit:5;
-builder.Services.AddControllersWithViews(options => options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+builder.Services.AddScoped<InquiryCaptchaLookup>();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    options.ModelMetadataDetailsProviders.Add(new LandPortal.Web.Models.VietnameseValidationMetadata());
+    options.ModelBindingMessageProvider.SetValueMustNotBeNullAccessor(_=>"Thông tin này không được để trống.");
+    options.ModelBindingMessageProvider.SetAttemptedValueIsInvalidAccessor((_,name)=>$"{name} chưa hợp lệ. Vui lòng kiểm tra lại.");
+    options.ModelBindingMessageProvider.SetValueIsInvalidAccessor(_=>"Giá trị chưa hợp lệ. Vui lòng kiểm tra lại.");
+    options.ModelBindingMessageProvider.SetValueMustBeANumberAccessor(name=>$"{name} phải là số.");
+});
 builder.Services.AddScoped<HtmlPolicy>();
+builder.Services.AddScoped<DocumentUsage>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<PublicTraffic>();
 builder.Services.AddScoped<WorkflowService>();
 builder.Services.AddSingleton(SchedulerOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<SchedulerService>();

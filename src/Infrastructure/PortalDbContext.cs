@@ -122,6 +122,10 @@ public partial class PortalDbContext(DbContextOptions<PortalDbContext> options) 
         b.Entity<Job>().HasIndex(x => x.IdempotencyKey).IsUnique();
         b.Entity<Job>().HasIndex(x => new { x.Status, x.AvailableUtc });
         b.Entity<AuditLog>().HasIndex(x => new { x.ContentId, x.CreatedUtc });
+        b.Entity<PublicVisit>().HasKey(x=>x.SessionHash);
+        b.Entity<PublicVisit>().Property(x=>x.SessionHash).HasMaxLength(64).IsUnicode(false);
+        b.Entity<PublicVisit>().HasIndex(x=>x.StartedUtc);
+        b.Entity<PublicVisit>().HasIndex(x=>x.LastSeenUtc);
     }
     private void ProtectHistory()
     {

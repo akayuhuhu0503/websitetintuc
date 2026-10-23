@@ -1,2 +1,9 @@
 /* Long identifiers and official document titles must wrap without widening the viewport. */
 .main-content h1,.main-content h2,.main-content h3,.main-content .card-content,.main-content .featured-content{overflow-wrap:anywhere;min-width:0}
+/* SRS1.1: manual slider works without motion; without JS every link remains usable. */
+.activity-slide[hidden],.activity-controls[hidden]{display:none!important}
+.activity-controls{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.5rem 0 1.5rem}
+.activity-controls button{padding:.65rem 1rem;cursor:pointer;border:1px solid #bcccd4;background:#fff;color:#124b64;border-radius:.25rem}
+.activity-controls button:focus-visible{outline:3px solid #267e9d;outline-offset:2px}
+[data-vietnam-clock]{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:.8rem}
+@media(max-width:600px){.utility-inner{flex-wrap:wrap;gap:.35rem}.utility-inner>span{flex-basis:100%}.activity-controls{gap:.5rem}.activity-controls button{padding:.6rem}}

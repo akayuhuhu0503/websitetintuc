@@ -36,6 +36,14 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         }
         if (!ModelState.IsValid) { ModelState.AddModelError("", "Nhập tên đăng nhập và mật khẩu hợp lệ, rồi trả lời câu hỏi mới."); return await LoginView(model, 400); }
         var result = await signIn.PasswordSignInAsync(model.UserName, model.Password, isPersistent: false, lockoutOnFailure: true);
+        var loginAccount = await signIn.UserManager.FindByNameAsync(model.UserName);
+        if(loginAccount!=null&&!DevDemoPolicy.Allowed(await signIn.UserManager.GetClaimsAsync(loginAccount),environment.EnvironmentName,db.Database.GetDbConnection().Database))
+        {await signIn.SignOutAsync();result=Microsoft.AspNetCore.Identity.SignInResult.Failed;}
+        // Never log credentials, CAPTCHA answers, email/IP or the submitted name.
+        // MFA-required is a partial authentication result, not a completed login.
+        db.AuditLogs.Add(new(){Actor=loginAccount?.Id??"anonymous",Action=result.Succeeded?"AdminPasswordLogin":result.RequiresTwoFactor?"AdminPasswordMfaRequired":result.IsLockedOut?"AdminPasswordLocked":"AdminPasswordFailed",Detail="Identity password outcome; no credentials recorded"});
+        try { await db.SaveChangesAsync(); }
+        catch { if(result.Succeeded||result.RequiresTwoFactor)await signIn.SignOutAsync();throw; }
         if(result.RequiresTwoFactor){var account=await signIn.UserManager.FindByNameAsync(model.UserName);if(account==null||account.IsDisabled)return Forbid();HttpContext.RequestServices.GetRequiredService<AdminMfaFlow>().Start(HttpContext,account,Url.IsLocalUrl(model.ReturnUrl)?model.ReturnUrl!:"/admin");return Redirect("/admin/mfa");}
         if (result.Succeeded) {
             var target=Url.IsLocalUrl(model.ReturnUrl) ? model.ReturnUrl! : "/admin";
@@ -85,7 +93,11 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         if (!string.IsNullOrWhiteSpace(owner)) rows = rows.Where(x => x.OwnerId == owner);
         page = Math.Clamp(page, 1, 10000);
         var total = await rows.CountAsync();
-        var items = await rows.OrderByDescending(x => x.UpdatedUtc).ThenBy(x => x.Id).Skip((page - 1) * 15).Take(15).ToListAsync();
+        // Sort/page identifiers and ordering keys only. Materialize titles after
+        // SQL paging, preserving both the permission scope and deterministic order.
+        var ids = await rows.OrderByDescending(x => x.UpdatedUtc).ThenBy(x => x.Id).Skip((page - 1) * 15).Take(15).Select(x=>x.Id).ToArrayAsync();
+        var byId = await rows.Where(x=>ids.Contains(x.Id)).ToDictionaryAsync(x=>x.Id);
+        var items = ids.Where(byId.ContainsKey).Select(id=>byId[id]).ToList();
         var categories = await Categories(actor);
         var owners = await (from u in db.Users.AsNoTracking() where contents.Any(c => c.OwnerUserId == u.Id) orderby u.UserName select new AdminOwner(u.Id, u.UserName ?? u.Id)).ToListAsync();
         return View(new AdminListModel { Kind = kind, Query = q, Status = status, CategoryId = categoryId, Owner = owner, Page = page, Total = total, Categories = categories, Owners = owners, CanCreate = actor.Has(Permissions.Create), Items = items.Select(x => new AdminRow(x.Id, x.Title, StateLabel(x.State), categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm"), x.IsPublic && !x.IsTrashed, x.IsTrashed, owners.FirstOrDefault(o => o.Id == x.OwnerId)?.Name ?? "Dữ liệu nguồn")).ToList() });
@@ -119,7 +131,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
             var asset = document == null ? null : await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == documentId);
             if (asset == null) return NotFound();
             await using var original = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment());
-            if (original == null) return StatusCode(423, "Chưa có kết luận Clean đúng byte; không đọc preview.");
+            if (original == null) return StatusCode(423, "Chưa có kết luận Clean đúng byte; không đọc bản xem trước.");
             model.AttachmentIds = model.AttachmentIds.Append(asset.Id).Distinct().ToArray();
             if (asset.MimeType == OfficeDocumentPolicy.Docx)
             {
@@ -133,7 +145,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
                 }
                 catch (InvalidOperationException error) { model.DocumentWarnings = [error.Message, "Tệp gốc Clean vẫn được giữ; nhập hoặc sửa các dòng bên dưới. Chưa lưu nháp, chưa thay lịch công khai."]; }
             }
-            else model.DocumentWarnings = ["Tài liệu Clean được chọn trong preview; bấm Lưu bản nháp để tạo revision. Chưa cấp quyền công khai."];
+            else model.DocumentWarnings = ["Tài liệu Clean được chọn trong bản xem trước; bấm Lưu bản nháp để tạo phiên bản. Chưa cấp quyền công khai."];
         }
         return View(await Populate(model, actor, content));
     }
@@ -226,11 +238,12 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         if (revisionId is not null && revision is null || revision is null && draft is null) return NotFound();
         var categoryId = draft is null ? revision!.PrimaryCategoryId : draft.PrimaryCategoryId;
         var cover = draft is null ? revision!.CoverAssetId : draft.CoverAssetId;
+        var coverCaption=cover is null?null:draft is null?await db.ContentAssets.Where(x=>x.RevisionId==revision!.Id&&x.MediaAssetId==cover).Select(x=>x.Caption).FirstOrDefaultAsync():await db.DraftAssets.Where(x=>x.ContentId==id&&x.MediaAssetId==cover).Select(x=>x.Caption).FirstOrDefaultAsync();
         var attachments = draft is null ? await db.ContentAssets.Where(x => x.RevisionId == revision!.Id && (x.MediaAsset.MimeType == "application/pdf" || x.MediaAsset.Origin == "EditorialDocument")).Select(x => new EditorMedia(x.MediaAssetId, x.MediaAsset.OriginalName, x.MediaAsset.MimeType, x.MediaAsset.ByteLength)).ToListAsync() : await db.DraftAssets.Where(x => x.ContentId == id && (x.MediaAsset.MimeType == "application/pdf" || x.MediaAsset.Origin == "EditorialDocument")).Select(x => new EditorMedia(x.MediaAssetId, x.MediaAsset.OriginalName, x.MediaAsset.MimeType, x.MediaAsset.ByteLength)).ToListAsync();
         var category = await db.Categories.Where(x => x.Id == categoryId).Select(x => x.Name).FirstOrDefaultAsync();
         var body = draft?.BodyHtml ?? revision!.BodyHtml;
         var inlineCover = cover is not null && new HtmlParser().ParseDocument(body).QuerySelectorAll("img[src]").Any(x => string.Equals(x.GetAttribute("src"), "/media/" + cover, StringComparison.OrdinalIgnoreCase));
-        return View(new PreviewModel { Metadata = (draft?.Metadata ?? revision!.Metadata).Copy(), ContentId = id, RevisionId = revisionId, Title = draft?.Title ?? revision!.Title, Summary = draft?.Summary ?? revision!.Summary, BodyHtml = PrivateHtml(body, id), Author = draft?.Author ?? revision!.Author, Source = draft?.SourceCredit ?? revision!.SourceCredit, Category = category, CoverUrl = cover is null || inlineCover ? null : $"/admin/media/{cover}/preview?contentId={id}", Attachments = attachments });
+        return View(new PreviewModel { CoverCaption=coverCaption, Metadata = (draft?.Metadata ?? revision!.Metadata).Copy(), ContentId = id, RevisionId = revisionId, Title = draft?.Title ?? revision!.Title, Summary = draft?.Summary ?? revision!.Summary, BodyHtml = PrivateHtml(body, id), Author = draft?.Author ?? revision!.Author, Source = draft?.SourceCredit ?? revision!.SourceCredit, Category = category, CoverUrl = cover is null || inlineCover ? null : $"/admin/media/{cover}/preview?contentId={id}", Attachments = attachments });
     }
     [HttpGet("admin/history/{id:guid}")]
     public async Task<IActionResult> History(Guid id)
@@ -274,7 +287,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         var referenced = new HtmlParser().ParseDocument(body).QuerySelectorAll("img[src],a[href]").Select(x => x.GetAttribute(x.LocalName == "img" ? "src" : "href") ?? "").Select(x => TryMediaId(x, out var id) ? id : Guid.Empty).ToHashSet();
         var extras = assets.Where(x => !referenced.Contains(x.Id) && x.Id != cover && x.MimeType != "application/pdf" && x.MimeType != "text/vtt" && !x.MimeType.StartsWith("video/")).Select(x => x.Id).ToArray();
         var preserved = draft is null ? await db.ContentAssets.Where(x => x.RevisionId == revision!.Id && extras.Contains(x.MediaAssetId)).Select(x => new EditorAssetInput { Id = x.MediaAssetId, Usage = x.Usage, Caption = x.Caption, SortOrder = x.SortOrder }).ToListAsync() : await db.DraftAssets.Where(x => x.ContentId == content.Id && extras.Contains(x.MediaAssetId)).Select(x => new EditorAssetInput { Id = x.MediaAssetId, Usage = x.Usage, Caption = x.Caption, SortOrder = x.SortOrder }).ToListAsync();
-        return new EditorModel { Kind = content.Kind, Metadata = (draft?.Metadata ?? revision!.Metadata).Copy(), Id = content.Id, CurrentRevisionId = content.CurrentRevisionId, Title = draft?.Title ?? revision!.Title, Summary = draft?.Summary ?? revision!.Summary, BodyHtml = body, Author = draft?.Author ?? revision!.Author, SourceName = draft?.SourceCredit ?? revision!.SourceCredit, CategoryId = primary, SecondaryCategoryIds = categories.Where(x => x != primary).ToArray(), CoverAssetId = cover, VideoAssetIds = assets.Where(x=>x.MimeType.StartsWith("video/")).Select(x=>x.Id).ToArray(), SubtitleAssetIds = assets.Where(x=>x.MimeType=="text/vtt").Select(x=>x.Id).ToArray(), SelectedMedia = assets, AttachmentLabels = labels, AttachmentIds = assets.Where(x => OfficeDocumentPolicy.IsDocument(x.MimeType)).Select(x => x.Id).ToArray(), PreservedAssets = preserved, RowVersion = Convert.ToBase64String(content.RowVersion) };
+        return new EditorModel { Kind = content.Kind, Metadata = (draft?.Metadata ?? revision!.Metadata).Copy(), Id = content.Id, CurrentRevisionId = content.CurrentRevisionId, Title = draft?.Title ?? revision!.Title, Summary = draft?.Summary ?? revision!.Summary, BodyHtml = body, Author = draft?.Author ?? revision!.Author, SourceName = draft?.SourceCredit ?? revision!.SourceCredit, CategoryId = primary, SecondaryCategoryIds = categories.Where(x => x != primary).ToArray(), CoverAssetId = cover, CoverCaption=cover is Guid coverId?labels.GetValueOrDefault(coverId, ""):null, VideoAssetIds = assets.Where(x=>x.MimeType.StartsWith("video/")).Select(x=>x.Id).ToArray(), SubtitleAssetIds = assets.Where(x=>x.MimeType=="text/vtt").Select(x=>x.Id).ToArray(), SelectedMedia = assets, AttachmentLabels = labels, AttachmentIds = assets.Where(x => OfficeDocumentPolicy.IsDocument(x.MimeType)).Select(x => x.Id).ToArray(), PreservedAssets = preserved, RowVersion = Convert.ToBase64String(content.RowVersion) };
     }
     private async Task<EditorModel> Populate(EditorModel model, ContentActor actor, Content? content = null)
     {
@@ -338,7 +351,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         foreach (var id in model.AttachmentIds.Distinct()) assets[id] = new AssetSelection { MediaAssetId = id, Usage = "Attachment", Caption = model.AttachmentLabels.GetValueOrDefault(id, "") ?? "", SortOrder = order++ };
         foreach(var id in model.VideoAssetIds.Distinct())assets[id]=new AssetSelection{MediaAssetId=id,Usage="Video",Caption=model.AttachmentLabels.GetValueOrDefault(id,"")??"",SortOrder=order++};
         foreach(var id in model.SubtitleAssetIds.Distinct())assets[id]=new AssetSelection{MediaAssetId=id,Usage="Subtitle",Caption=model.AttachmentLabels.GetValueOrDefault(id,"")??"",SortOrder=order++};
-        if (model.CoverAssetId is not null) assets[model.CoverAssetId.Value] = new AssetSelection { MediaAssetId = model.CoverAssetId.Value, Usage = "Cover", SortOrder = -1 };
+        if (model.CoverAssetId is not null) assets[model.CoverAssetId.Value] = new AssetSelection { MediaAssetId = model.CoverAssetId.Value, Usage = "Cover", Caption=model.CoverCaption??model.AttachmentLabels.GetValueOrDefault(model.CoverAssetId.Value,"")??"", SortOrder = -1 };
         // Historical metadata is not an access grant. Only the current body, cover or
         // explicitly selected attachments may keep a media membership in this revision.
         foreach (var asset in model.PreservedAssets)
@@ -359,7 +372,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
     private static object Result(WorkflowResult result) => new { contentId = result.ContentId, currentRevisionId = result.CurrentRevisionId, publishedRevisionId = result.PublishedRevisionId, rowVersion = Convert.ToBase64String(result.RowVersion), state = result.State.ToString(), result.IsPublic, result.IsTrashed, result.AlreadyApplied, savedUtc = result.SavedUtc };
     // Stable identifiers keep the legacy combined form action idempotent on network retry.
     private static Guid FollowupCommand(Guid requestId, string action) => new(SHA256.HashData(Encoding.UTF8.GetBytes(requestId.ToString("D") + ":" + action)).AsSpan(0, 16));
-    public static string StateLabel(WorkflowState state) => state switch { WorkflowState.Draft => "Bản nháp", WorkflowState.PendingReview => "Chờ duyệt", WorkflowState.Approved => "Đã duyệt", WorkflowState.Published => "Đã đăng phiên bản này", WorkflowState.Rejected => "Đã trả bài", WorkflowState.Unpublished => "Đã gỡ", WorkflowState.Archived => "Thùng rác", _ => state.ToString() };
-    public static string ActionLabel(string action) => action switch { "SaveDraft" => "Lưu phiên bản nháp", "Autosave" => "Tự lưu bản nháp", "BeginEdit" => "Mở bản sửa", "Submit" => "Gửi duyệt", "Approve" => "Duyệt", "Reject" => "Trả bài", "PublishDirect" => "Đăng trực tiếp", "PublishApproved" => "Xuất bản bản đã duyệt", "Unpublish" => "Gỡ bài", "Trash" => "Chuyển vào thùng rác", "RestoreTrash" => "Khôi phục từ thùng rác", "RestoreRevision" => "Khôi phục phiên bản thành nháp", "Clone" => "Nhân bản thành nháp", _ => action };
+    public static string StateLabel(WorkflowState state) => AdminLabels.State(state);
+    public static string ActionLabel(string action) => AdminLabels.Action(action);
     private sealed class AdminQueryRow { public Guid Id { get; init; } public string Title { get; init; } = ""; public int? CategoryId { get; init; } public string? OwnerId { get; init; } public WorkflowState State { get; init; } public bool IsPublic { get; init; } public bool IsTrashed { get; init; } public DateTimeOffset UpdatedUtc { get; init; } }
 }

@@ -30,7 +30,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
     [HttpPost("admin/documents/{id:guid}/enqueue/{assetId:guid}")]
     public async Task<IActionResult> Enqueue(Guid id, Guid assetId, CancellationToken ct)
     {
-        try { EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName); await documents.EnqueueLegacyPdfAsync(id, assetId, await Actor(), ct); TempData["Success"] = "PDF upload cũ đã vào hàng đợi riêng tư NotScanned. Byte và revision được giữ; cần worker quét thật trước công khai."; return Redirect("/admin/documents/" + id); }
+        try { EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName); await documents.EnqueueLegacyPdfAsync(id, assetId, await Actor(), ct); TempData["Success"] = "PDF tải lên cũ đã vào hàng đợi riêng tư chưa quét an toàn. Byte và phiên bản được giữ; cần tác vụ nền quét thật trước công khai."; return Redirect("/admin/documents/" + id); }
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (InvalidOperationException error) { return BadRequest(error.Message); }
     }
@@ -42,7 +42,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
             if (file == null || file.Length is < 1 or > EditorialDocumentService.Maximum || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu tối đa 10 MiB.");
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
-            TempData["Success"] = "Đã lưu SQL và kho cách ly, trạng thái NotScanned. Chạy worker quét thật trước khi đọc hoặc dùng tài liệu.";
+            TempData["Success"] = "Đã lưu SQL và kho cách ly, trạng thái chưa quét an toàn. Chạy tác vụ nền quét thật trước khi đọc hoặc dùng tài liệu.";
             return Redirect("/admin/documents/" + id);
         }
         catch (UnauthorizedAccessException) { return Forbid(); }

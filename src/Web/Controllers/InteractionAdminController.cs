@@ -12,19 +12,23 @@ public sealed class InteractionAdminController(PortalDbContext db,InteractionSer
 {
     private Task<ContentActor> Actor()=>permissions.GetAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet("")]
-    public async Task<IActionResult> Index(InteractionKind kind=InteractionKind.Comment,InteractionState? state=null,string? field=null,string? due=null,int page=1)
+    public async Task<IActionResult> Index(InteractionKind kind=InteractionKind.Comment,InteractionState? state=null,string? field=null,string? due=null,int page=1,Guid? contentId=null)
     {
         var actor=await Actor();if(!Enum.IsDefined(kind)||!InteractionPermissions.CanList(actor,kind))return StatusCode(403);
+        if(!ModelState.IsValid || state is not null && !Enum.IsDefined(state.Value) || contentId is not null && kind!=InteractionKind.Comment)return BadRequest("Bộ lọc không hợp lệ.");
         ViewData["CanManageReception"]=actor.Has(Permissions.CommentModerate)&&actor.Has(Permissions.ManageSettings);
         ViewData["CanExport"]=kind==InteractionKind.Inquiry&&actor.Has(Permissions.InquiryRead)&&actor.Has(Permissions.InquiryExport);ViewData["CanExportPii"]=actor.Has(Permissions.InquiryExportPii);ViewData["CanManageCalendar"]=actor.Has(Permissions.InquiryCalendarManage)&&actor.Has(Permissions.InquirySupervise);
         ViewData["CanContactExport"]=actor.Has(Permissions.ContactRead)&&actor.Has(Permissions.InteractionExport);ViewData["CanContactExportPii"]=actor.Has(Permissions.ContactExportPii);
         var pending=new Dictionary<InteractionKind,int>();foreach(var k in Enum.GetValues<InteractionKind>())if(InteractionPermissions.CanList(actor,k))pending[k]=await service.Inbox(actor,k).CountAsync(x=>x.State==InteractionState.Pending);
         var rows=service.Inbox(actor,kind);if(state!=null)rows=rows.Where(x=>x.State==state);page=Math.Clamp(page,1,10000);
+        // Apply the article filter AFTER the permission/category scope. A guessed
+        // article ID must not reveal its title, existence or out-of-scope comments.
+        if(contentId is Guid article)rows=rows.Where(x=>x.ContentId==article);
         if(field!=null){if(field.Length>120)return BadRequest("Lĩnh vực quá dài.");rows=rows.Where(x=>x.InquiryField==field);}
         var now=DateTimeOffset.UtcNow;if(due=="late")rows=rows.Where(x=>x.InquiryDueUtc<now&&x.State!=InteractionState.Closed&&x.State!=InteractionState.Rejected);else if(due=="soon")rows=rows.Where(x=>x.InquiryDueUtc>=now&&x.InquiryDueUtc<now.AddDays(2)&&x.State!=InteractionState.Closed&&x.State!=InteractionState.Rejected);
         var total=await rows.CountAsync();var items=await rows.OrderByDescending(x=>x.CreatedUtc).ThenBy(x=>x.Id).Skip((page-1)*20).Take(20).ToListAsync();
         var names=await db.Users.AsNoTracking().Where(x=>items.Select(i=>i.AssigneeId).Contains(x.Id)).ToDictionaryAsync(x=>x.Id,x=>x.DisplayName==""?"Cán bộ xử lý":x.DisplayName);
-        return View(new InteractionInbox(kind,total,page,items,pending){Field=field,CanReadOriginal=actor.Has(InteractionPermissions.Read(kind)),Due=due,State=state,Assignees=names});
+        return View(new InteractionInbox(kind,total,page,items,pending){ContentId=contentId,Field=field,CanReadOriginal=actor.Has(InteractionPermissions.Read(kind)),Due=due,State=state,Assignees=names});
     }
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Detail(Guid id)

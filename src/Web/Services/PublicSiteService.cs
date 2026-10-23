@@ -14,6 +14,8 @@ public sealed class ConfiguredHomeModel
 {
     public required SitePublicConfiguration Site { get; init; }
     public IReadOnlyList<SiteHomeBlockResult> Blocks { get; init; } = [];
+    public IEnumerable<SiteHomeBlockResult> VisibleBlocks => Blocks.Where(x=>x.ErrorReference==null &&
+        (x.Items.Count>0 || x.Block.Type=="Links" && Site.Menus.Any(m=>m.Position=="links"&&m.Url!=null)));
 }
 
 // One immutable snapshot per request: header, navigation, homepage and footer share its revision.
@@ -37,10 +39,13 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             .Concat(r.Banners.Where(x => x.ContentId.HasValue).Select(x => x.ContentId!.Value)).Distinct().ToArray();
         var targets = targetIds.Length == 0 ? [] : await PublicContentQuery.ForDisplay(query.Published().Where(x => targetIds.Contains(x.Id))).ToListAsync();
         var urls = targets.ToDictionary(x => x.Id, x => PublicContentQuery.Card(x).Url);
-        var approvedGroups = await db.DisclosureGroups.AsNoTracking().Where(x => x.Status == "NameApproved").Select(x => x.Id).ToListAsync();
+        // SRS official names may be navigated even when their content-release
+        // catalog is not yet activated. Published() still enforces NameApproved
+        // for every content record: an empty category page grants no content.
         bool RouteAllowed(string kind, string key) => kind != "Route" || !key.StartsWith("Disclosure", StringComparison.Ordinal) || key == "Disclosure" ||
-            SiteConfigurationService.Routes.TryGetValue(key, out var route) && approvedGroups.Contains(route.Url.Split('/').Last());
-        var menus = r.Menus.Where(x => RouteAllowed(x.TargetKind, x.RouteKey)).Where(x => x.TargetKind != "Category" || r.Categories.Any(c => c.CategoryId == x.CategoryId && c.ShowInNavigation)).Select(x => new SiteNavigationItem(x.Id, x.ParentId, x.Position, x.Label,
+            SiteConfigurationService.Routes.TryGetValue(key, out var route) && V05ContentPolicy.Groups.ContainsKey(route.Url.Split('/').Last());
+        bool Visible(SiteMenuItem item) { var seen=new HashSet<Guid>(); while(true){if(!item.Enabled||!seen.Add(item.Id))return false;if(item.ParentId is not Guid parent)return true;var next=r.Menus.SingleOrDefault(x=>x.Id==parent);if(next==null)return false;item=next;} }
+        var menus = r.Menus.Where(Visible).Where(x => RouteAllowed(x.TargetKind, x.RouteKey)).Where(x => x.TargetKind != "Category" || r.Categories.Any(c => c.CategoryId == x.CategoryId && c.ShowInNavigation)).Select(x => new SiteNavigationItem(x.Id, x.ParentId, x.Position, x.Label,
             Resolve(x.TargetKind, x.CategoryId, x.ContentId, x.RouteKey, x.ExternalUrl, r, urls), x.OpenNewWindow, x.SortOrder))
             .Where(x => x.Url is not null || r.Menus.Any(y => y.Id == x.Id && y.TargetKind == "Group"))
             .OrderBy(x => x.SortOrder).ThenBy(x => x.Id).ToList();
@@ -74,7 +79,12 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             var pinned = pins.Length == 0 ? [] : await PublicContentQuery.ForDisplay(rows.Where(x => pins.Contains(x.Id))).ToListAsync();
             var selected = pins.Select(id => pinned.SingleOrDefault(x => x.Id == id)).Where(x => x is not null).Select(x => x!).ToList();
             var selectedIds = selected.Select(x => x.Id).ToArray();
-            if (selected.Count < block.Limit) selected.AddRange(await query.CardsPageAsync(PublicContentQuery.Recent(rows.Where(x => !selectedIds.Contains(x.Id))),0,block.Limit-selected.Count));
+            if (selected.Count < block.Limit)
+            {
+                var remaining=rows.Where(x=>!selectedIds.Contains(x.Id));
+                var ordered=block.Type=="Featured"?remaining.OrderByDescending(x=>db.Revisions.Any(r=>r.Id==x.RevisionId&&r.Metadata.Featured==true)).ThenByDescending(x=>x.SourceDate??(x.PublishedUtc==null?(DateOnly?)null:DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date))).ThenByDescending(x=>x.PublishedUtc).ThenBy(x=>x.Id):PublicContentQuery.Recent(remaining);
+                selected.AddRange(await query.CardsPageAsync(ordered,0,block.Limit-selected.Count));
+            }
             var more = block.Type switch { "Announcements" => "/thong-bao", "LegalDocuments" => "/van-ban", "DraftDocuments" => "/du-thao", "Videos" => "/video", "Category" => "/chuyen-muc/" + site.Revision.Categories.Single(x => x.CategoryId == block.CategoryId).Slug, _ => "/tin-tuc" };
             blocks.Add(new(block, selected.Select(PublicContentQuery.Card).ToList(), more));
             }
@@ -82,9 +92,8 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             {
                 var correlation=context.HttpContext?.TraceIdentifier??Guid.NewGuid().ToString("N");
                 logger?.LogError("Public block unavailable: block {BlockId}; SQL code {SqlCode}; correlation {Correlation}. No fallback content returned.",block.Id,error.Number,correlation);
-                // Core featured failure uses the normal friendly 500 route. A failed
-                // supplementary block stays visibly distinct from a truly empty block.
-                if(block.Type=="Featured")throw;
+                // BR-03: keep the failure in operational logs, hide the failed
+                // module on the public page. Never substitute cached/draft data.
                 blocks.Add(new(block,[],null,correlation));
             }
         }
@@ -103,6 +112,7 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
         "Category" => r.Categories.FirstOrDefault(x => x.CategoryId == category) is { } c ? "/chuyen-muc/" + c.Slug : null,
         "Content" => content.HasValue && urls.TryGetValue(content.Value, out var url) ? url : null,
         "Route" => SiteConfigurationService.Routes.TryGetValue(route, out var value) ? value.Url : null,
+        "Internal" => SiteConfigurationService.InternalUrlValid(external) ? external : null,
         "External" => SiteConfigurationService.ExternalUrlValid(external) ? external : null, _ => null
     };
 }

@@ -1,6 +1,6 @@
 @model LandPortal.Infrastructure.InteractionReceipt
 @{ViewData["Title"]="Đã tiếp nhận";}
 <section class="interaction-panel"><h1>Đã tiếp nhận nội dung</h1><p>Hồ sơ đã được lưu vào cơ sở dữ liệu, đang chờ xử lý/kiểm duyệt và chưa công khai.</p>
-<p>Mã tiếp nhận: <strong id="receipt-code">@Model.PublicCode</strong>. Hãy lưu mã này; mã không cấp quyền đọc hồ sơ riêng tư.</p>
+<p>Mã tiếp nhận: <strong id="receipt-code">@Model.PublicCode</strong>. Hãy lưu riêng mã này để tra cứu hỏi đáp cùng email đã gửi và CAPTCHA. Không chia sẻ mã tiếp nhận.</p>
 @if(Model.MailQueued){<p>Thư xác nhận đã được xếp hàng. Chưa xác nhận gửi thành công hoặc email đã đến hộp thư.</p>}else{<p>Dịch vụ thư chưa được bật tại môi trường này; chưa xếp hàng email xác nhận.</p>}
 <a href="/">Về trang chủ</a></section>

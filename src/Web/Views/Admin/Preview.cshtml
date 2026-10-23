@@ -4,7 +4,9 @@
 <div class="admin-title"><div><a class="back-link" href="/admin/edit/@Model.ContentId">← Về bài biên tập</a><h1>Xem trước riêng tư</h1></div><span class="workflow-badge">@(Model.RevisionId is null ? "Bản nháp đã lưu" : "Phiên bản lịch sử")</span></div>
 <p class="scope-note">Chỉ người có quyền xem bài được truy cập. Đây là nội dung đã lưu trong SQL; các thay đổi chưa lưu ở cửa sổ soạn thảo chưa xuất hiện tại đây.</p>
 <article class="article-detail preview-article"><header><p class="eyebrow">@Model.Category</p><h1>@Model.Title</h1><p class="article-meta">@Model.Author</p>@if (!string.IsNullOrWhiteSpace(Model.Summary)) { <p class="article-summary">@Model.Summary</p> }</header>
-@if (Model.CoverUrl is not null) { <img class="preview-cover" src="@Model.CoverUrl" alt="Ảnh đại diện bản xem trước" /> }
+@if (Model.CoverUrl is not null) { <figure><img class="preview-cover" src="@Model.CoverUrl" alt="Ảnh đại diện bản xem trước" />@if(!string.IsNullOrWhiteSpace(Model.CoverCaption)){<figcaption>@Model.CoverCaption</figcaption>}</figure> }
+@if(!string.IsNullOrWhiteSpace(Model.Metadata.Tags)){<p>Từ khóa: @Model.Metadata.Tags</p>}
+@if(Model.Metadata.Featured==true){<p>Tin nổi bật: có. Cờ của bản đang xem, chưa thay đổi bản công khai.</p>}
 <div class="article-body">@Html.Raw(Model.BodyHtml)</div>
 @if (Model.Attachments.Count > 0) { <section class="attachments"><h2>Tài liệu đính kèm</h2><ul>@foreach (var file in Model.Attachments) { <li><a href="/admin/media/@file.Id/preview?contentId=@Model.ContentId&amp;download=true">@file.Name</a><small>@file.MimeType · @((file.Bytes / 1024d).ToString("N0")) KB</small></li> }</ul></section> }
 @if (!string.IsNullOrWhiteSpace(Model.Source)) { <p class="article-source">Nguồn: @Model.Source</p> }</article>

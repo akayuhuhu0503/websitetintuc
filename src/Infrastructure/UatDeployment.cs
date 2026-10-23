@@ -7,6 +7,12 @@ namespace LandPortal.Infrastructure;
 // import, real mail, or deployment, and never enables a Production exception.
 public static class UatDeployment
 {
+    public static bool IsTargetDatabase(string? database) => database is { Length: > 0 and <= 128 } &&
+        System.Text.RegularExpressions.Regex.IsMatch(database, @"\A[A-Za-z][A-Za-z0-9_]*\z") &&
+        !new[] { "master", "model", "msdb", "tempdb", "LandPortal_Dev", "LandPortal_Test" }.Contains(database, StringComparer.OrdinalIgnoreCase) &&
+        !database.Contains("restore", StringComparison.OrdinalIgnoreCase) && !database.Contains("prod", StringComparison.OrdinalIgnoreCase) &&
+        !database.Contains("REPLACE", StringComparison.OrdinalIgnoreCase);
+
     public static bool Enabled(IConfiguration c) => c["Deployment:Profile"] == "UAT";
     public static bool RequireMfa(IConfiguration c) => Enabled(c) || c["AdminSession:RequireMfa"] == "true";
     public static bool Validate(IConfiguration c, string environment)
@@ -15,10 +21,12 @@ public static class UatDeployment
         if (environment != "Staging" || c["DOTNET_ENVIRONMENT"] != "Staging" || c["ASPNETCORE_ENVIRONMENT"] != "Staging")
             throw new InvalidOperationException("UAT requires explicit Staging for both Web and Worker; never Production/Development.");
         var sql = new SqlConnectionStringBuilder(DatabaseSettings.Connection(c));
-        if (sql.InitialCatalog != "LandPortal_Uat" || c["Sql:ExpectedDatabase"] != "LandPortal_Uat" ||
+        if (c["Deployment:TargetApproved"] != "true" || c["Deployment:TargetApprovalReference"] is not { Length: > 4 } ||
+            !IsTargetDatabase(c["Sql:ExpectedDatabase"]) || sql.InitialCatalog != c["Sql:ExpectedDatabase"] ||
             !sql.IntegratedSecurity || sql.DataSource != c["Deployment:ExpectedSqlServer"] ||
+            string.IsNullOrWhiteSpace(c["Deployment:ExpectedSqlServer"]) || sql.DataSource.Contains("REPLACE", StringComparison.OrdinalIgnoreCase) ||
             sql.Encrypt == SqlConnectionEncryptOption.Optional || sql.TrustServerCertificate)
-            throw new InvalidOperationException("UAT requires exact approved server/LandPortal_Uat, Windows identity and validated encrypted SQL transport.");
+            throw new InvalidOperationException("UAT requires allocated database, explicit target approval reference, exact server, Windows identity and validated encrypted SQL transport.");
         if (!Uri.TryCreate(c["Public:BaseUrl"], UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
             uri.AbsolutePath != "/" || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
             !string.Equals(uri.IdnHost, c["Deployment:ExpectedHost"], StringComparison.OrdinalIgnoreCase))
@@ -37,10 +45,13 @@ public static class UatDeployment
                     throw new InvalidOperationException("Reparse UAT private store refused.");
         if (data.StartsWith(application, StringComparison.OrdinalIgnoreCase) || application.StartsWith(data, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("UAT private stores/config must be outside published application.");
-        if (c["Media:AllowUnscannedDevelopmentUploads"] == "true" || c["Scanner:Provider"] != "Clamd" ||
-            !int.TryParse(c["Scanner:ClamdPort"], out var port) || port is < 1024 or > 65535 ||
+        var clamd=c["Scanner:Provider"]=="Clamd"&&int.TryParse(c["Scanner:ClamdPort"],out var port)&&port is >=1024 and <=65535;
+        var defender=c["Scanner:Provider"]=="MicrosoftDefenderOnPrem"&&c["Scanner:DefenderPrivacyPolicyReference"] is {Length:>4}&&
+            c["Scanner:DefenderServiceIdentity"] is {Length:>3} identity&&!identity.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)&&!identity.Any(char.IsControl)&&
+            c["Scanner:DefenderBinarySha256"] is {Length:64} binarySha&&binarySha.All(Uri.IsHexDigit);
+        if (c["Media:AllowUnscannedDevelopmentUploads"] == "true" || !clamd&&!defender ||
             c["Scanner:PolicyReference"] is not { Length: > 4 } || c["Runtime:RolePassword"] is not { Length: >= 24 })
-            throw new InvalidOperationException("UAT needs on-prem Clamd policy/port and runtime role secret; unscanned/DefenderTest bypass is forbidden.");
+            throw new InvalidOperationException("UAT requires approved on-prem Clamd or pinned Microsoft Defender with privacy policy/service identity, plus runtime role secret; unscanned/DefenderTest bypass is forbidden.");
         return true;
     }
 }

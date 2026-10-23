@@ -44,6 +44,11 @@ public sealed class SiteContactInput
 {
     [StringLength(300)] public string OrganizationName { get; set; } = "";
     [StringLength(5000)] public string FooterText { get; set; } = "";
+    [StringLength(300)] public string? EnglishName { get; set; }
+    [StringLength(300)] public string? SupervisingAgency { get; set; }
+    [StringLength(300)] public string? ResponsiblePerson { get; set; }
+    [StringLength(300)] public string? LicenseNumber { get; set; }
+    [StringLength(1000)] public string? SeoDescription { get; set; }
     [StringLength(1000)] public string ContactAddress { get; set; } = "";
     [StringLength(100)] public string ContactPhone { get; set; } = "";
     [StringLength(100)] public string ContactHotline { get; set; } = "";
@@ -61,6 +66,7 @@ public sealed class SiteCategoryInput
 }
 public class SiteMenuInput
 {
+    public bool Enabled { get; set; } = true;
     [StringLength(300)] public string Label { get; set; } = "";
     public string Position { get; set; } = "main";
     public Guid? ParentId { get; set; }

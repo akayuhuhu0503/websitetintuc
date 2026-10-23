@@ -10,10 +10,13 @@ public static class BootstrapIdentity
     {
         var email = config["Bootstrap:AdminEmail"];
         var password = config["Bootstrap:AdminPassword"];
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password)) return;
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(password)) throw new InvalidOperationException("Bootstrap cần email và mật khẩu riêng trong cấu hình private; chưa tạo tài khoản hoặc nhóm quyền.");
         using var scope = provider.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        // Validate before creating any role/claim. A rejected first-use password
+        // must not leave a partially provisioned role set behind.
+        foreach(var validator in users.PasswordValidators)Check(await validator.ValidateAsync(users,new PortalUser{UserName=email,Email=email},password));
         foreach (var (role, permissions) in new[] { ("Administrator", Permissions.All), ("Editor", new[] { Permissions.EditOwn, Permissions.Submit }), ("Publisher", new[] { Permissions.EditOwn, Permissions.EditAll, Permissions.Submit, Permissions.Publish, Permissions.Review }) })
         {
             if (await roles.FindByNameAsync(role) == null)

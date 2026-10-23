@@ -3,9 +3,9 @@
 @{Layout="_AdminLayout";ViewData["Title"]="Xử lý hồ sơ tương tác";}
 <section class="interaction-panel"><h1>@InteractionLabels.Kind(Model.Submission.Kind) — @InteractionLabels.State(Model.Submission.State)</h1><p class="scope-note">Bản gốc riêng tư. Không sao chép email/điện thoại/thông tin nhạy cảm sang bản công khai.</p>
 <dl><dt>Người gửi</dt><dd>@Model.Original.Name</dd><dt>Email</dt><dd>@Model.Original.Email</dd><dt>Tiêu đề</dt><dd>@Model.Original.Title</dd><dt>Nội dung gốc</dt><dd class="interaction-original">@Model.Original.Text</dd><dt>Đồng ý công khai</dt><dd>@(Model.Submission.PublicConsent?"Có":"Không")</dd><dt>Phản hồi đã lưu</dt><dd>@Model.Answer</dd></dl>
-<h2>Trạng thái thư</h2><ul>@foreach(var m in Model.Mail){<li>@InteractionLabels.Mail(m.State) · thử @m.Attempts · @m.ErrorCode</li>}</ul>
+<h2>Trạng thái thư</h2><ul>@foreach(var m in Model.Mail){<li>@InteractionLabels.Mail(m.State) · thử @m.Attempts · @AdminLabels.Diagnostic(m.ErrorCode)</li>}</ul>
 <partial name="_InquiryOperations" model="Model"/>
-@if(Model.Submission.Kind==InteractionKind.Contact&&Model.Attachment is {} file){<p>Tệp riêng: @file.Mime · @file.ScanState</p>@if(Model.CanReadFile&&file.ScanState==InquiryScanState.Clean){<a href="/admin/hoi-dap/tep/@file.Id">Tải tệp qua kiểm tra quyền và scan</a>}}
+@if(Model.Submission.Kind==InteractionKind.Contact&&Model.Attachment is {} file){<p>Tệp riêng: @file.Mime · @AdminLabels.State(file.ScanState)</p>@if(Model.CanReadFile&&file.ScanState==InquiryScanState.Clean){<a href="/admin/hoi-dap/tep/@file.Id">Tải tệp qua kiểm tra quyền và quét an toàn</a>}}
 
 @if(Model.CanProcess||Model.CanPublish){<form method="post">@Html.AntiForgeryToken()<input type="hidden" name="RowVersion" value="@Convert.ToBase64String(Model.Submission.RowVersion)"/><input type="hidden" name="CommandId" value="@Guid.NewGuid()"/>
 <label for="displayName">Tên hiển thị đã biên tập</label><input id="displayName" name="DisplayName" maxlength="120"/><label for="text">Nội dung công khai đã loại thông tin riêng</label><textarea id="text" name="Text" rows="5" maxlength="8000"></textarea><label for="answer">Phản hồi</label><textarea id="answer" name="Answer" rows="5" maxlength="8000">@Model.Answer</textarea><label for="reason">Lý do từ chối/ẩn (hoặc căn cứ ghi chú)</label><textarea id="reason" name="Reason" maxlength="500"></textarea>

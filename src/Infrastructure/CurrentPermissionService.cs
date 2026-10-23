@@ -8,6 +8,8 @@ public sealed class CurrentPermissionService(PortalDbContext db)
     {
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId);
         if (user == null || user.IsDisabled || user.MustChangePassword || user.LockoutEnd > DateTimeOffset.UtcNow) return new(userId, new HashSet<string>(StringComparer.Ordinal));
+        var demo=await db.UserClaims.AsNoTracking().Where(x=>x.UserId==userId&&x.ClaimType!=null&&x.ClaimType.StartsWith("dev.demo")).ToListAsync();
+        if(!DevDemoPolicy.Allowed(demo.Select(x=>new System.Security.Claims.Claim(x.ClaimType!,x.ClaimValue??"")),Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),db.Database.GetDbConnection().Database))return new(userId,new HashSet<string>(StringComparer.Ordinal));
         var own = await db.UserClaims.AsNoTracking().Where(x => x.UserId == userId && x.ClaimType == "permission").Select(x => x.ClaimValue!).ToListAsync();
         var roles = from ur in db.UserRoles.AsNoTracking() join rc in db.RoleClaims.AsNoTracking() on ur.RoleId equals rc.RoleId where ur.UserId == userId && rc.ClaimType == "permission" select rc.ClaimValue!;
         var permissions = own.Concat(await roles.ToListAsync()).Where(x => Permissions.All.Contains(x, StringComparer.Ordinal)).ToHashSet(StringComparer.Ordinal);

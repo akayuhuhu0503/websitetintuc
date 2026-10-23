@@ -1,16 +1,16 @@
 @model LandPortal.Web.Models.InteractionForm
 @using LandPortal.Domain
 @{var label=Model.Input.Kind switch{InteractionKind.Comment=>"Gửi bình luận",InteractionKind.Inquiry=>"Gửi câu hỏi",InteractionKind.Contact=>"Hòm thư góp ý và liên hệ",_=>"Góp ý dự thảo"};ViewData["Title"]=label;}
-<section class="interaction-panel"><h1>@label</h1>
+<section class="interaction-panel public-interaction-panel"><h1>@label</h1>
 <p>Thông tin được lưu riêng tư để xử lý. Bình luận/câu hỏi chỉ xuất hiện sau kiểm duyệt và đồng ý công khai. Góp ý và liên hệ giữ riêng tư. Thời hạn lưu giữ đang chờ đơn vị xác nhận.</p>
 <p>Email chưa được xác minh. Vui lòng kiểm tra địa chỉ để nhận phản hồi; CAPTCHA chỉ giúp chống gửi tự động.</p>
-@if(Model.Message!=""){<p role="status">@Model.Message</p>}
-<form method="post" enctype="multipart/form-data" action="/tuong-tac/gui">
-@Html.AntiForgeryToken()<div asp-validation-summary="All" role="alert"></div>
+@if(Model.Message!=""){<p class="success-message" role="status">@Model.Message</p>}
+<form data-public-submit method="post" enctype="multipart/form-data" action="/tuong-tac/gui">
+@Html.AntiForgeryToken()<div asp-validation-summary="All" class="validation-summary" role="alert"></div>
 <input type="hidden" asp-for="Input.Kind"/><input type="hidden" asp-for="Input.ContentId"/><input type="hidden" asp-for="Input.PublishedRevisionId"/>
 @if(Model.Input.Kind is InteractionKind.Inquiry or InteractionKind.Contact){
     @if(Model.Input.Kind==InteractionKind.Inquiry){<label asp-for="Input.Field">Lĩnh vực hỏi đáp</label><input asp-for="Input.Field" maxlength="120" required/>}
-    <label for="inquiry-attachment">Một tệp riêng (PDF/JPEG/PNG, tối đa10 MiB)</label><input id="inquiry-attachment" type="file" name="attachment" accept="application/pdf,image/jpeg,image/png"/>
+    <label for="inquiry-attachment">Một tệp riêng (PDF/JPEG/PNG, tối đa10 MiB)</label><div class="private-file-picker"><input id="inquiry-attachment" type="file" name="attachment" accept="application/pdf,image/jpeg,image/png" data-private-file aria-describedby="private-file-name"/><span class="private-file-button" aria-hidden="true">Chọn tệp từ máy</span><span id="private-file-name" data-private-file-name role="status">Chưa chọn tệp</span></div>
     <p>Tệp lưu cách ly; chỉ cán bộ có quyền được tải sau khi quét sạch đúng byte. Khi gửi lỗi, hãy chọn lại tệp.</p>
 }
 <label asp-for="Input.Name">Họ tên</label><input asp-for="Input.Name" autocomplete="name" maxlength="120" required/>
@@ -23,6 +23,8 @@
 <p id="captcha-question">@Model.CaptchaQuestion</p><label asp-for="CaptchaAnswer">Kết quả câu hỏi (hiệu lực tối đa5 phút, dùng một lần)</label>
 <input asp-for="CaptchaAnswer" inputmode="numeric" autocomplete="off" maxlength="3" aria-describedby="captcha-question captcha-help" required/>
 <p id="captcha-help">Có thể dùng bàn phím và trình đọc màn hình. Chọn câu hỏi mới nếu cần; nội dung đã nhập vẫn được giữ.</p>
-<button type="submit" formaction="/tuong-tac/lam-moi" formnovalidate>Câu hỏi xác thực mới</button></fieldset>
-<button type="submit" disabled="@(Model.CaptchaId==Guid.Empty)">Gửi nội dung để kiểm duyệt</button>
+<button class="button secondary" type="submit" formaction="/tuong-tac/lam-moi" formnovalidate>Làm mới CAPTCHA</button></fieldset>
+<button class="button" type="submit" disabled="@(Model.CaptchaId==Guid.Empty)">@(Model.Input.Kind==InteractionKind.Inquiry?"Gửi câu hỏi":Model.Input.Kind==InteractionKind.Contact?"Gửi góp ý":"Gửi nội dung để kiểm duyệt")</button>
 </form>@if(Model.Input.Kind==InteractionKind.Inquiry){<a href="/tra-cuu-ho-so">Thông tin về tra cứu hồ sơ riêng tư</a>}</section>
+
+@section Scripts { <script src="~/js/public-forms.js" asp-append-version="true" defer></script> }

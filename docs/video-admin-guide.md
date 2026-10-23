@@ -1,3 +1,5 @@
+> Cập nhật BA/SRS v1.1: máy chủ vận hành chính thức thuộc TTDL, không phải máy chủ của Bộ. Giữ IIS + SQL Server + Web/Worker; hạ tầng đích chưa được cấp. Video mới tải trực tiếp lên hệ thống, không nhúng YouTube.
+
 # Biên tập video nội bộ — 2D
 
 Mốc này chỉ mở upload trong **Development / LandPortal_Test / kho Test riêng**. Dev không được cấp thêm quyền; Production vẫn khóa. Video nguồn cũ còn thiếu tệp giữ nguyên metadata, không lấy fixture gán vào bài nguồn.

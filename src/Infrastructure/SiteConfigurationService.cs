@@ -30,7 +30,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         ["LandPlanning"] = ("Quy hoạch sử dụng đất", "/quy-hoach-su-dung-dat"), ["Weekly"] = ("Lịch tuần", "/lich-tuan"),
         ["Disclosure"] = ("Công khai thông tin", "/cong-khai-thong-tin"),
         ["DisclosureCertificates"] = ("Giấy chứng nhận sai hỏng, hủy", "/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy"),
-        ["DisclosureForeignResidents"] = ("Người nước ngoài định cư ở Việt Nam (chờ PO/pháp chế xác nhận)", "/cong-khai-thong-tin/nguoi-nuoc-ngoai-dinh-cu-o-viet-nam"),
+        ["DisclosureForeignResidents"] = ("Người nước ngoài định cư ở Việt Nam", "/cong-khai-thong-tin/nguoi-nuoc-ngoai-dinh-cu-o-viet-nam"),
         ["DisclosureViolations"] = ("Tổ chức vi phạm pháp luật đất đai", "/cong-khai-thong-tin/to-chuc-vi-pham-phap-luat-dat-dai")
     };
     public static void AddDisclosureMenu(SiteConfigurationRevision revision)
@@ -38,8 +38,29 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         var parent = revision.Menus.FirstOrDefault(x => x.TargetKind == "Group" && x.Label == Routes["Disclosure"].Label);
         if (parent == null) { parent = new() { Label = Routes["Disclosure"].Label, TargetKind = "Group", Position = "main", SortOrder = revision.Menus.Where(x => x.Position == "main").Select(x => x.SortOrder).DefaultIfEmpty().Max() + 1 }; revision.Menus.Add(parent); }
         var order = 0;
-        foreach (var key in new[] { "Disclosure", "DisclosureCertificates", "DisclosureForeignResidents", "DisclosureViolations" })
-        { if (!revision.Menus.Any(x => x.TargetKind == "Route" && x.RouteKey == key)) revision.Menus.Add(new() { Label = Routes[key].Label, TargetKind = "Route", RouteKey = key, Position = parent.Position, ParentId = parent.Id, SortOrder = order }); order++; }
+        revision.Menus.RemoveAll(x=>x.ParentId==parent.Id&&x.TargetKind=="Route"&&x.RouteKey=="Disclosure");
+        foreach (var key in new[] { "DisclosureCertificates", "DisclosureForeignResidents", "DisclosureViolations" })
+        { var item=revision.Menus.SingleOrDefault(x=>x.TargetKind=="Route"&&x.RouteKey==key);if(item==null)revision.Menus.Add(new() { Label = Routes[key].Label, TargetKind = "Route", RouteKey = key, Position = parent.Position, ParentId = parent.Id, SortOrder = order });else{item.Label=Routes[key].Label;item.ParentId=parent.Id;item.Position=parent.Position;item.SortOrder=order;} order++; }
+    }
+    // Explicit operator confirmation, separate from saving/publishing a menu.
+    // Never unhide previously published records as a side effect of catalog work.
+    public async Task ConfirmDisclosureCatalogAsync(ContentActor actor,byte[] version)
+    {
+        actor=await new CurrentPermissionService(db).GetAsync(actor.UserId);
+        Require(actor,Permissions.ManageSite);Require(actor,Permissions.PublishSite);
+        if(actor.CategoryIds!=null)throw new UnauthorizedAccessException();
+        await using var tx=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        var site=await db.Set<SiteConfiguration>().SingleAsync(x=>x.Id==1);
+        if(!site.RowVersion.SequenceEqual(version))throw new SiteConfigurationException("Cấu hình đã đổi; tải lại trước khi xác nhận danh mục.",409);
+        foreach(var pair in V05ContentPolicy.Groups)
+        {
+            var group=await db.DisclosureGroups.SingleOrDefaultAsync(x=>x.Id==pair.Key)??throw new SiteConfigurationException("Danh mục công khai thông tin chưa được khởi tạo.",409);
+            if(group.Status=="NameApproved"&&group.Name==pair.Value)continue;
+            if(await db.Contents.AnyAsync(c=>c.IsPublic&&!c.IsTrashed&&db.Revisions.Any(r=>r.Id==c.PublishedRevisionId&&r.Metadata.DisclosureGroupId==pair.Key)))throw new SiteConfigurationException("Nhóm còn hồ sơ đang gắn trạng thái công khai. Cần cán bộ có quyền rà soát riêng trước kích hoạt; chưa thay đổi bài hoặc danh mục.",409);
+            group.Name=pair.Value;group.Status="NameApproved";
+        }
+        site.Generation++;db.AuditLogs.Add(new(){Actor=actor.UserId,Action="DisclosureCatalogConfirmed",Detail="Explicit operator confirmation of the three SRS disclosure names; no content publication or menu live change"});
+        await db.SaveChangesAsync();await tx.CommitAsync();
     }
     public static readonly string[] BlockTypes = ["Featured", "Recent", "Announcements", "Category", "LegalDocuments", "DraftDocuments", "Videos", "Links"];
     public static readonly string[] MenuPositions = ["main", "footer", "links", "supplementary"];
@@ -57,13 +78,25 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
     }
 
     // Invoked only by the explicit operator CLI, never from a web startup/request.
-    public async Task<bool> InitializeAsync(string actor)
+    public async Task<bool> InitializeAsync(string actor,IReadOnlyList<Category>? referenceCatalog=null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
         if (await db.Set<SiteConfiguration>().AnyAsync()) return false;
+        if(referenceCatalog!=null)
+        {
+            var existing=await db.Categories.AsNoTracking().ToDictionaryAsync(x=>x.Id);
+            if(referenceCatalog.GroupBy(x=>x.Id).Any(x=>x.Count()!=1)||referenceCatalog.Any(x=>x.Id<=0||string.IsNullOrWhiteSpace(x.Name)||string.IsNullOrWhiteSpace(x.Slug)))throw new SiteConfigurationException("Danh mục tham chiếu không hợp lệ.");
+            foreach(var category in referenceCatalog)
+            {
+                if(existing.TryGetValue(category.Id,out var old))
+                {if(old.Name!=category.Name||old.Slug!=category.Slug||old.SourceUrl!=category.SourceUrl)throw new SiteConfigurationException("Danh mục đã có khác danh mục tham chiếu; dừng, không ghi đè.");}
+                else db.Categories.Add(new(){Id=category.Id,Name=category.Name,Slug=category.Slug,SourceUrl=category.SourceUrl,SortOrder=category.SortOrder,ParentId=category.ParentId});
+            }
+            await db.SaveChangesAsync();
+        }
         var revision = new SiteConfigurationRevision
         {
-            EditedByUserId = actor, CreatedUtc = Now, OrganizationName = "CỤC QUẢN LÝ ĐẤT ĐAI",
+            EnglishName=SitePresentation.OfficialEnglishName, EditedByUserId = actor, CreatedUtc = Now, OrganizationName = "CỤC QUẢN LÝ ĐẤT ĐAI",
             ContactAddress = "Số 10 Tôn Thất Thuyết, Phường Cầu Giấy, Hà Nội", ContactPhone = "024.3629.0211",
             ContactHotline = "024.3629.0196", ContactEmail = "vanphongcqldd@mae.gov.vn",
             FooterText = "Bản chạy thử. Thông tin nguồn và ngoại lệ chuyển dữ liệu được lưu trong hồ sơ dự án."
@@ -106,6 +139,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
 
     public async Task<SiteConfigurationState> MutateAsync(ContentActor actor, byte[] version, Action<SiteConfigurationRevision> mutate, string detail)
     {
+        actor=await new CurrentPermissionService(db).GetAsync(actor.UserId);
         Require(actor, Permissions.ManageSite);
         return await ChangeAsync(actor, version, async header =>
         {
@@ -119,6 +153,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
 
     public async Task<SiteConfigurationState> RestoreAsync(ContentActor actor, byte[] version, Guid revisionId)
     {
+        actor=await new CurrentPermissionService(db).GetAsync(actor.UserId);
         Require(actor, Permissions.ManageSite);
         return await ChangeAsync(actor, version, async header =>
         {
@@ -135,6 +170,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
 
     public async Task<SiteConfigurationState> PublishAsync(ContentActor actor, byte[] version, Guid revisionId)
     {
+        actor=await new CurrentPermissionService(db).GetAsync(actor.UserId);
         Require(actor, Permissions.PublishSite);
         return await ChangeAsync(actor, version, async header =>
         {
@@ -171,6 +207,8 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
     public async Task ValidateAsync(SiteConfigurationRevision revision, ContentActor actor, bool publishing)
     {
         Text(revision.OrganizationName, 300, true); Text(revision.FooterText, 5000); Text(revision.ContactAddress, 1000);
+        foreach(var field in new[]{revision.EnglishName,revision.SupervisingAgency,revision.ResponsiblePerson,revision.LicenseNumber})Text(field??"",300);
+        Text(revision.SeoDescription??"",1000);
         Text(revision.ContactPhone, 100); Text(revision.ContactHotline, 100); Text(revision.ContactEmail, 254);
         if (revision.ContactEmail.Length > 0 && (!System.Net.Mail.MailAddress.TryCreate(revision.ContactEmail, out var email) || email.Address != revision.ContactEmail)) throw new SiteConfigurationException("Email liên hệ công khai không hợp lệ.");
         if (revision.Categories.Count > 100 || revision.Menus.Count > 180 || revision.Banners.Count > 30 || revision.Blocks.Count > 30 || revision.Pins.Count > 100 || revision.Vocabularies.Count > 300) throw new SiteConfigurationException("Cấu hình vượt giới hạn số mục.");
@@ -204,17 +242,12 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
             var originalVocabulary = await db.Set<SiteVocabulary>().AsNoTracking().Where(x => x.RevisionId == liveId).ToListAsync();
             foreach (var value in originalVocabulary)
                 if (!revision.Vocabularies.Any(x => x.Id == value.Id && x.Kind == value.Kind)) throw new SiteConfigurationException("Giữ ID/loại danh mục phụ; ngừng chọn thay vì xóa hoặc đổi loại.");
-            var protectedItems = await db.Set<SiteMenuItem>().AsNoTracking().Where(x => x.RevisionId == liveId && x.SystemProtected).ToListAsync();
-            foreach (var item in protectedItems)
-            {
-                var candidate = revision.Menus.SingleOrDefault(x => x.Id == item.Id);
-                if (candidate is null || !candidate.SystemProtected || candidate.Label != item.Label || candidate.TargetKind != item.TargetKind || candidate.RouteKey != item.RouteKey || candidate.CategoryId != item.CategoryId || candidate.ContentId != item.ContentId || candidate.ExternalUrl != item.ExternalUrl || candidate.Position != item.Position || candidate.ParentId != item.ParentId)
-                    throw new SiteConfigurationException("Giữ đầy đủ mục điều hướng nguồn; mục hệ thống chỉ đổi thứ tự.");
-            }
+
         }
         foreach (var item in revision.Menus)
         {
             Text(item.Label, 300, true);
+            if(item.Label.IndexOfAny(['<','>'])>=0)throw new SiteConfigurationException("Tên menu không nhận HTML/script.");
             if (!MenuPositions.Contains(item.Position) || revision.Menus.Any(x => x != item && x.Id == item.Id)) throw new SiteConfigurationException("Vị trí hoặc ID menu không hợp lệ.");
             if (item.ParentId.HasValue && !revision.Menus.Any(x => x.Id == item.ParentId && x.Position == item.Position && x.TargetKind == "Group")) throw new SiteConfigurationException("Menu cha phải là nhóm cùng vị trí.");
             var visited = new HashSet<Guid> { item.Id }; var parent = item.ParentId;
@@ -278,18 +311,36 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         var path = Uri.UnescapeDataString(uri.AbsolutePath).Replace('\\', '/');
         return !new[] { "/admin", "/preview", "/private", "/snapshots", "/.local", "/.env" }.Any(prefix => path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase));
     }
+    public static bool InternalUrlValid(string url)
+    {
+        if(string.IsNullOrWhiteSpace(url)||url.Length>2000||!url.StartsWith('/')||url.StartsWith("//"))return false;
+        var decoded=url;
+        for(var i=0;i<4;i++){var next=Uri.UnescapeDataString(decoded);if(next==decoded)break;decoded=next;}
+        if(decoded.Contains('%')||decoded.Contains('\\')||decoded.Any(char.IsControl)||decoded.StartsWith("//"))return false;
+        var path=decoded.Split('?', '#')[0];
+        if(path.Split('/').Any(x=>x is "." or ".."))return false;
+        return !new[]{"/admin","/preview","/private","/snapshots","/.local","/.env","/account"}.Any(x=>path.Equals(x,StringComparison.OrdinalIgnoreCase)||path.StartsWith(x+"/",StringComparison.OrdinalIgnoreCase));
+    }
     public static SiteConfigurationRevision Clone(SiteConfigurationRevision source, string actor, DateTimeOffset now) => new()
     {
         EditedByUserId = actor, CreatedUtc = now, OrganizationName = source.OrganizationName, FooterText = source.FooterText,
+        EnglishName=source.EnglishName,SupervisingAgency=source.SupervisingAgency,ResponsiblePerson=source.ResponsiblePerson,LicenseNumber=source.LicenseNumber,SeoDescription=source.SeoDescription,
         ContactAddress = source.ContactAddress, ContactPhone = source.ContactPhone, ContactHotline = source.ContactHotline, ContactEmail = source.ContactEmail, LogoAssetId = source.LogoAssetId,
         Categories = source.Categories.Select(x => new SiteCategoryConfiguration { CategoryId = x.CategoryId, DisplayName = x.DisplayName, Slug = x.Slug, Description = x.Description, ParentCategoryId = x.ParentCategoryId, SortOrder = x.SortOrder, ShowInNavigation = x.ShowInNavigation }).ToList(),
-        Menus = source.Menus.Select(x => new SiteMenuItem { Id = x.Id, ParentId = x.ParentId, Position = x.Position, Label = x.Label, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, SystemProtected = x.SystemProtected }).ToList(),
+        Menus = source.Menus.Select(x => new SiteMenuItem { Id = x.Id, ParentId = x.ParentId, Position = x.Position, Label = x.Label, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, SystemProtected = x.SystemProtected, Enabled=x.Enabled }).ToList(),
         Banners = source.Banners.Select(x => new SiteBanner { Id = x.Id, MediaAssetId = x.MediaAssetId, Label = x.Label, Alt = x.Alt, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, StartUtc = x.StartUtc, EndUtc = x.EndUtc }).ToList(),
         Blocks = source.Blocks.Select(x => new SiteHomeBlock { Id = x.Id, Type = x.Type, Title = x.Title, Limit = x.Limit, CategoryId = x.CategoryId, SortOrder = x.SortOrder, Enabled = x.Enabled }).ToList(),
         Pins = source.Pins.Select(x => new SiteHomePin { BlockId = x.BlockId, ContentId = x.ContentId, SortOrder = x.SortOrder }).ToList(),
         Vocabularies = source.Vocabularies.Select(x => new SiteVocabulary { Id = x.Id, Kind = x.Kind, Label = x.Label, SortOrder = x.SortOrder, Active = x.Active }).ToList()
     };
-    public static string Hash(SiteConfigurationRevision r) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+    public static string Hash(SiteConfigurationRevision r)
+    {
+        var old=LegacyHash(r);
+        if(r.Menus.Any(x=>!x.Enabled))old=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(old+"\nSRS1.2.MenuEnabled.v1\n"+JsonSerializer.Serialize(r.Menus.Where(x=>!x.Enabled).Select(x=>x.Id).Order()))));
+        if(new[]{r.EnglishName,r.SupervisingAgency,r.ResponsiblePerson,r.LicenseNumber,r.SeoDescription}.All(x=>x is null))return old;
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(old+"\nSRS1.1.Presentation.v1\n"+JsonSerializer.Serialize(new{r.EnglishName,r.SupervisingAgency,r.ResponsiblePerson,r.LicenseNumber,r.SeoDescription}))));
+    }
+    private static string LegacyHash(SiteConfigurationRevision r) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
     {
         r.OrganizationName, r.FooterText, r.ContactAddress, r.ContactPhone, r.ContactHotline, r.ContactEmail, r.LogoAssetId,
         Categories = r.Categories.OrderBy(x => x.CategoryId).Select(x => new { x.CategoryId, x.DisplayName, x.Slug, x.Description, x.ParentCategoryId, x.SortOrder, x.ShowInNavigation }),
@@ -319,10 +370,11 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
                 var content = contentId.HasValue ? await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == contentId) : null;
                 if (content is null || publishing && (!content.IsPublic || content.IsTrashed || !content.PublishedRevisionId.HasValue)) throw new SiteConfigurationException("Đích nội dung phải đang công khai khi áp dụng."); break;
             case "Route": if (!Routes.ContainsKey(route)) throw new SiteConfigurationException("Chọn mục hệ thống từ danh sách; không nhận tuyến admin/private."); break;
+            case "Internal" when groupAllowed: if(!InternalUrlValid(external))throw new SiteConfigurationException("Đường dẫn nội bộ không hợp lệ hoặc thuộc vùng riêng tư."); break;
             case "External": if (!ExternalUrlValid(external)) throw new SiteConfigurationException("Liên kết ngoài phải là HTTP(S), không credential/backslash/control."); break;
             default: throw new SiteConfigurationException("Loại đích liên kết không hợp lệ.");
         }
-        if (kind != "Category" && categoryId.HasValue || kind != "Content" && contentId.HasValue || kind != "Route" && route.Length > 0 || kind != "External" && external.Length > 0) throw new SiteConfigurationException("Các trường đích không khớp loại đã chọn.");
+        if (kind != "Category" && categoryId.HasValue || kind != "Content" && contentId.HasValue || kind != "Route" && route.Length > 0 || kind is not ("External" or "Internal") && external.Length > 0) throw new SiteConfigurationException("Các trường đích không khớp loại đã chọn.");
     }
     private static SiteMenuItem Menu(SiteConfigurationRevision r, string label, string kind, string route, int order, Guid? parent = null, string position = "main")
     { var item = new SiteMenuItem { Label = label, TargetKind = kind, RouteKey = route, SortOrder = order, ParentId = parent, Position = position, SystemProtected = true }; r.Menus.Add(item); return item; }

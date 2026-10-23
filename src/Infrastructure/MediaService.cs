@@ -144,7 +144,7 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
                 var scanner=InquiryScannerFactory.Create(configuration,"Staging",maximum);
                 await using var scanning=new FileStream(temporaryPath,FileMode.Open,FileAccess.Read,FileShare.Read);
                 scan=await scanner.ScanAsync(scanning,cancellationToken);scanning.Position=0;
-                if(Convert.ToHexStringLower(await SHA256.HashDataAsync(scanning,cancellationToken))!=digest||scan.State==LandPortal.Domain.InquiryScanState.Clean&&(scan.Provider!="Clamd"||scan.EngineVersion is not{Length:>0}))scan=new(LandPortal.Domain.InquiryScanState.ScanFailed,"ScannerProofOrBytesInvalid",null);
+                if(Convert.ToHexStringLower(await SHA256.HashDataAsync(scanning,cancellationToken))!=digest||scan.State==LandPortal.Domain.InquiryScanState.Clean&&(scan.Provider!=configuration["Scanner:Provider"]||scan.EngineVersion is not{Length:>0}))scan=new(LandPortal.Domain.InquiryScanState.ScanFailed,"ScannerProofOrBytesInvalid",null);
                 asset.ScanStatus=scan.State.ToString();asset.IsQuarantined=scan.State!=LandPortal.Domain.InquiryScanState.Clean;asset.ValidationStatus=asset.IsQuarantined?"PendingScan":"Validated";
                 if(validateEnvelope!=null)await validateEnvelope();
             }

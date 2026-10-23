@@ -14,6 +14,11 @@ public static class SiteModel
         b.Entity<SiteConfigurationRevision>().Property(x => x.ContentHash).HasMaxLength(64).IsUnicode(false);
         b.Entity<SiteConfigurationRevision>().Property(x => x.EditedByUserId).HasMaxLength(450);
         b.Entity<SiteConfigurationRevision>().Property(x => x.OrganizationName).HasMaxLength(300);
+        b.Entity<SiteConfigurationRevision>().Property(x=>x.EnglishName).HasMaxLength(300);
+        b.Entity<SiteConfigurationRevision>().Property(x=>x.SupervisingAgency).HasMaxLength(300);
+        b.Entity<SiteConfigurationRevision>().Property(x=>x.ResponsiblePerson).HasMaxLength(300);
+        b.Entity<SiteConfigurationRevision>().Property(x=>x.LicenseNumber).HasMaxLength(300);
+        b.Entity<SiteConfigurationRevision>().Property(x=>x.SeoDescription).HasMaxLength(1000);
         b.Entity<SiteConfigurationRevision>().Property(x => x.ContactAddress).HasMaxLength(1000);
         b.Entity<SiteConfigurationRevision>().Property(x => x.ContactPhone).HasMaxLength(100);
         b.Entity<SiteConfigurationRevision>().Property(x => x.ContactHotline).HasMaxLength(100);
@@ -26,6 +31,7 @@ public static class SiteModel
         b.Entity<SiteCategoryConfiguration>().Property(x => x.Slug).HasMaxLength(180);
         b.Entity<SiteCategoryConfiguration>().Property(x => x.Description).HasMaxLength(2000);
         b.Entity<SiteMenuItem>().HasKey(x => new { x.RevisionId, x.Id });
+        b.Entity<SiteMenuItem>().Property(x=>x.Enabled).HasDefaultValue(true);
         b.Entity<SiteMenuItem>().HasOne(x => x.Revision).WithMany(x => x.Menus).HasForeignKey(x => x.RevisionId).OnDelete(DeleteBehavior.NoAction);
         b.Entity<SiteMenuItem>().Property(x => x.Label).HasMaxLength(300);
         b.Entity<SiteMenuItem>().Property(x => x.Position).HasMaxLength(20);
