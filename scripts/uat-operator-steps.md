@@ -4,6 +4,21 @@
 
 Cài SDK đúng `global.json` (.NET 10.0.112), Node.js/npm và RTK CLI được các script dự án sử dụng. Pull đúng commit bàn giao, tại gốc source:
 
+Mã nguồn đã có trên `https://github.com/akayuhuhu0503/websitetintuc`, nhánh `main`.
+Đối chiếu SHA bàn giao trước build; `git pull --ff-only` chỉ tại checkout sạch,
+không reset/stash hoặc tự gộp thay đổi của đơn vị. Bản sửa local chưa push không
+được coi là đã có trên GitHub. Không đưa cấu hình đích hoặc dữ liệu vào checkout.
+
+Máy build cần **SDK 10.0.112**; máy IIS cần **.NET 10 Hosting Bundle x64** gồm
+.NET Runtime, ASP.NET Core Runtime và ASP.NET Core Module V2 (ANCM). SDK không
+thay thế Hosting Bundle. TTDL chọn bản vá 10.0.x đã được phê duyệt từ nguồn
+Microsoft, ghi version/SHA/giấy phép trong hồ sơ cài đặt. Cài IIS trước Hosting
+Bundle; nếu đã cài bundle trước IIS thì operator repair bundle theo Microsoft.
+Kiểm `dotnet --list-sdks`, `dotnet --list-runtimes` có cả Microsoft.NETCore.App
+và Microsoft.AspNetCore.App 10.0.x, IIS có AspNetCoreModuleV2; installer không tự
+cài các prerequisite hoặc khởi động lại IIS toàn máy. [Hướng dẫn IIS .NET10 của
+Microsoft](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0).
+
 ```powershell
 rtk proxy npm --prefix src/Web ci
 rtk proxy npm --prefix src/Web run build
@@ -124,7 +139,9 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
    DENY UPDATE,DELETE cho AuditLogs,InteractionPublicSnapshots,InquiryAssignments,
    InquiryCalendars,InquiryCalendarExceptions,InquiryExtensions,OutboxReconciliations.
    Windows login Web/Worker chỉ CONNECT + quyền kích hoạt approle, không db_owner.
-   DBA phải kiểm __EFMigrationsHistory cuối = 20261023060018_Srs11SitePresentation.
+   Với commit31cbb8b7, DBA phải kiểm __EFMigrationsHistory cuối =
+   `20261023074121_Srs12MenuAndInquiryLookup`. Với bản bàn giao sau, đối chiếu
+   schema trong chính gói đã duyệt; không hạ về migration1.1 hoặc sửa history.
    Sau khi DBA đã backup/provision schema + runtime role, operator đặt LANDPORTAL_HOME,
    LANDPORTAL_CONFIG và cả hai biến môi trường Staging như bước bootstrap bên dưới.
    Chạy `dotnet tools/MigrationCli.dll site-initialize --confirm-target <DATABASE_DA_CAP>

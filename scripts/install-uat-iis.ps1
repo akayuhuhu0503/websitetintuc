@@ -50,6 +50,7 @@ $auditPath=Join-Path $report 'installation.json'
 try{
  New-WebAppPool -Name $t.AppPoolName | Out-Null
  Set-ItemProperty ('IIS:\AppPools\'+$t.AppPoolName) -Name managedRuntimeVersion -Value ''
+ Set-ItemProperty ('IIS:\AppPools\'+$t.AppPoolName) -Name managedPipelineMode -Value 'Integrated'
  Set-ItemProperty ('IIS:\AppPools\'+$t.AppPoolName) -Name enable32BitAppOnWin64 -Value $false
  $secret=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($WebCredential.Password)
  try{$password=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($secret);Set-ItemProperty ('IIS:\AppPools\'+$t.AppPoolName) -Name processModel -Value @{identityType=3;userName=$WebCredential.UserName;password=$password}}finally{$password=$null;[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secret)}
