@@ -1,0 +1,10 @@
+<Project>
+  <!-- Native NuGet assets can include PDBs even with DebugSymbols=false. -->
+  <Target Name="ExcludeIisHandoffSymbols" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(IisHandoffPublish)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+</Project>
