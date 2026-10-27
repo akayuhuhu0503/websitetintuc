@@ -20,6 +20,8 @@ public sealed class MediaUploadOptions
     public int MaxPdfPages { get; init; } = 1000;
     public bool AllowUnscannedDevelopmentUploads { get; init; }
     public bool IsDevelopmentLoopback { get; init; }
+    public bool IsIsolatedLanDemo { get; init; }
+    public bool VerifiedSourceAllowed => IsDevelopmentLoopback || IsIsolatedLanDemo;
     public bool DevelopmentExceptionEnabled => IsDevelopmentLoopback && AllowUnscannedDevelopmentUploads;
     public bool NativeUatUploads { get; init; }
     public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads;
@@ -46,12 +48,13 @@ public sealed class MediaUploadOptions
             MaxPdfPages = (int)Number(configuration, "MaxPdfPages", 1000, 1, 5000),
             AllowUnscannedDevelopmentUploads = explicitException,
             IsDevelopmentLoopback = string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) && loopback
+            ,IsIsolatedLanDemo=LanDemoDeployment.Validate(configuration,environmentName)
             ,NativeUatUploads=UatDeployment.Validate(configuration,environmentName)
         };
     }
 
     public bool CanServe(MediaAsset asset) => asset.ValidationStatus == BatchMediaProof.Validation
-        ? IsDevelopmentLoopback && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
+        ? VerifiedSourceAllowed && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
         : asset.Origin == "EditorialDocument"
         ? !asset.IsQuarantined && asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" && OfficeDocumentPolicy.IsDocument(asset.MimeType)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")

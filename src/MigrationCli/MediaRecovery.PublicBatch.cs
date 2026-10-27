@@ -18,6 +18,7 @@ public sealed partial class MediaRecovery
         if(inventory.Policy!=Policy||inventory.Resources.Count>60||inventory.Resources.Select(x=>x.Sha256).Distinct().Count()!=inventory.Resources.Count)throw new InvalidDataException("Bounded unique resources/policy required.");
         if(inventory.Scope is null){if(inventory.Resources.Count<53||inventory.Resources.Count(x=>x.IsProtectedSource)!=53)throw new InvalidDataException("Legacy protected53 plus at most7 required.");}
         else if(inventory.Scope!=PublicBatchScope||inventory.Resources.Any(x=>x.IsProtectedSource)||inventory.ParentCheckpointSha256 is not{Length:64})throw new InvalidDataException("Reviewed public batch scope required; no original Dev promotion.");
+        if(inventory.ReviewedOptionalImages is not null&&(inventory.Scope!=PublicBatchScope||inventory.ReviewedOptionalImages.Count==0||inventory.ReviewedOptionalImages.Any(x=>x.Value.Count==0||x.Value.Select(r=>r.Url).Distinct().Count()!=x.Value.Count)))throw new InvalidDataException("Invalid bound optional-image review scope.");
     }
 
     public static void ValidatePublicProjection(InventoryState selected,InventoryState parent)
@@ -30,7 +31,7 @@ public sealed partial class MediaRecovery
         try{parent.Items=selected.Items;if(JsonSerializer.Serialize(parent)!=JsonSerializer.Serialize(selected))throw new InvalidDataException("Projection changed capture/provenance/source metadata.");}finally{parent.Items=save;}
     }
 
-    public async Task<RecoveryInventory> PublicBatchInventoryAsync(InventoryState selected,string selectedSha,InventoryState parent,string parentSha,string sourceProofPath,string sourceProofSha)
+    public async Task<RecoveryInventory> PublicBatchInventoryAsync(InventoryState selected,string selectedSha,InventoryState parent,string parentSha,string sourceProofPath,string sourceProofSha,Dictionary<string,List<OptionalImageReview>>? optionalImages=null)
     {
         await Guard();ValidatePublicProjection(selected,parent);
         using var proof=JsonDocument.Parse(await File.ReadAllBytesAsync(sourceProofPath));
@@ -39,6 +40,7 @@ public sealed partial class MediaRecovery
         if(media.Count(x=>x.GetProperty("ScanStatus").GetString()=="NotScanned")!=53)throw new InvalidDataException("Original53 preservation differs; stop for review.");
         var forbidden=media.Where(x=>x.GetProperty("ScanStatus").GetString()!="Clean"||x.GetProperty("IsQuarantined").GetBoolean()).Select(x=>x.GetProperty("Sha256").GetString()!).ToHashSet();
         var resources=new Dictionary<string,RecoveryResource>();
+        if(optionalImages is not null&&optionalImages.Keys.Any(k=>!selected.Items.Any(x=>x.Source.Kind+":"+x.Source.SourceId==k)))throw new InvalidDataException("Optional review contains an unknown public identity.");
         foreach(var item in selected.Items)
         {
             var source=item.Source;
@@ -46,8 +48,22 @@ public sealed partial class MediaRecovery
             if(record?.Content.PublishedRevisionId is not Guid revision||!record.Content.IsPublic||record.Content.IsTrashed||record.Content.HasEditorialChanges||!await db.Revisions.AnyAsync(x=>x.Id==revision&&x.IsSourceRevision)||!await db.AuditLogs.AnyAsync(x=>x.Action=="Phase3B.Import"&&x.ContentId==record.ContentId&&x.RevisionId==revision))throw new InvalidDataException("Real source item must already have a published Test import receipt; fixtures not in parent cannot enter.");
             var raw=parent.Captures.LastOrDefault(x=>x.Sha256==item.RawSha256&&x.Status==200&&x.Origin=="Network");
             if(raw is null)throw new InvalidDataException("Public network detail provenance required.");
+            var omitted=new HashSet<string>(StringComparer.Ordinal);
+            if(optionalImages is not null)
+            {
+                // Use exactly the importer's raw/hash/format/unsafe-file and meaningful-text rules.
+                // A review alone can never authorize omission; it must reproduce the already
+                // receipted Test revision, including its fingerprint and complete asset set.
+                var reviews=optionalImages.GetValueOrDefault(source.Kind+":"+source.SourceId)??[];
+                var prepared=await new SourceBatch(db,storage,config,workspace,selected,selectedSha).PrepareAsync(item,reviews);
+                var imported=await db.Revisions.AsNoTracking().SingleAsync(x=>x.Id==revision);
+                var links=await db.ContentAssets.AsNoTracking().Where(x=>x.RevisionId==revision).Select(x=>x.MediaAssetId).ToListAsync();
+                omitted=prepared.Warnings.Where(x=>x.StartsWith("OPTIONAL_IMAGE_OMITTED:",StringComparison.Ordinal)||x.StartsWith("SOURCE_ATTACHMENT_UNAVAILABLE:",StringComparison.Ordinal)||x.StartsWith("SOURCE_ATTACHMENT_WITHHELD_VALIDATION:",StringComparison.Ordinal)).Select(x=>x[(x.IndexOf(':')+1)..]).ToHashSet(StringComparer.Ordinal);
+                if(prepared.Errors.Count>0||prepared.Fingerprint!=record!.LastContentHash||prepared.Fingerprint!=imported.ContentHash||!links.Order().SequenceEqual(prepared.Assets.Select(x=>x.Id).Distinct().Order())||!omitted.SetEquals(reviews.Select(x=>x.Url)))throw new InvalidDataException("Optional review does not reproduce the exact receipted Test revision and assets.");
+            }
             foreach(var url in source.AssetUrls.Distinct())
             {
+                if(omitted.Contains(url))continue;
                 var node=selected.Urls.SingleOrDefault(x=>x.Role=="File"&&x.Url==url);
                 var capture=node is null?null:selected.Captures.LastOrDefault(x=>x.Url==url&&x.Sha256==node.CaptureSha&&x.Status==200&&x.Origin=="Network");
                 if(node?.FormatStatus!="Validated"||node.Mime is not("image/jpeg" or "image/png" or "image/gif" or "image/webp" or "application/pdf")||capture is null||capture.Bytes<=0||capture.Bytes>(node.Mime=="application/pdf"?SourceResourcePolicy.MediaOptions(config,url).MaxPdfBytes:SourceResourcePolicy.StandardPdfBytes)||forbidden.Contains(capture.Sha256))throw new InvalidDataException("Invalid/missing/unreviewed or protected Dev resource; do not omit or promote.");
@@ -56,12 +72,14 @@ public sealed partial class MediaRecovery
                 new MediaService(db,storage,SourceResourcePolicy.MediaOptions(config,url)).ValidateContent(file,node.Mime,CancellationToken.None);
                 var existing=await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x=>x.Sha256==capture.Sha256);
                 if(existing is null||existing.ByteLength!=capture.Bytes||existing.MimeType!=node.Mime||!await db.ContentAssets.AnyAsync(x=>x.RevisionId==revision&&x.MediaAssetId==existing.Id))throw new InvalidDataException("Resource not linked to exact imported Test revision.");
+                var stored=MediaService.ResolveMediaPath(storage,existing.StorageKey);SourceInventory.NoReparse(stored);
+                if(new FileInfo(stored).Length!=capture.Bytes||Hash(await File.ReadAllBytesAsync(stored))!=capture.Sha256)throw new InvalidDataException("Imported Test media bytes differ from source capture.");
                 var identity=source.Kind+":"+source.SourceId;
                 if(resources.TryGetValue(capture.Sha256,out var found)){if(!found.Urls.Contains(url))found.Urls.Add(url);if(!found.Identities.Contains(identity))found.Identities.Add(identity);}
                 else resources.Add(capture.Sha256,new(capture.Sha256,capture.Bytes,node.Mime,capture.Key,[url],[identity],false));
             }
         }
-        var result=new RecoveryInventory{Scope=PublicBatchScope,ParentCheckpointSha256=parentSha,InventoryId=selected.Id,CheckpointSha256=selectedSha,SourceProofSha256=sourceProofSha,SourceResourcePolicySha256=SourceResourcePolicy.Read(config)?.Sha,Resources=resources.Values.OrderBy(x=>x.Sha256).Select(x=>x with{Urls=x.Urls.Order().ToList(),Identities=x.Identities.Order().ToList()}).ToList()};
+        var result=new RecoveryInventory{Scope=PublicBatchScope,ParentCheckpointSha256=parentSha,InventoryId=selected.Id,CheckpointSha256=selectedSha,SourceProofSha256=sourceProofSha,SourceResourcePolicySha256=SourceResourcePolicy.Read(config)?.Sha,ReviewedOptionalImages=optionalImages,Resources=resources.Values.OrderBy(x=>x.Sha256).Select(x=>x with{Urls=x.Urls.Order().ToList(),Identities=x.Identities.Order().ToList()}).ToList()};
         ValidateShape(result);return result;
     }
 }

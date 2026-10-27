@@ -40,6 +40,14 @@ public partial class PortalDbContext(DbContextOptions<PortalDbContext> options) 
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.Entity<LandStatisticsVersion>().ToTable("LandStatisticsVersions");
+        b.Entity<LandStatisticsVersion>().HasIndex(x=>x.Year).IsUnique().HasFilter("[IsCurrent] = 1");
+        b.Entity<LandStatisticsVersion>().Property(x=>x.Unit).HasMaxLength(50);
+        b.Entity<LandStatisticsVersion>().Property(x=>x.Source).HasMaxLength(1000);
+        b.Entity<LandStatisticsVersion>().Property(x=>x.OwnerId).HasMaxLength(450);
+        b.Entity<LandStatisticsVersion>().Property(x=>x.StorageKey).HasMaxLength(200);
+        b.Entity<LandStatisticsVersion>().Property(x=>x.Sha256).HasMaxLength(64);
+        b.Entity<LandStatisticsVersion>().Property(x=>x.State).HasMaxLength(20);
         PublicCaptchaModel.Configure(b);
         V05ContentModel.Configure(b);
         EditorialDocumentModel.Configure(b);
@@ -122,6 +130,11 @@ public partial class PortalDbContext(DbContextOptions<PortalDbContext> options) 
         b.Entity<Job>().HasIndex(x => x.IdempotencyKey).IsUnique();
         b.Entity<Job>().HasIndex(x => new { x.Status, x.AvailableUtc });
         b.Entity<AuditLog>().HasIndex(x => new { x.ContentId, x.CreatedUtc });
+        // Recovery bindings and scan receipts are exact Action/Actor lookups.
+        // Bounded identifiers allow a narrow seek without indexing/copying Detail (nvarchar(max)).
+        b.Entity<AuditLog>().Property(x=>x.Action).HasMaxLength(200);
+        b.Entity<AuditLog>().Property(x=>x.Actor).HasMaxLength(450);
+        b.Entity<AuditLog>().HasIndex(x=>new{x.Action,x.Actor});
         b.Entity<PublicVisit>().HasKey(x=>x.SessionHash);
         b.Entity<PublicVisit>().Property(x=>x.SessionHash).HasMaxLength(64).IsUnicode(false);
         b.Entity<PublicVisit>().HasIndex(x=>x.StartedUtc);

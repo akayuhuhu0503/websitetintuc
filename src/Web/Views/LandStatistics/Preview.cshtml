@@ -1,0 +1,8 @@
+@model (LandPortal.Domain.LandStatisticsVersion? Version,LandPortal.Domain.LandAreaPreview Preview)
+@{Layout="_AdminLayout";ViewData["Title"]="Xem trước số liệu thống kê";}
+<h1>Xem trước số liệu thống kê</h1>
+@if(Model.Version!=null){<p>Năm @Model.Version.Year · @Model.Version.Unit · Nguồn: @Model.Version.Source</p>}
+@foreach(var issue in Model.Preview.Issues){<p class="warning-message">@(issue.Warning?"Cảnh báo":"Lỗi") · dòng @issue.Row, cột @issue.Column: @issue.Message</p>}
+<div style="overflow-x:auto"><table><thead><tr><th>Mã</th><th>Tỉnh/thành</th><th>Tổng</th><th>Nông nghiệp</th><th>Phi nông nghiệp</th><th>Chưa sử dụng</th></tr></thead><tbody>@foreach(var row in Model.Preview.Rows){<tr><td>@row.Code</td><td>@row.Province</td><td>@row.Total</td><td>@row.Agricultural</td><td>@row.NonAgricultural</td><td>@row.Unused</td></tr>}</tbody></table></div>
+@if(Model.Version!=null&&Model.Preview.Valid&&ViewData["CanConfirm"] is true){<form method="post" action="/admin/thong-ke-dat-dai/@Model.Version.Id/confirm">@Html.AntiForgeryToken()<label><input type="checkbox" name="confirmed" value="true" required/>Tôi đã kiểm tra số liệu, đơn vị và nguồn</label><button>Lưu bản nháp</button></form>}else if(!Model.Preview.Valid){<p>Chưa nhập số liệu; sửa lỗi trong Excel rồi tải lại.</p>}
+<a href="/admin/thong-ke-dat-dai">Trở về quản lý</a>

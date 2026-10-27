@@ -18,6 +18,10 @@ public sealed class RecoveryInventory
     public string? Scope { get; set; }
     public string? ParentCheckpointSha256 { get; set; }
     public string? SourceResourcePolicySha256 { get; set; }
+    // Included in the inventory hash and consequently in the strict proof set.
+    // Null is omitted to preserve the byte shape of existing sealed inventories.
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string,List<OptionalImageReview>>? ReviewedOptionalImages { get; set; }
     public List<RecoveryResource> Resources { get; set; }=[];
 }
 public sealed record RecoveryProof(Guid JobId,string Sha256,long Bytes,string Policy,string State,string? Engine,DateTimeOffset ScannedUtc,DateTimeOffset ExpiresUtc,InquiryScanResult Result,string QuarantineKey);

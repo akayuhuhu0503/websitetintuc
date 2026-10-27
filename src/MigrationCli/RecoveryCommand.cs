@@ -12,7 +12,7 @@ public static class RecoveryCommand
         if(args[0]=="recovery-public-inventory"){
             var hash=Opt("--checkpoint-sha");var state=await SourceBatch.ReadCheckpointAsync(workspace,Opt("--checkpoint"),hash);
             var parentSha=Opt("--parent-checkpoint-sha");var parent=await SourceBatch.ReadCheckpointAsync(workspace,Opt("--parent-checkpoint"),parentSha);
-            var inventory=await service.PublicBatchInventoryAsync(state,hash,parent,parentSha,Path.GetFullPath(Opt("--source-proof"),workspace),Opt("--source-proof-sha"));
+            var inventory=await service.PublicBatchInventoryAsync(state,hash,parent,parentSha,Path.GetFullPath(Opt("--source-proof"),workspace),Opt("--source-proof-sha"),await RecoveryEvidence.ReadOptionalImagesAsync(args,workspace));
             var sha=await MediaRecovery.WriteNewAsync(Path.Combine(report,"inventory.json"),inventory);await service.RegisterAsync(inventory,sha);
             await MediaRecovery.WriteNewAsync(Path.Combine(report,"summary.json"),new{inventory.JobId,InventorySha256=sha,inventory.Scope,Resources=inventory.Resources.Count,OriginalDevPromoted=false});
         }else if(args[0]=="recovery-inventory"){

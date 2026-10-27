@@ -237,6 +237,25 @@ Các trường nhận diện/chân trang mới nằm tại admin/site/edit?secti
 tên tiếng Anh, cơ quan chủ quản, người chịu trách nhiệm, giấy phép, mô tả SEO.
 Nhập từ văn bản Văn phòng Cục, lưu nháp, preview, rồi áp dụng đúng revision theo
 quyền. Để trống khi chưa có dữ liệu chính thức; không tự dùng số giấy phép/tên mẫu.
-Thống kê truy cập là phiên cookie ẩn danh20phút, active5phút, ngày/tháng Việt Nam,
+Thống kê truy cập là phiên cookie ẩn danh30phút, active5phút, ngày/tháng Việt Nam,
 lưu SQL; không phải số người duy nhất. Không chuyển số truy cập từ web cũ thành
 số giả. Kiểm thử đồng hồ, cookie/HTTPS, thống kê và privacy tại target trước UAT.
+
+
+## Bổ sung thống kê đất SRS v1.2 (26/10)
+
+Source local có migration `20261026095148_LandAreaStatistics`; bản ZIP/schema bàn giao cũ chưa bao gồm thay đổi này. Khi được duyệt bàn giao Git, build lại từ đúng commit mới và thực hiện schema theo quy trình target/backup. Không tự chạy migration trên server chưa được cấp; không downgrade/drop bảng khi đã có phiên bản nghiệp vụ.
+
+Trang `/thong-ke-dat-dai`, quản trị `/admin/thong-ke-dat-dai`. Quyền có sẵn: `site.manage` nhập/xác nhận nháp, `site.publish` công bố đúng phiên bản; không tự cấp quyền. XLSX≤10MiB, đúng6cột SRS,34mã tỉnh từ2025, giá trị thuần; năm/ha hoặc km²/nguồn bắt buộc. Mặc định `LandStatistics:TotalMismatch=Block`; Warn chỉ khi operator quyết định và người xuất bản kiểm tra cảnh báo. Không công bố fixture.
+
+Gốc XLSX nằm trong private media `land-statistics/`, không có public MediaAsset/URL, giữ cùng SQL phiên bản+SHA+scan proof trong backup. Chỉ Test hoặc Staging UAT đã duyệt scanner mới được nhập/công bố; cấu hình engine đơn thuần không bỏ được UAT/identity/privacy fence. Giữ 5worker hiện có; luồng này dùng scanner service hiện có, không cài worker/service thứ sáu. Cần TTDL cung cấp cấu hình đích và số liệu chính thức; preview/lưu nháp không thay bản công khai.
+
+## Bàn giao source và dữ liệu là hai việc riêng
+
+- Source bổ sung FR-08/14/15, LAN sample-only scanner và migration `20261027025057_AuditRecoveryLookup`. Chỉ pull SHA đã được chủ dự án duyệt/push; commit local chưa có trên GitHub. Không dùng ZIP/schema sinh từ commit cũ.
+- `git pull` **không mang theo 314 nội dung/325 revision/756 media/628 alias của Dev**. Không copy database Test hoặc Identity/cấu hình/khóa của Dev/LAN sang UAT.
+- Khi TTDL cấp database mới, hostname/certificate HTTPS, identity Web/Worker, thư mục private, scanner và SMTP: điền cấu hình mẫu, dùng `prepare-uat-target.ps1` ràng buộc đúng đích, backup nếu có dữ liệu, chạy schema đã duyệt theo thứ tự migration. Lệnh sinh package không tự cấp database/service hay deploy.
+- Chuyển dữ liệu bằng packet riêng chỉ gồm nguồn đã đối soát: published content/revision/metadata/chuyên mục/alias và byte media tương ứng, manifest SHA + mapping + audit + rollback. Không xuất phản hồi người dân, bản nháp, tài khoản, mật khẩu, token hoặc fixture. Quy trình Apply Dev hiện hành không tự cho phép ghi UAT/Production; phải có công cụ/plan được ràng buộc và phê duyệt đúng đích mới trước khi chuyển.
+- 53 media NotScanned giữ cách ly/chờ quyết định; các media Clean nhưng có proof/validation chỉ dành Development cũng phải được kiểm định và phê duyệt phát hành trên đích. Không đổi nhãn sang Clean bằng cấu hình và không hotlink.
+- Trưởng phòng build package từ đúng source đã duyệt, cài IIS trước .NET10 Hosting Bundle, đặt HTTPS/ACL, khởi động Web và 5 Worker theo `uat-runtime.ps1`/task XML đã duyệt; cấu hình SMTP và MFA bằng thông tin đích. Kiểm thử UAT 16 kịch bản, scanner/privacy, backup/restore và rollback tại TTDL; không đổi DNS trước nghiệm thu.
+- Provider `MicrosoftDefenderLanSample` chỉ cho Development/LandPortal_LanDemo/exact public sample hashes, chỉ preview/draft; không dùng cho UAT/Production. UAT dùng provider on-prem đã duyệt, signed binary/identity pin và policy privacy như phần trên. Không sao chép private config LAN.

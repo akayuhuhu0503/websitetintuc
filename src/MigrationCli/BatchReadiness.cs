@@ -33,8 +33,11 @@ public static class BatchReadiness
         return "SourceResourceNeedsReview";
     }
     public static bool CanReviewOptional(ParsedSource s,OptionalImageReview review)=>
-        s.Kind==ContentKind.Article&&s.AssetUrls.Contains(review.Url)&&Role(s,review.Url)=="InlineImage"&&
-        Uri.TryCreate(review.Url,UriKind.Absolute,out var uri)&&System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath,@"\.(jpe?g|png|gif|webp)$",System.Text.RegularExpressions.RegexOptions.IgnoreCase)&&
+        s.AssetUrls.Contains(review.Url)&&
+        (review.RecoveryMode=="SourceAttachmentUnavailable"
+            ? s.Kind is ContentKind.Article or ContentKind.Announcement && Role(s,review.Url)=="AttachmentOrLinkedImage"
+            : review.RecoveryMode is null && s.Kind==ContentKind.Article&&Role(s,review.Url)=="InlineImage"&&
+              Uri.TryCreate(review.Url,UriKind.Absolute,out var uri)&&System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath,@"\.(jpe?g|png|gif|webp)$",System.Text.RegularExpressions.RegexOptions.IgnoreCase))&&
         !string.IsNullOrWhiteSpace(review.Reason)&&review.Reason.Length<=1000&&!string.IsNullOrWhiteSpace(review.Evidence)&&review.Evidence.Length<=2000;
     public static SourceBatchFinding Finding(ParsedSource s,string value,bool warning=false)
     {
@@ -46,6 +49,8 @@ public static class BatchReadiness
             "UNSUPPORTED_FORMAT"=>"Đối chiếu bytes/header nguồn; không coi đuôi URL là định dạng hợp lệ.",
             "VIDEO_METADATA_ONLY_NO_FILE"=>"Cần tệp video thật và pipeline quét/xử lý; metadata không đủ.",
             "OPTIONAL_IMAGE_OMITTED"=>"Ảnh phụ thiếu đã được đối chiếu; giữ cảnh báo nội bộ, không tạo ảnh hoặc hotlink.",
+            "SOURCE_ATTACHMENT_UNAVAILABLE"=>"Liên kết nguồn không có tệp phục vụ hợp lệ; giữ tên/URL/raw/audit, dùng đường dẫn nội bộ404. Không phải media Clean hay bỏ qua kiểm định.",
+            "SOURCE_ATTACHMENT_WITHHELD_VALIDATION"=>"Có bytes trong cache nhưng chưa đạt kiểm định; không phải SOURCE_MISSING. Giữ bytes/trạng thái gốc, không tạo media public; chỉ phục hồi phần nội dung độc lập.",
             "OPTIONAL_METADATA_ABSENT"=>"Giữ trống trường tùy chọn như nguồn; không suy diễn giá trị.",
             _=>"Đối chiếu staging/raw và giải quyết trước khi nhập."
         };

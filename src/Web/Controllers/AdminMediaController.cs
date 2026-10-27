@@ -138,7 +138,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         catch (InvalidOperationException) { return NotFound(); }
         catch (MediaUploadException) { return NotFound(); }
         if (!System.IO.File.Exists(path)) return NotFound();
-        if(asset.ValidationStatus==BatchMediaProof.Validation&&!await BatchMediaProof.ValidAsync(storage,asset,options.IsDevelopmentLoopback))return NotFound();
+        if(asset.ValidationStatus==BatchMediaProof.Validation&&!await BatchMediaProof.ValidAsync(storage,asset,options.VerifiedSourceAllowed))return NotFound();
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (asset.MimeType == "application/pdf") Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
         Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");

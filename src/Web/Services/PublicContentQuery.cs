@@ -13,12 +13,13 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
     {
         var today=DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).DateTime);
         var legacy=(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback;
+        var verifiedSource=(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed;
         var uploaded=(mediaOptions??new MediaUploadOptions()).DevelopmentExceptionEnabled;
         // Keep legacy Source NotScanned policy intact. A card must not point at an
         // uploaded/quarantined/Test-only file the current media endpoint will deny.
         var thumbnails=db.MediaAssets.AsNoTracking().Where(m=>!m.IsQuarantined
             && (m.MimeType=="image/jpeg"||m.MimeType=="image/png"||m.MimeType=="image/gif"||m.MimeType=="image/webp")
-            && (m.Origin=="Source"&&(m.ScanStatus=="Clean"||legacy&&m.ScanStatus=="NotScanned")&&(m.ValidationStatus!=BatchMediaProof.Validation||legacy&&m.ScanStatus=="Clean")
+            && (m.Origin=="Source"&&(m.ScanStatus=="Clean"||legacy&&m.ScanStatus=="NotScanned")&&(m.ValidationStatus!=BatchMediaProof.Validation||verifiedSource&&m.ScanStatus=="Clean")
                 ||m.Origin=="Uploaded"&&m.ValidationStatus=="Validated"&&(m.ScanStatus=="Clean"||uploaded&&m.ScanStatus=="NotScanned")))
             .Select(m=>(Guid?)m.Id);
         return
@@ -39,7 +40,7 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
         {
             Id = content.Id, RevisionId = revision.Id, Kind = content.Kind,
             Title = revision.Title, Summary = revision.Summary,
-            SearchText = projection == null ? revision.SearchText : projection.Text,
+            SearchText = projection == null ? revision.SearchText : projection.Text, Tags = revision.Metadata.Tags ?? "",
             NumberSearch = projection == null ? "" : projection.Number,
             AuthoritySearch = projection == null ? "" : projection.Authority,
             TypeSearch = projection == null ? "" : projection.DocumentType,
@@ -113,6 +114,7 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
 
 public sealed class PublicRow
 {
+    public string Tags { get; init; } = "";
     public string Signer { get; init; }="";
     public string? EffectivenessStatus { get; init; }
     public string NumberSearch { get; init; } = "";

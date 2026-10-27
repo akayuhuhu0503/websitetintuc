@@ -157,7 +157,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
                 }
                 if (!(mediaOptions ?? new MediaUploadOptions()).CanServe(asset.MediaAsset) || !AllowedMime(asset.MediaAsset.MimeType))
                     throw new InvalidOperationException("Tài nguyên chưa đủ điều kiện công khai; kiểm tra định dạng, cách ly và chính sách scanner/development.");
-                if(asset.MediaAsset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset.MediaAsset,(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback)))
+                if(asset.MediaAsset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset.MediaAsset,(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed)))
                     throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
                 if (storage is null) throw new InvalidOperationException("Chưa cấu hình kho tài nguyên để kiểm tra tệp trước khi xuất bản.");
                 var original = new FileInfo(storage.ResolveMedia(asset.MediaAsset.StorageKey));
@@ -386,7 +386,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             else
             {
             if (asset.IsQuarantined || asset.ValidationStatus is not ("Validated" or "SourceValidated" or BatchMediaProof.Validation)) throw new InvalidOperationException("Tài nguyên chưa được xác minh định dạng.");
-            if(asset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset,(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback)))throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
+            if(asset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset,(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed)))throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
             if (!AllowedMime(asset.MimeType)) throw new InvalidOperationException("Chỉ được chọn ảnh JPEG/PNG/GIF/WebP hoặc PDF.");
             }
             if (selections[asset.Id].Usage == "Attachment" && !OfficeDocumentPolicy.IsDocument(asset.MimeType) &&

@@ -1,0 +1,9 @@
+@model Guid?
+@{ ViewData["Title"] = "Không tìm thấy dữ liệu"; }
+<nav class="breadcrumbs" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><span>Không tìm thấy dữ liệu</span></nav>
+<div class="page-header"><h1>Không tìm thấy dữ liệu</h1></div>
+<section class="status-panel">
+    <p>Tệp đính kèm hiện không khả dụng.</p>
+    @if(Model is Guid id){<p><a href="/bai-viet/@id">Quay lại bài viết</a></p>}
+    else{<p><a href="/">Quay lại trang chủ</a></p>}
+</section>

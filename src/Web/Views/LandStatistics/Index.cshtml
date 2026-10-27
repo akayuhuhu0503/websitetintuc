@@ -1,0 +1,11 @@
+@model LandPortal.Web.Controllers.LandStatisticsPage
+@using LandPortal.Application
+@{ViewData["Title"]="Thống kê diện tích đất";var term=TextNormalizer.Search(Model.Query??"");var filtered=Model.Rows.Where(x=>term==""||TextNormalizer.Search(x.Province).Contains(term)||x.Code==Model.Query);var rows=Model.Sort switch{"total"=>filtered.OrderByDescending(x=>x.Total),"agricultural"=>filtered.OrderByDescending(x=>x.Agricultural),"nonagricultural"=>filtered.OrderByDescending(x=>x.NonAgricultural),"unused"=>filtered.OrderByDescending(x=>x.Unused),_=>filtered.OrderBy(x=>x.Code)};}
+<h1>Thống kê diện tích đất</h1>
+@if(Model.Version==null){<p class="empty-note">Chưa có số liệu thống kê chính thức được công bố.</p>}
+else{
+<p>Năm @Model.Version.Year · Đơn vị: @Model.Version.Unit · Nguồn: @Model.Version.Source</p>
+<form method="get"><label>Năm <select name="year">@foreach(var year in Model.Years){<option selected="@(year==Model.Version.Year)" value="@year">@year</option>}</select></label><label>Tỉnh/thành <input name="q" value="@Model.Query" maxlength="100"/></label><label>Sắp xếp <select name="sort">@foreach(var pair in new[]{("province","Mã tỉnh"),("total","Tổng diện tích"),("agricultural","Đất nông nghiệp"),("nonagricultural","Đất phi nông nghiệp"),("unused","Đất chưa sử dụng")}){<option value="@pair.Item1" selected="@(Model.Sort==pair.Item1)">@pair.Item2</option>}</select></label><button>Lọc</button></form>
+<div style="overflow-x:auto"><table><caption>Diện tích đất năm @Model.Version.Year (@Model.Version.Unit)</caption><thead><tr><th>Tỉnh/thành phố</th><th>Tổng diện tích</th><th>Đất nông nghiệp</th><th>Đất phi nông nghiệp</th><th>Đất chưa sử dụng</th></tr></thead><tbody>
+@foreach(var row in rows){<tr><th scope="row">@row.Province</th><td>@row.Total.ToString("N2")</td><td>@row.Agricultural.ToString("N2")</td><td>@row.NonAgricultural.ToString("N2")</td><td>@row.Unused.ToString("N2")</td></tr>}
+</tbody><tfoot><tr><th scope="row">Toàn quốc (34 tỉnh/thành)</th><td>@Model.Rows.Sum(x=>x.Total).ToString("N2")</td><td>@Model.Rows.Sum(x=>x.Agricultural).ToString("N2")</td><td>@Model.Rows.Sum(x=>x.NonAgricultural).ToString("N2")</td><td>@Model.Rows.Sum(x=>x.Unused).ToString("N2")</td></tr></tfoot></table></div>}

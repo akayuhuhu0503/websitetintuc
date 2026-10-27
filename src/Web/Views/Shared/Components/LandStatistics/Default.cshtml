@@ -1,0 +1,4 @@
+@model LandPortal.Domain.LandStatisticsVersion
+@using System.Text.Json
+@using LandPortal.Domain
+@if(Model!=null){var rows=JsonSerializer.Deserialize<LandAreaRow[]>(Model.RowsJson)??[];<section class="configured-home-block"><div class="section-heading"><h2>Thống kê diện tích đất</h2><a href="/thong-ke-dat-dai?year=@Model.Year">Xem 34 tỉnh/thành →</a></div><p>Toàn quốc năm @Model.Year: <strong>@rows.Sum(x=>x.Total).ToString("N2") @Model.Unit</strong></p><p>Nguồn: @Model.Source</p></section>}

@@ -1,0 +1,6 @@
+@model (IReadOnlyList<ContentCard> Week,IReadOnlyList<ContentCard> Month)
+@if(Model.Week.Count>0||Model.Month.Count>0){
+<section class="popular-articles"><div class="section-heading"><h2>Tin đọc nhiều</h2></div>
+<details open><summary>7 ngày qua</summary>@foreach(var item in Model.Week){<partial name="_Card" model="item"/>}</details>
+<details><summary>30 ngày qua</summary>@foreach(var item in Model.Month){<partial name="_Card" model="item"/>}</details></section>
+}

@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class PortalController(PortalDbContext db, PublicContentQuery query, PublicSiteService site,PublicUrlPolicy urls,DocumentUsage usage) : Controller
+public sealed class PortalController(PortalDbContext db, PublicContentQuery query, PublicSiteService site,PublicUrlPolicy urls,DocumentUsage usage,ArticleDiscovery discovery) : Controller
 {
     [HttpGet("tin-tuc")]
     public Task<IActionResult> News(string? q, int page = 1) => List("Tin tức", query.Published().Where(x => x.Kind == ContentKind.Article), q, page);
@@ -52,7 +52,8 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         var revision = await db.Revisions.AsNoTracking().SingleAsync(x => x.Id == row.RevisionId);
         var files = await db.ContentAssets.AsNoTracking().Where(x => x.RevisionId == row.RevisionId && !x.MediaAsset.IsQuarantined && !x.MediaAsset.MimeType.StartsWith("image/"))
             .OrderBy(x => x.SortOrder).Select(x => new AttachmentModel(x.MediaAssetId, x.Caption == "" ? x.MediaAsset.OriginalName : x.Caption, x.MediaAsset.MimeType, x.MediaAsset.ByteLength)).ToListAsync();
-        var related = await query.CardsPageAsync(PublicContentQuery.Recent(query.Published().Where(x => x.Id != id && x.Kind == row.Kind && (row.CategoryId == null || x.CategoryId == row.CategoryId))),0,4);
+        var related = await discovery.RelatedAsync(row, revision.Metadata.Tags);
+        if(row.Kind == ContentKind.Article) HttpContext.Items[ArticleDiscovery.ViewAction] = row.Id;
         var source = await db.SourceRecords.AsNoTracking().Where(x => x.ContentId == id).Select(x => x.CanonicalUrl).FirstOrDefaultAsync();
         var legal = revision.Metadata;
         var isDocument=row.Kind is ContentKind.LegalDocument or ContentKind.DraftDocument;
@@ -63,7 +64,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         ViewData["CanonicalPath"]="/bai-viet/"+id;
         ViewData["OpenGraphImage"]=revision.CoverAssetId is Guid cover?"/media/"+cover:null;
         var inlineCover = revision.CoverAssetId is not null && new HtmlParser().ParseDocument(revision.BodyHtml).QuerySelectorAll("img[src]").Any(x => string.Equals(x.GetAttribute("src"), "/media/" + revision.CoverAssetId, StringComparison.OrdinalIgnoreCase));
-        return View(new ArticleModel { CoverCaption=coverCaption, InlinePdfId=inlinePdf, DocumentViews=counts.Views, DocumentDownloads=counts.Downloads, Metadata = revision.Metadata, IsDraftDocument = row.Kind == ContentKind.DraftDocument, ConsultationState = row.Kind == ContentKind.DraftDocument ? revision.Metadata.ConsultationState(DateTimeOffset.UtcNow) : null, Content = PublicContentQuery.Card(row), BodyHtml = revision.BodyHtml, CoverUrl = revision.CoverAssetId is not null && !inlineCover ? $"/media/{revision.CoverAssetId}" : null, Author = PublicContentQuery.Empty(revision.Author), SourceName = PublicContentQuery.Empty(revision.SourceCredit), SourceUrl = source, Attachments = files, Related = related.Select(PublicContentQuery.Card).ToList(), DocumentNumber = PublicContentQuery.Empty(legal?.Number), IssuingAuthority = PublicContentQuery.Empty(legal?.IssuingBody), IssuedDate = legal?.IssuedDate?.ToString("dd/MM/yyyy"), IsVideo = row.Kind == ContentKind.Video, VideoFileId = files.FirstOrDefault(x => x.ContentType == "video/mp4")?.Id });
+        return View("Article", new ArticleModel { CoverCaption=coverCaption, InlinePdfId=inlinePdf, DocumentViews=counts.Views, DocumentDownloads=counts.Downloads, Metadata = revision.Metadata, IsDraftDocument = row.Kind == ContentKind.DraftDocument, ConsultationState = row.Kind == ContentKind.DraftDocument ? revision.Metadata.ConsultationState(DateTimeOffset.UtcNow) : null, Content = PublicContentQuery.Card(row), BodyHtml = revision.BodyHtml, CoverUrl = revision.CoverAssetId is not null && !inlineCover ? $"/media/{revision.CoverAssetId}" : null, Author = PublicContentQuery.Empty(revision.Author), SourceName = PublicContentQuery.Empty(revision.SourceCredit), SourceUrl = source, Attachments = files, Related = related, DocumentNumber = PublicContentQuery.Empty(legal?.Number), IssuingAuthority = PublicContentQuery.Empty(legal?.IssuingBody), IssuedDate = legal?.IssuedDate?.ToString("dd/MM/yyyy"), IsVideo = row.Kind == ContentKind.Video, VideoFileId = files.FirstOrDefault(x => x.ContentType == "video/mp4")?.Id });
     }
     [HttpGet("van-ban")]
     public Task<IActionResult> Documents(string? q, string? agency, string? type, int page = 1, string? field = null, [VietnameseFilterDate] DateOnly? issuedFrom = null, [VietnameseFilterDate] DateOnly? issuedTo = null, [VietnameseFilterDate] DateOnly? from = null, [VietnameseFilterDate] DateOnly? to = null, string sort = "relevant",string? signer=null,string? effectiveness=null) => DocumentList(false,q,agency,type,page,field,issuedFrom,issuedTo,from,to,sort,signer,effectiveness);
@@ -121,16 +122,52 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         _=>PublicContentQuery.Recent(rows)
     };
     [HttpGet("gioi-thieu/{slug}")]
-    public async Task<IActionResult> Introduction(string slug)
+    public async Task<IActionResult> Introduction(string slug, int page = 1)
     {
         var names = new Dictionary<string, string> { ["lanh-dao-cuc"] = "Lãnh đạo cục", ["chuc-nang-nhiem-vu"] = "Chức năng nhiệm vụ", ["co-cau-to-chuc"] = "Cơ cấu tổ chức" };
         if (!names.TryGetValue(slug, out var name)) return NotFoundView();
-        var row = await query.Published().Where(x => x.Kind == ContentKind.StaticPage && x.Title.Contains(name)).FirstOrDefaultAsync();
-        if (row is not null) return await Article(row.Id, PublicContentQuery.Slug(row.Title));
-        return View("Status", new StatusModel(name, "Nội dung giới thiệu chưa được nhập hoặc chưa tiếp cận được trong tập mẫu. Không tự bổ sung thông tin tổ chức khi chưa có bằng chứng nguồn."));
+        var rows = query.Published().Where(x => x.Kind == ContentKind.StaticPage);
+        // Mixed function/organisation decisions belong to functions, not the
+        // dedicated organisation page. Read only the published revision title.
+        rows = slug switch
+        {
+            "chuc-nang-nhiem-vu" => rows.Where(x => x.Title.Contains("chức năng") || x.Title.Contains("nhiệm vụ")),
+            "co-cau-to-chuc" => rows.Where(x => x.Title.Contains("cơ cấu tổ chức") && !x.Title.Contains("chức năng") && !x.Title.Contains("nhiệm vụ")),
+            _ => rows.Where(x => x.Title.Contains("lãnh đạo"))
+        };
+        var count = await rows.CountAsync();
+        if (count == 0) return View("Status", new StatusModel(name, "Chưa có nội dung riêng đã được duyệt để công khai tại mục này. Các quyết định về chức năng, nhiệm vụ của các đơn vị được đăng tại mục Chức năng nhiệm vụ."));
+        if (count == 1)
+        {
+            var row = await rows.Select(x => new { x.Id, x.Title }).SingleAsync();
+            return await Article(row.Id, PublicContentQuery.Slug(row.Title));
+        }
+        return await List(name, rows, null, page, description: "Các nội dung giới thiệu và quyết định đã công khai từ nguồn QLDD.");
     }
     [HttpGet("hoi-dap")]
     public IActionResult Questions() => Redirect("/tuong-tac/hoi-dap-da-duyet");
+    [HttpGet("tep-nguon/{kind:int}/{sourceId}/{key}")]
+    public async Task<IActionResult> UnavailableSourceFile(int kind,string sourceId,string key)
+    {
+        Guid? publicContent=null;
+        if(kind is >=0 and <=5 && sourceId.Length<=100 && System.Text.RegularExpressions.Regex.IsMatch(sourceId,@"^[0-9]+$") && System.Text.RegularExpressions.Regex.IsMatch(key,@"^[a-f0-9]{64}$"))
+        {
+            var id=await db.SourceRecords.AsNoTracking().Where(x=>x.Source=="qldd.mae.gov.vn"&&(int)x.Kind==kind&&x.SourceId==sourceId).Select(x=>(Guid?)x.ContentId).SingleOrDefaultAsync();
+            var row=id is null?null:await query.Published().Where(x=>x.Id==id).Select(x=>new{x.Id,x.RevisionId}).SingleOrDefaultAsync();
+            if(row is not null)
+            {
+                publicContent=row.Id;
+                // A later recovered file must belong to the CURRENT public
+                // revision. Draft/private assets and old approvals confer no access.
+                var assets=await db.ContentAssets.AsNoTracking().Where(x=>x.RevisionId==row.RevisionId).Select(x=>x.MediaAsset).ToListAsync();
+                var policy=HttpContext.RequestServices.GetRequiredService<MediaUploadOptions>();
+                var recovered=assets.FirstOrDefault(x=>!string.IsNullOrWhiteSpace(x.SourceUrl)&&SourceUnavailableLinks.Key(x.SourceUrl)==key&&x.ScanStatus=="Clean"&&!x.IsQuarantined&&policy.CanServe(x));
+                if(recovered is not null)return Redirect("/media/"+recovered.Id);
+            }
+        }
+        Response.StatusCode=404;
+        return View("SourceFileMissing",publicContent);
+    }
     [HttpGet("lien-he")]
     public async Task<IActionResult> Contact()
     {

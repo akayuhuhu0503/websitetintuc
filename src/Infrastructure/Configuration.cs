@@ -31,7 +31,7 @@ public static class PortalConfiguration
             for (string? node = full; node != null; node = Path.GetDirectoryName(node))
                 if ((File.Exists(node) || Directory.Exists(node)) && (File.GetAttributes(node) & FileAttributes.ReparsePoint) != 0) throw new InvalidOperationException("Reparse UAT config path refused.");
             var deployed = new ConfigurationBuilder().AddJsonFile(full, optional: false, reloadOnChange: false).AddEnvironmentVariables().AddInMemoryCollection(new Dictionary<string,string?> { ["WorkspaceRoot"] = workspace }).Build();
-            if (!UatDeployment.Validate(deployed, Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production")) throw new InvalidOperationException("External configuration is restricted to explicit UAT profile.");
+            if (!UatDeployment.Validate(deployed, Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production") && !LanDemoDeployment.Validate(deployed, Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production")) throw new InvalidOperationException("External configuration requires explicit isolated UAT or LAN demo profile.");
             return deployed; // Never read or copy the developer .env on a target host.
         }
         workspace ??= FindWorkspace();

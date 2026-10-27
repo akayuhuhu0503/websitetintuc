@@ -11,7 +11,7 @@ public static class InquiryScannerFactory
     public static IInquiryScanner Create(IConfiguration config,string environment,long maximumBytes=InquiryFileOptions.MaximumBytes)
     {
         if(maximumBytes<1||maximumBytes>1024L*1024*1024)throw new InvalidOperationException("Scanner byte limit is invalid.");
-        return config["Scanner:Provider"] switch{null or "" or "Clamd"=>new ClamdInquiryScanner(config,maximumBytes),"DefenderTest"=>new DefenderInquiryScanner(config,environment,maximumBytes),"MicrosoftDefenderOnPrem"=>DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes),_=>throw new InvalidOperationException("Unsupported scanner provider; no automatic Clean fallback.")};
+        return config["Scanner:Provider"] switch{null or "" or "Clamd"=>new ClamdInquiryScanner(config,maximumBytes),"DefenderTest"=>new DefenderInquiryScanner(config,environment,maximumBytes),"MicrosoftDefenderOnPrem"=>DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes),LanStatisticsSamples.Provider=>DefenderInquiryScanner.ForApprovedLanSamples(config,environment,maximumBytes),_=>throw new InvalidOperationException("Unsupported scanner provider; no automatic Clean fallback.")};
     }
 }
 
@@ -24,6 +24,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
     private readonly string temp;
     private readonly HashSet<string>? approved;
     private readonly bool onPrem;
+    private readonly bool lanSample;
     private readonly string? binaryPin;
     private readonly int seconds;
     private readonly long maximumBytes;
@@ -33,9 +34,12 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
         if(config["Scanner:Provider"]!="MicrosoftDefenderOnPrem"||!UatDeployment.Validate(config,environment))throw new InvalidOperationException("Defender on-prem requires the approved isolated Staging UAT profile, never a Test/Production bypass.");
         return new DefenderInquiryScanner(config,environment,maximumBytes,true);
     }
-    private DefenderInquiryScanner(IConfiguration config,string environment,long maximumBytes,bool approvedUat)
+    public static IInquiryScanner ForApprovedLanSamples(IConfiguration config,string environment,long maximumBytes)
+    {LanStatisticsSamples.Require(config,environment);if(maximumBytes>LandStatisticsService.MaximumBytes)throw new InvalidOperationException("LAN sample scanner is limited to 10 MiB statistics workbooks.");return new DefenderInquiryScanner(config,environment,maximumBytes,false,true);}
+    private DefenderInquiryScanner(IConfiguration config,string environment,long maximumBytes,bool approvedUat,bool approvedLanSample=false)
     {
         onPrem=approvedUat;
+        lanSample=approvedLanSample;
         if(maximumBytes<1||maximumBytes>1024L*1024*1024)throw new InvalidOperationException("Scanner byte limit is invalid.");this.maximumBytes=maximumBytes;
         var root=config["WorkspaceRoot"]??throw new InvalidOperationException("Workspace required.");var storage=StorageOptions.FromConfiguration(config);
         var prefix=Path.Combine(root,".local","tests")+Path.DirectorySeparatorChar;
@@ -43,6 +47,10 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
         {
             if(!OperatingSystem.IsWindows()||environment!="Staging"||!UatDeployment.Validate(config,environment)||config["Scanner:DefenderServiceIdentity"] is not string identity||!string.Equals(identity,System.Security.Principal.WindowsIdentity.GetCurrent().Name,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Defender UAT must run under the explicitly approved Windows service identity.");
             binaryPin=config["Scanner:DefenderBinarySha256"]!.ToLowerInvariant();
+        }
+        else if(lanSample)
+        {
+            LanStatisticsSamples.Require(config,environment);approved=LanStatisticsSamples.Hashes().ToHashSet(StringComparer.Ordinal);binaryPin=config["Scanner:DefenderBinarySha256"]!.ToLowerInvariant();
         }
         else
         {
@@ -71,7 +79,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
         var info=new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe"));info.ArgumentList.Add("-NoProfile");info.ArgumentList.Add("-NonInteractive");info.ArgumentList.Add("-Command");info.ArgumentList.Add(script);
         var result=await Run(info,10,ct);if(result.Exit!=0)return null;
         var health=JsonSerializer.Deserialize<Health>(result.Output);
-        if(onPrem&&health!=null&&Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(health.Binary,ct)))!=binaryPin)return null;
+        if((onPrem||lanSample)&&health!=null&&Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(health.Binary,ct)))!=binaryPin)return null;
         return health is {Active:true,Signed:"MicrosoftValid"}&&(!onPrem||health.PrivacyReady)&&health.Updated<=DateTimeOffset.UtcNow.AddMinutes(5)&&health.Updated>DateTimeOffset.UtcNow.AddHours(-72)&&Regex.IsMatch(health.Engine,@"^\d+(\.\d+){2,4}$")&&Regex.IsMatch(health.Signatures,@"^\d+(\.\d+){2,4}$")?health:null;
     }
     public async Task<(bool Ready,string Code)> HealthAsync(CancellationToken cancellation=default)
@@ -82,11 +90,18 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
     // Recovery reuse must bind the currently verified engine and definition set, not just a provider name.
     public async Task<string?> CurrentIdentityAsync(CancellationToken ct=default)
     {
-        try{var health=await Probe(ct);return health is null?null:$"{(onPrem?"DefenderOnPrem":"Defender")}/{health.Engine} sig/{health.Signatures} updated/{health.Updated:O}";}
+        try{var health=await Probe(ct);return health is null?null:$"{(onPrem?"DefenderOnPrem":lanSample?"DefenderLanSample":"Defender")}/{health.Engine} sig/{health.Signatures} updated/{health.Updated:O}";}
         catch(Exception e)when(e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException or JsonException){return null;}
     }
     public async Task<InquiryScanResult> ScanAsync(Stream input,CancellationToken cancellation=default)
     {
+        using var sample=lanSample?new MemoryStream():null;
+        if(sample!=null)
+        {
+            var buffer=new byte[65536];int read;while((read=await input.ReadAsync(buffer,cancellation))>0){if(sample.Length+read>maximumBytes)return new(InquiryScanState.ScanFailed,"ScannerFileTooLarge",null);await sample.WriteAsync(buffer.AsMemory(0,read),cancellation);}
+            if(!approved!.Contains(LanStatisticsSamples.Sha(sample.ToArray())))return new(InquiryScanState.ScanFailed,"NotApprovedAnonymousLanSample",null);
+            sample.Position=0;input=sample;
+        }
         var path=StorageOptions.ResolveWithin(temp,Guid.NewGuid().ToString("N")+".bin");
         try
         {
@@ -98,12 +113,12 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
             var result=await Run(info,seconds,cancellation);var after=await Probe(cancellation);
             if(after==null||after.Signatures!=health.Signatures||after.Engine!=health.Engine)return new(InquiryScanState.ScanFailed,"EngineDefinitionsChangedDuringScan",null);
             await using(var check=File.OpenRead(path)){if(check.Length!=bytes||Convert.ToHexStringLower(await SHA256.HashDataAsync(check,cancellation))!=hash)return new(InquiryScanState.ScanFailed,"ScannerCopyChangedOrRemediated",null);}
-            var engine=$"{(onPrem?"DefenderOnPrem":"Defender")}/{health.Engine} sig/{health.Signatures} updated/{health.Updated:O}";
+            var engine=$"{(onPrem?"DefenderOnPrem":lanSample?"DefenderLanSample":"Defender")}/{health.Engine} sig/{health.Signatures} updated/{health.Updated:O}";
             var noThreat=$"Scanning {path} found no threats.";
             var detected=Regex.Match(result.Output,@"(?m)^Threat\s*:\s*([A-Za-z0-9_:/.-]{1,120})\s*$");
             var finished=result.Output.Split('\n').Any(x=>x.Trim()=="Scan finished.");
             var state=finished&&result.Exit==0&&result.Output.Split('\n').Any(x=>x.Trim()==noThreat)&&!detected.Success?InquiryScanState.Clean:finished&&result.Exit==2&&detected.Success&&Regex.IsMatch(result.Output,"Scanning "+Regex.Escape(path)+@" found [1-9]\d* threats\.")?InquiryScanState.Infected:InquiryScanState.ScanFailed;
-            return new(state,state==InquiryScanState.Infected?detected.Groups[1].Value:state==InquiryScanState.ScanFailed?"DefenderOutputNotConclusive":"",engine){Provider=onPrem?"MicrosoftDefenderOnPrem":"MicrosoftDefender",SignatureVersion=health.Signatures,SignatureUpdatedUtc=health.Updated,OutputSha256=Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(result.Output.Replace(path,onPrem?"<private-scan>":"<anonymous-test>"))))};
+            return new(state,state==InquiryScanState.Infected?detected.Groups[1].Value:state==InquiryScanState.ScanFailed?"DefenderOutputNotConclusive":"",engine){Provider=onPrem?"MicrosoftDefenderOnPrem":lanSample?LanStatisticsSamples.Provider:"MicrosoftDefender",SignatureVersion=health.Signatures,SignatureUpdatedUtc=health.Updated,OutputSha256=Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(result.Output.Replace(path,onPrem?"<private-scan>":"<anonymous-test>"))))};
         }
         catch(Exception e)when(e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or OperationCanceledException or JsonException){return new(InquiryScanState.ScanFailed,"DefenderUnavailableTimeoutOrFileChanged",null);}
         finally{try{if(File.Exists(path))File.Delete(path);}catch(IOException){}catch(UnauthorizedAccessException){}}

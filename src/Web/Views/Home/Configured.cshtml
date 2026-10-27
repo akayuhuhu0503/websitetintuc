@@ -17,3 +17,6 @@
 }
 </div>
 @foreach (var banner in Model.Site.Banners.Where(x => x.Position == "sidebar")) { <a class="site-banner" href="@banner.Url" target="@(banner.NewWindow ? "_blank" : null)" rel="@(banner.NewWindow ? "noopener noreferrer" : null)"><img src="@banner.ImageUrl" alt="@banner.Alt" /></a> }
+
+@await Component.InvokeAsync("PopularArticles")
+@await Component.InvokeAsync("LandStatistics")

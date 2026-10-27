@@ -31,7 +31,15 @@ public sealed class SourceBatchRow
     public List<SourceBatchFinding> Findings { get; set; } = [];
 }
 // Explicitly reviewed missing photos only. This never authorizes skipping a scan or a bad hash.
-public sealed record OptionalImageReview(string Url,string Reason,string Evidence);
+public sealed record OptionalImageReview(string Url,string Reason,string Evidence)
+{
+    // Null retains byte-compatible historical image-review packets. The explicit
+    // mode below reviews an unavailable source link, never an unsafe media asset.
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecoveryMode { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? UnavailableState { get; init; }
+}
 public sealed record SourceBatchFinding(string Severity,string Code,string? Url,string Role,string Resolution);
 public sealed record SourceBatchOutcome(string SourceIdentity,string Status,Guid? ContentId,Guid? RevisionId,string? Error=null);
 public sealed record SourceBatchAsset(InventoryUrl Node,InventoryCapture Capture,Guid Id);

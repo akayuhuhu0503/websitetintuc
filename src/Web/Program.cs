@@ -17,10 +17,11 @@ var connection = DatabaseSettings.Connection(builder.Configuration);
 var storage = StorageOptions.FromConfiguration(builder.Configuration);
 var baseUrl = builder.Configuration["Public:BaseUrl"] ?? "http://127.0.0.1:5188";
 var uat=UatDeployment.Validate(builder.Configuration,builder.Environment.EnvironmentName);
-if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var publicUri) || !uat && !publicUri.IsLoopback || publicUri.Scheme is not ("http" or "https") || publicUri.AbsolutePath != "/")
+var lan=LanDemoDeployment.Validate(builder.Configuration,builder.Environment.EnvironmentName);
+if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var publicUri) || !uat && !lan && !publicUri.IsLoopback || publicUri.Scheme is not ("http" or "https") || publicUri.AbsolutePath != "/")
     throw new InvalidOperationException("Bản chạy local chỉ cho phép Public__BaseUrl là địa chỉ HTTP(S) loopback.");
 if(!uat)builder.WebHost.UseUrls(baseUrl); // ANCM owns its backend port under IIS.
-builder.Configuration["AllowedHosts"] = uat ? publicUri.IdnHost : "localhost;127.0.0.1;[::1]";
+builder.Configuration["AllowedHosts"] = uat||lan ? publicUri.IdnHost : "localhost;127.0.0.1;[::1]";
 var publicUrls=new PublicUrlPolicy(builder.Configuration);
 builder.Services.AddSingleton(publicUrls);
 builder.Services.AddSingleton(storage);
@@ -94,6 +95,8 @@ builder.Services.AddControllersWithViews(options =>
 });
 builder.Services.AddScoped<HtmlPolicy>();
 builder.Services.AddScoped<DocumentUsage>();
+builder.Services.AddScoped<ArticleDiscovery>();
+builder.Services.AddScoped<LandStatisticsService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<PublicTraffic>();
 builder.Services.AddScoped<WorkflowService>();
@@ -130,6 +133,14 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SiteConfigurationService>();
 builder.Services.AddScoped<PublicSiteService>();
 var app = builder.Build();
+// Statistics uploads stay in bounded memory before CSRF/model binding can read the form.
+// LAN sample policy must reject unknown bytes before Windows real-time AV can see a temp file.
+app.Use(async(context,next)=>
+{
+    if(context.Request.Path.Value?.TrimEnd('/').Equals("/admin/thong-ke-dat-dai/preview",StringComparison.OrdinalIgnoreCase)==true)
+        context.Features.Set<Microsoft.AspNetCore.Http.Features.IFormFeature>(new Microsoft.AspNetCore.Http.Features.FormFeature(context.Request,new Microsoft.AspNetCore.Http.Features.FormOptions{MemoryBufferThreshold=11*1024*1024,MultipartBodyLengthLimit=11*1024*1024}));
+    await next();
+});
 var bufferedForms=StorageOptions.ResolveWithin(storage.TempRoot,"http-form-buffer");Directory.CreateDirectory(bufferedForms);Environment.SetEnvironmentVariable("ASPNETCORE_TEMP",bufferedForms);
 if (bool.TryParse(builder.Configuration["Media:AllowUnscannedDevelopmentUploads"], out var requestedBypass) && requestedBypass && !app.Services.GetRequiredService<MediaUploadOptions>().DevelopmentExceptionEnabled)
     app.Logger.LogWarning("Unscanned media development exception is disabled outside Development loopback; files remain NotScanned and uploads/publication are blocked by policy.");
@@ -137,6 +148,7 @@ app.UseExceptionHandler("/loi");
 if(uat){app.UseHsts();app.UseHttpsRedirection();}
 app.Use(async (context, next) =>
 {
+    if(lan&&(DateTimeOffset.Parse(builder.Configuration["LanDemo:ExpiresUtc"]!)<=DateTimeOffset.UtcNow||context.Request.Host.Host!=publicUri.Host||context.Connection.RemoteIpAddress is not{} remote||!LanDemoDeployment.PrivateV4(remote.MapToIPv4()))){context.Response.StatusCode=403;return;}
     if(!publicUrls.AllowsHost(context.Request.Host.Host)||context.Request.Path.Value?.StartsWith("//",StringComparison.Ordinal)==true||context.Request.Path.Value?.Contains('\\')==true){context.Response.StatusCode=400;return;}
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";

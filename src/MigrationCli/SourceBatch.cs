@@ -55,7 +55,7 @@ public sealed partial class SourceBatch(PortalDbContext db,StorageOptions storag
     public async Task<SourceBatchPrepared> PrepareAsync(InventoryItem item,IReadOnlyList<OptionalImageReview>? optionalImages=null)
     {
         var errors=new List<string>();var assets=new List<SourceBatchAsset>();var s=item.Source;
-        var warnings=new List<string>();var omitted=new HashSet<string>();optionalImages??=[];
+        var warnings=new List<string>();var omitted=new HashSet<string>();var unavailable=new HashSet<string>();optionalImages??=[];
         if(optionalImages.GroupBy(x=>x.Url).Any(x=>x.Count()!=1)||optionalImages.Any(x=>!BatchReadiness.CanReviewOptional(s,x)))errors.Add("INVALID_OPTIONAL_IMAGE_REVIEW");
         var raw=state.Captures.LastOrDefault(x=>x.Sha256==item.RawSha256&&x.Status==200&&state.Urls.Any(u=>u.Url==x.Url&&u.Role=="Detail"));
         if(raw is null)throw new InvalidDataException("Missing verified detail raw.");
@@ -69,6 +69,14 @@ public sealed partial class SourceBatch(PortalDbContext db,StorageOptions storag
         foreach(var url in s.AssetUrls.Distinct())
         {
             var node=state.Urls.SingleOrDefault(x=>x.Url==url&&x.Role=="File");
+            var unavailableReview=optionalImages.SingleOrDefault(x=>x.Url==url&&x.RecoveryMode=="SourceAttachmentUnavailable");
+            if(unavailableReview is not null)
+            {
+                if(!BatchReadiness.CanReviewOptional(s,unavailableReview)||!unavailableReview.Evidence.Contains(item.RawSha256,StringComparison.Ordinal)||!await IsUnavailableResponseAsync(node,url,unavailableReview))
+                    errors.Add("INVALID_SOURCE_UNAVAILABLE_REVIEW:"+url);
+                else { unavailable.Add(url);warnings.Add((unavailableReview.UnavailableState=="WITHHELD_VALIDATION"?"SOURCE_ATTACHMENT_WITHHELD_VALIDATION:":"SOURCE_ATTACHMENT_UNAVAILABLE:")+url); }
+                continue;
+            }
             bool OptionalMissing()=>optionalImages.Any(x=>x.Url==url&&BatchReadiness.CanReviewOptional(s,x))&&
                 (node is null||node.ScanStatus=="NotScanned")&&node?.ScannedSha256 is null&&
                 !state.Captures.Any(x=>x.Url==url&&x.Status==200);
@@ -87,6 +95,7 @@ public sealed partial class SourceBatch(PortalDbContext db,StorageOptions storag
             assets.Add(new(node,capture,new Guid(Convert.FromHexString(capture.Sha256).AsSpan(0,16))));
         }
         var cats=s.CategoryIds.Append(s.PrimaryCategoryId??-1).Where(x=>x>=0).Distinct().Order().ToList();
+        if(unavailable.Count>0&&Text(s.BodyHtml).Length<200&&assets.Count==0)errors.Add("PARTIAL_SOURCE_CONTENT");
         var known=await db.Categories.Where(x=>cats.Contains(x.Id)).Select(x=>x.Id).ToListAsync();
         // Missing legacy category is retained as provenance, never invented or required by new-editor validation.
         var primary=known.Contains(s.PrimaryCategoryId??-1)?s.PrimaryCategoryId:null;
@@ -98,6 +107,7 @@ public sealed partial class SourceBatch(PortalDbContext db,StorageOptions storag
             foreach(var attr in new[]{"src","href","data-src"})
             {
                 var value=el.GetAttribute(attr);if(value is null||!Uri.TryCreate(new Uri(s.SourceUrl),value,out var uri))continue;
+                if(attr=="href"&&unavailable.Contains(uri.AbsoluteUri)) {el.SetAttribute("href",SourceUnavailableLinks.Path((int)s.Kind,s.SourceId,uri.AbsoluteUri));el.SetAttribute("title","Tệp đính kèm hiện không khả dụng.");continue;}
                 var a=assets.FirstOrDefault(x=>x.Node.Url==uri.AbsoluteUri);
                 if(a is not null)el.SetAttribute(attr=="data-src"?"src":attr,"/media/"+a.Id);
                 else if(attr is "src" or "data-src")el.RemoveAttribute(attr);
@@ -108,9 +118,26 @@ public sealed partial class SourceBatch(PortalDbContext db,StorageOptions storag
         var body=new HtmlPolicy().Clean(document.Body?.InnerHtml??"");
         if(Text(body)!=Text(s.BodyHtml))errors.Add("MEANINGFUL_TEXT_MISMATCH");
         var fingerprint=H(JsonSerializer.Serialize(new{s.Kind,s.SourceId,s.Title,s.Summary,Text=Text(s.BodyHtml),Markup=H(s.BodyHtml),s.Author,s.OriginalDateText,s.PublishedDate,s.PublishedUtc,s.DatePrecision,Fields=s.Fields.OrderBy(x=>x.Key),Categories=cats,Primary=s.PrimaryCategoryId,Files=assets.Select(x=>x.Capture.Sha256)}));
-        if(omitted.Count>0)fingerprint=H(fingerprint+JsonSerializer.Serialize(optionalImages.OrderBy(x=>x.Url)));
+        if(omitted.Count>0||unavailable.Count>0)fingerprint=H(fingerprint+JsonSerializer.Serialize(optionalImages.OrderBy(x=>x.Url)));
         if(string.IsNullOrWhiteSpace(s.Summary)||string.IsNullOrWhiteSpace(s.Author))warnings.Add("OPTIONAL_METADATA_ABSENT");
         return new(item,fingerprint,body,assets,known.Order().ToList(),primary,errors){Warnings=warnings,Findings=errors.Select(x=>BatchReadiness.Finding(s,x)).Concat(warnings.Select(x=>BatchReadiness.Finding(s,x,true))).ToList()};
+    }
+    async Task<bool> IsUnavailableResponseAsync(InventoryUrl? node,string url,OptionalImageReview review)
+    {
+        // Missing/non-file HTTP responses are distinct from quarantined or
+        // unscanned actual files. A real PDF/Office/image can never use this path.
+        if(node?.ScanStatus is "Infected" or "ScanFailed"||node?.ScannedSha256 is not null||node?.FormatStatus=="Validated")return false;
+        var capture=state.Captures.LastOrDefault(x=>x.Url==url&&x.Sha256==node?.CaptureSha);
+        if(capture is null)return review.UnavailableState=="NOT_RETRIEVED_BUDGET"&&node?.CaptureSha is null&&node?.Status=="ValidationFailed"&&node.Error?.Contains("Content-Length exceeds response budget",StringComparison.Ordinal)==true;
+        var bytes=await ReadBlob(capture);
+        if(review.UnavailableState=="WITHHELD_VALIDATION")return capture.Status==200&&bytes.Length>0&&node?.FormatStatus!="Validated"&&node?.ScanStatus=="NotScanned"&&review.Evidence.Contains(capture.Sha256,StringComparison.Ordinal);
+        if(review.UnavailableState!="SOURCE_MISSING")return false;
+        var header=Encoding.UTF8.GetString(bytes.AsSpan(0,Math.Min(bytes.Length,2048))).TrimStart('\uFEFF',' ','\r','\n','\t');
+        if(capture.Status is 404 or 410)return bytes.Length==0||header.StartsWith("<!doctype html",StringComparison.OrdinalIgnoreCase)||header.StartsWith("<html",StringComparison.OrdinalIgnoreCase);
+        if(capture.Status!=200||bytes.Length>1024*1024)return false;
+        var text=Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF',' ','\r','\n','\t');
+        return (text.StartsWith("<!doctype html",StringComparison.OrdinalIgnoreCase)||text.StartsWith("<html",StringComparison.OrdinalIgnoreCase))&&
+            (text.Contains("404",StringComparison.Ordinal)||text.Contains("not found",StringComparison.OrdinalIgnoreCase)||text.Contains("không tìm thấy",StringComparison.OrdinalIgnoreCase)||text.Contains("error",StringComparison.OrdinalIgnoreCase));
     }
     string BlobPath(string key){var p=StorageOptions.ResolveWithin(PrivateRoot,key);SourceInventory.NoReparse(p);return p;}
     async Task<byte[]> ReadBlob(InventoryCapture c){var b=await File.ReadAllBytesAsync(BlobPath(c.Key));if(b.LongLength!=c.Bytes||SourceInventory.Hash(b)!=c.Sha256)throw new InvalidDataException("Source blob hash/size differs.");return b;}
