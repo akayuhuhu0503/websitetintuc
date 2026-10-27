@@ -8,7 +8,7 @@ Chỉ mở toolbar soạn văn bản/bảng/liên kết; ẩn tính năng nhập
 
 `rtk npm run build` và Web build đã chạy lại sau thay đổi: 0 warning/error. `npm audit` sau gỡ dependency Quill báo **0 vulnerabilities**, gồm đúng Jodit và TypeScript đang pin; đây là kết quả feed tại thời điểm kiểm tra, không phải chứng nhận an ninh production. Kết quả kiểm thử SQL/HTTP/UI, ảnh chụp và phần NOT RUN được ghi riêng trong phase-2a-report/acceptance-matrix.
 
-Các bộ kiểm tra ảnh/PDF SkiaSharp và PdfPig thực hiện decode/parse định dạng, **không quét mã độc**. Native notices và license đi cùng gói publish. Upload mặc định bị chặn khi thiếu scanner; chỉ có ngoại lệ Development tường minh trên loopback, ScanStatus vẫn NotScanned. Production scanner, HTTPS/MFA/ACL và triển khai Linux vẫn chưa được nghiệm thu.
+Các bộ kiểm tra ảnh/PDF SkiaSharp và PdfPig thực hiện decode/parse định dạng, **không quét mã độc**. Native notices và license đi cùng gói publish. Upload mặc định bị chặn khi thiếu scanner; chỉ có ngoại lệ Development tường minh trên loopback, ScanStatus vẫn NotScanned. Production scanner, HTTPS/ACL và triển khai Linux vẫn chưa được nghiệm thu.
 
 Ngày thực hiện: 12/10/2026. Đây là rà soát code và phụ thuộc cho bản chạy thử; không thay nghiệm thu bảo mật production.
 
@@ -40,6 +40,6 @@ Quill core không giữ đầy đủ mô hình bảng/figure nguồn. Bài chứ
 ## Giới hạn còn lại
 
 - Asset nguồn trong local có ScanStatus NotScanned: chưa có máy quét mã độc production. Không coi đây là chứng minh tệp sạch.
-- HTTP loopback được dùng trong môi trường local; HTTPS, MFA tài khoản đặc quyền, ACL/backup/restore keys và media, revoke phiên, UAT và kiểm tra bảo mật production chưa nghiệm thu.
+- HTTP loopback được dùng trong môi trường local; HTTPS, kiểm soát tài khoản đặc quyền, ACL/backup/restore keys và media, revoke phiên, UAT và kiểm tra bảo mật production chưa nghiệm thu.
 - Chưa triển khai thao tác duyệt độc lập/trả bài/gỡ/hẹn giờ/khôi phục; Giai đoạn 1 chỉ lưu nháp/gửi duyệt/xuất bản theo quyền. Trên UI không có nút giả cho các phần này.
 - Bình luận, hỏi đáp, liên hệ, góp ý và upload video mới chưa mở nhận dữ liệu; chỉ có trang giải thích trạng thái thật, không thông báo backend/email thành công giả.

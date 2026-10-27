@@ -11,7 +11,7 @@ if(-not(Get-NetIPAddress -AddressFamily IPv4 -IPAddress $uri.Host -ErrorAction S
 if(Get-NetTCPConnection -LocalAddress $uri.Host -LocalPort $uri.Port -State Listen -ErrorAction SilentlyContinue){Write-Output ('A process already listens at '+$uri.AbsoluteUri+'; no duplicate instance started.');return}
 $env:LANDPORTAL_CONFIG=$state.config;$env:LANDPORTAL_HOME=$state.home
 # External isolated config must win over inherited developer settings. No persistent environment changes.
-foreach($key in @('ConnectionStrings__Portal','Sql__ExpectedDatabase','Runtime__RolePassword','Storage__MediaRoot','Storage__SnapshotRoot','Storage__TempRoot','Storage__KeysRoot','Public__BaseUrl','Public__CanonicalHost','Deployment__Profile','Mail__Transport','Scanner__Provider','Media__AllowUnscannedDevelopmentUploads','AdminSession__RequireMfa','Captcha__TestScope')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
+foreach($key in @('ConnectionStrings__Portal','Sql__ExpectedDatabase','Runtime__RolePassword','Storage__MediaRoot','Storage__SnapshotRoot','Storage__TempRoot','Storage__KeysRoot','Public__BaseUrl','Public__CanonicalHost','Deployment__Profile','Mail__Transport','Scanner__Provider','Media__AllowUnscannedDevelopmentUploads','AdminSession__IdleMinutes','Captcha__TestScope')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 $env:DOTNET_ENVIRONMENT='Development';$env:ASPNETCORE_ENVIRONMENT='Development'
 $stamp=[DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssZ')+'-'+[Guid]::NewGuid().ToString('N').Substring(0,6)
 $stdout=Join-Path $state.home ('web-'+$stamp+'.out.log');$stderr=Join-Path $state.home ('web-'+$stamp+'.err.log')
@@ -30,5 +30,5 @@ $ready=$false
 for($i=0;$i -lt 40;$i++){Start-Sleep -Milliseconds 250;$proc.Refresh();if($proc.HasExited){throw 'LAN Web stopped during startup; inspect private log (no secrets in console).'};try{$response=Invoke-WebRequest ($uri.AbsoluteUri+'health') -UseBasicParsing -TimeoutSec 2;if($response.StatusCode -eq 200){$ready=$true;break}}catch{}}
 if(-not $ready){throw 'LAN process started but HTTP readiness not confirmed; inspect private log before retry'}
 Write-Output ('RUNNING '+$uri.AbsoluteUri+' | Admin: '+$uri.AbsoluteUri+'admin/login')
-Write-Output ('Database: LandPortal_LanDemo | PID '+$proc.Id+' | Workers/SMTP disabled; MFA/CAPTCHA retained.')
+Write-Output ('Database: LandPortal_LanDemo | PID '+$proc.Id+' | Workers/SMTP disabled; password/CAPTCHA login retained.')
 Write-Output 'LAN HOST READY - CLIENT NOT VERIFIED. Firewall/profile were not changed.'

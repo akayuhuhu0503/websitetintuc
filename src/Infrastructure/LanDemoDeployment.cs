@@ -16,9 +16,9 @@ public static class LanDemoDeployment
         var sql=new SqlConnectionStringBuilder(DatabaseSettings.Connection(c));
         if(environment!="Development"||c["DOTNET_ENVIRONMENT"]!="Development"||c["ASPNETCORE_ENVIRONMENT"]!="Development"||
            sql.InitialCatalog!=Database||c["Sql:ExpectedDatabase"]!=Database||!sql.IntegratedSecurity||sql.DataSource!=@".\SQLEXPRESS"||
-           c["Mail:Transport"]!="Disabled"||c["Media:AllowUnscannedDevelopmentUploads"]=="true"||c["AdminSession:RequireMfa"]!="true"||
+           c["Mail:Transport"]!="Disabled"||c["Media:AllowUnscannedDevelopmentUploads"]=="true"||
            !DateTimeOffset.TryParse(c["LanDemo:ExpiresUtc"],out var expires)||expires<=DateTimeOffset.UtcNow||expires>DateTimeOffset.UtcNow.AddDays(15))
-            throw new InvalidOperationException("LAN demo requires isolated local database, Development, live expiry, disabled mail and unscanned bypass, mandatory MFA.");
+            throw new InvalidOperationException("LAN demo requires isolated local database, Development, live expiry, disabled mail and unscanned bypass.");
         if(!Uri.TryCreate(c["Public:BaseUrl"],UriKind.Absolute,out var uri)||uri.Scheme is not("http" or "https")||uri.AbsolutePath!="/"||uri.UserInfo!=""||uri.Query!=""||uri.Fragment!=""||
            !IPAddress.TryParse(uri.Host,out var ip)||!PrivateV4(ip)||!NetworkInterface.GetAllNetworkInterfaces().Any(n=>n.OperationalStatus==OperationalStatus.Up&&n.GetIPProperties().UnicastAddresses.Any(a=>a.Address.Equals(ip))))
             throw new InvalidOperationException("LAN demo requires an exact currently assigned RFC1918 IPv4 origin.");

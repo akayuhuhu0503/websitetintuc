@@ -45,4 +45,4 @@ PDF upload cũ `Origin=Uploaded` chưa có proof bị từ chối public/publish
 
 Mỗi `test-v05-finish` lưu code hash trước/sau, raw log, exit, artifact hashes và bảo vệ raw cũ. Không sửa mã/script trong lúc run đang đóng băng. Không cộng các focused vào full; tách native scanner, HTTP, browser, worker. Tên file kỹ thuật và thông tin QA trong `.local` không phải dữ liệu nghiệp vụ hoặc mẫu Word thật. Lưu screenshot và báo cáo riêng từng kích thước.
 
-SQL timeout vẫn MONITORING / ROOT CAUSE UNKNOWN; không nâng deadline để làm xanh test, không stress Dev. V04/D15/diagnostic v0.5 incident raw thiếu giữ nguyên. VERIFYONLY không thay thế restore drill; TLS/MFA/Production scanner/SMTP/UAT vẫn gate độc lập.
+SQL timeout vẫn MONITORING / ROOT CAUSE UNKNOWN; không nâng deadline để làm xanh test, không stress Dev. V04/D15/diagnostic v0.5 incident raw thiếu giữ nguyên. VERIFYONLY không thay thế restore drill; TLS/Production scanner/SMTP/UAT vẫn gate độc lập.

@@ -9,7 +9,12 @@ public static class PortalIdentityPolicy
     public static void Configure(IdentityOptions options)
     {
         options.User.RequireUniqueEmail = true;
-        options.Password.RequiredLength = 14;
+        options.Password.RequiredLength = 7;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireDigit = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredUniqueChars = 0;
         options.Lockout.MaxFailedAccessAttempts = 5;
         options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     }

@@ -25,7 +25,7 @@ rtk proxy npm --prefix src/Web run build
 rtk proxy powershell -NoProfile -File scripts/package-uat.ps1 -RunId uat-YYYYMMDD-UNIQUE
 ```
 
-Thay nhãn bằng thời điểm/ID riêng; script từ chối ghi đè. Publish/sinh schema offline không cần `.env` thật, SQL đang chạy hoặc mật khẩu. Gói nằm `.local/publish/<RunId>`. Schema mẫu có chặn UNALLOCATED; chỉ dùng artifact đã ràng buộc target được cấp qua `prepare-uat-target.ps1`. Không chạy lệnh bootstrap giả lập trên UAT; tài khoản cán bộ theo quy chế được phê duyệt/MFA. Không sao chép Identity Dev/Test.
+Thay nhãn bằng thời điểm/ID riêng; script từ chối ghi đè. Publish/sinh schema offline không cần `.env` thật, SQL đang chạy hoặc mật khẩu. Gói nằm `.local/publish/<RunId>`. Schema mẫu có chặn UNALLOCATED; chỉ dùng artifact đã ràng buộc target được cấp qua `prepare-uat-target.ps1`. Không chạy lệnh bootstrap giả lập trên UAT; tài khoản cán bộ theo quy chế được phê duyệt. Không sao chép Identity Dev/Test.
 
 Tra cứu hỏi đáp v1.2 dùng mã ngẫu nhiên128bit + email + CAPTCHA một lần, không OTP; chỉ trả trạng thái/câu trả lời. SQL giới hạn theo mã/phiên và CAPTCHA theo IP; CSRF/no-store; nội dung gốc, tệp và PII không được trả qua endpoint này. Thực hiện đánh giá chống dò/ATTT trên hạ tầng UAT trước mở public.
 
@@ -83,7 +83,7 @@ không còn trùng template gốc; giữ gói gốc làm mốc kiểm chứng.
 
 **Thứ tự ngắn nhất:** cấp target → DBA/schema/role + private ACL → preflight →
 IIS/HTTPS → khởi động foreground/health 5 worker → import XML task theo phê duyệt →
-MFA + scanner Clean/EICAR/failure + SMTP được duyệt + restart/restore + UAT-16.
+Xác thực mật khẩu/CAPTCHA + scanner Clean/EICAR/failure + SMTP được duyệt + restart/restore + UAT-16.
 Chưa có target nên các thao tác cài và nghiệm thu thật này đều **NOT RUN**.
 
 ## Chuẩn bị host worker với ít thao tác
@@ -116,7 +116,7 @@ nghiệm thu; XML kiểm tra local không chứng minh worker đích đã tự p
 
 Theo dõi health qua launcher `-Health` cho Documents/InquiryScan/Video. Scheduler
 và Mail theo SQL lease/outbox, task status và audit; không ghi mật khẩu, CAPTCHA,
-OTP, TOTP hoặc nội dung/email người dân vào log. Gửi thử email thật chỉ sau duyệt
+OTP hoặc nội dung/email người dân vào log. Gửi thử email thật chỉ sau duyệt
 riêng của đơn vị. Dùng `ops/UAT-16.md` để ghi đúng 16 case đã có; không lấy kết quả
 local thay chữ ký nghiệm thu cán bộ.
 
@@ -154,15 +154,15 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
    admin riêng bằng công cụ đã có trên target (LANDPORTAL_HOME/CONFIG, Staging;
    dotnet tools/MigrationCli.dll bootstrap). Trong uat.json private, dùng hai khóa
    Bootstrap.AdminEmail và Bootstrap.AdminPassword (mật khẩu riêng theo policy,
-   tối thiểu14 ký tự, chữ hoa/thường, chữ số và ký tự đặc biệt); không đưa giá trị vào command line/log. Đặt process env
+   tối thiểu 7 ký tự, không bắt buộc độ phức tạp); không đưa giá trị vào command line/log. Đặt process env
    LANDPORTAL_HOME=<PRIVATE_HOME>, LANDPORTAL_CONFIG=<PRIVATE_HOME>\uat.json,
    DOTNET_ENVIRONMENT=Staging và ASPNETCORE_ENVIRONMENT=Staging trước lệnh CLI.
    Xác minh tài khoản/role bằng đăng nhập thật; không coi dòng CLI success là
    chứng cứ nếu cấu hình bootstrap trống. Xóa hai bootstrap secret sau hoàn tất.
    Không đặt mật khẩu mẫu, không chạy bootstrap Dev hoặc reset người đã có.
-   Admin đăng nhập CAPTCHA/password -> /admin/account/mfa -> nhập password, TOTP
-   thủ công, lưu 10 recovery codes riêng. Mọi admin UAT phải có amr=mfa.
-   Reset thiết bị cần password + recovery một lần; không tự reset người khác.
+   Admin đăng nhập bằng tên tài khoản, mật khẩu và CAPTCHA theo cấu hình;
+   đổi mật khẩu lần đầu nếu được cấp mật khẩu tạm, rồi vào quản trị theo quyền.
+   Không có đăng ký TOTP, mã 6 chữ số hoặc recovery codes.
 4. Operator cấp scanner nội bộ đáng tin cậy: MicrosoftDefenderOnPrem theo cấu hình mẫu hoặc Clamd, policy/version/StreamMaxLength
    đủ 1GiB nếu bật video, cách ly khỏi public, TLS tunnel nếu scanner ở mạng khác.
    Kiểm Clean/EICAR/failure thật tại đích trước bật nghiệp vụ. DefenderTest và
@@ -195,14 +195,14 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
    độ lệch SQL/media và writers sau backup trước rollback. Công cụ backup Dev đã có
    không được tự đổi target sang UAT để lách guard.
 10. UAT thật phải nghiệm thu: HTTPS, SQL TLS/runtime role, Clean/EICAR/failure, SMTP
-    sink/relay, MFA/recovery/revoke, upload+duyệt đúng revision, draft/private ACL,
+    sink/relay, đăng nhập/lockout/thu hồi phiên, upload+duyệt đúng revision, draft/private ACL,
     video Range, restart worker, search tiếng Việt, restore, 3 Word lịch thật và
     dữ liệu QLDD/NukeViet. Gói publish local không phải bằng chứng các mục này PASS.
     Cutover chỉ sau PO/ATTT duyệt mapping/301/DNS/rollback và tắt nguồn sync.
 
 ## Delta P0 đã kiểm chứng local 23/10/2026
 
-- Web và CLI bootstrap dùng cùng chính sách mật khẩu tối thiểu14 ký tự. Thiếu
+- Web và CLI bootstrap dùng cùng chính sách mật khẩu tối thiểu 7 ký tự. Thiếu
   cấu hình bootstrap hoặc mật khẩu yếu trả lỗi; không coi CLI success là tạo được
   admin. Không chạy bootstrap lên Dev đã có hoặc dùng password Test cho UAT.
 - Nhật ký `/admin/audit`: cần đồng thời `users.manage`, `roles.manage` và phạm vi
@@ -252,10 +252,18 @@ Gốc XLSX nằm trong private media `land-statistics/`, không có public Media
 
 ## Bàn giao source và dữ liệu là hai việc riêng
 
+### Chính sách xác thực bàn giao SRS v1.2
+
+Đăng nhập bằng tên tài khoản + mật khẩu và CAPTCHA theo cấu hình; MFA/TOTP đã được loại bỏ khỏi mã nguồn. Mật khẩu tối thiểu 7 ký tự, không bắt buộc hoa/thường/số/ký tự đặc biệt. Identity dùng cùng policy khi tạo, đổi và reset; không tự reset mật khẩu hoặc thay quyền của tài khoản hiện hữu. Schema Identity cũ giữ nguyên, cờ hai bước cũ không chặn đăng nhập.
+
+Giữ khóa 15 phút sau 5 lần sai liên tiếp, giới hạn CAPTCHA/login, cookie HttpOnly/SameSite/Secure theo HTTPS, CSRF, audit và phân quyền server. `AdminSession:IdleMinutes=30` trong cấu hình mẫu. Các khóa cấu hình MFA cũ không có tác dụng và không cần sao chép sang đích mới.
+
+**Đơn vị TTDL cần xem xét quyết định bỏ MFA trong nghiệm thu ATTT trước khi mở website ra Internet.** Không suy từ PASS LOCAL thành nghiệm thu UAT/Production; vẫn phải cấp máy chủ TTDL, IIS/ASP.NET Core10 Hosting Bundle, SQL Server riêng, HTTPS, ACL/kho media, Defender nội bộ, SMTP và Web + 5 Worker theo các bước trên. Không tự thay môi trường Production đang chạy.
+
 - Source bổ sung FR-08/14/15, LAN sample-only scanner và migration `20261027025057_AuditRecoveryLookup`. Chỉ pull SHA đã được chủ dự án duyệt/push; commit local chưa có trên GitHub. Không dùng ZIP/schema sinh từ commit cũ.
 - `git pull` **không mang theo 314 nội dung/325 revision/756 media/628 alias của Dev**. Không copy database Test hoặc Identity/cấu hình/khóa của Dev/LAN sang UAT.
 - Khi TTDL cấp database mới, hostname/certificate HTTPS, identity Web/Worker, thư mục private, scanner và SMTP: điền cấu hình mẫu, dùng `prepare-uat-target.ps1` ràng buộc đúng đích, backup nếu có dữ liệu, chạy schema đã duyệt theo thứ tự migration. Lệnh sinh package không tự cấp database/service hay deploy.
 - Chuyển dữ liệu bằng packet riêng chỉ gồm nguồn đã đối soát: published content/revision/metadata/chuyên mục/alias và byte media tương ứng, manifest SHA + mapping + audit + rollback. Không xuất phản hồi người dân, bản nháp, tài khoản, mật khẩu, token hoặc fixture. Quy trình Apply Dev hiện hành không tự cho phép ghi UAT/Production; phải có công cụ/plan được ràng buộc và phê duyệt đúng đích mới trước khi chuyển.
 - 53 media NotScanned giữ cách ly/chờ quyết định; các media Clean nhưng có proof/validation chỉ dành Development cũng phải được kiểm định và phê duyệt phát hành trên đích. Không đổi nhãn sang Clean bằng cấu hình và không hotlink.
-- Trưởng phòng build package từ đúng source đã duyệt, cài IIS trước .NET10 Hosting Bundle, đặt HTTPS/ACL, khởi động Web và 5 Worker theo `uat-runtime.ps1`/task XML đã duyệt; cấu hình SMTP và MFA bằng thông tin đích. Kiểm thử UAT 16 kịch bản, scanner/privacy, backup/restore và rollback tại TTDL; không đổi DNS trước nghiệm thu.
+- Trưởng phòng build package từ đúng source đã duyệt, cài IIS trước .NET10 Hosting Bundle, đặt HTTPS/ACL, khởi động Web và 5 Worker theo `uat-runtime.ps1`/task XML đã duyệt; cấu hình SMTP và xác thực bằng thông tin đích. Kiểm thử UAT 16 kịch bản, scanner/privacy, backup/restore và rollback tại TTDL; không đổi DNS trước nghiệm thu.
 - Provider `MicrosoftDefenderLanSample` chỉ cho Development/LandPortal_LanDemo/exact public sample hashes, chỉ preview/draft; không dùng cho UAT/Production. UAT dùng provider on-prem đã duyệt, signed binary/identity pin và policy privacy như phần trên. Không sao chép private config LAN.

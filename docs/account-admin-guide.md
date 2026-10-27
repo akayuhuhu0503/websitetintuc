@@ -6,7 +6,7 @@ Chi tiết tài khoản có mục phạm vi: legacy/toàn bộ hoặc chọn t�
 
 Chưa gán scope/quyền Dev trong V04.10 quyền vận hành vẫn thiếu, ghi tại báo cáo; không reset mật khẩu. Kiểm thử assignment/concurrency/revoke/self/expansion dùng SQLTest và tài khoản QA riêng. Cookie idle30min, polling không renew; editor có reauth cùng principal giữ prose như hướng dẫn biên tập. Web V04 riêng5198, web5188 có trước lượt dùng binary cũ.
 
-Các màn hình `/admin/users` và `/admin/roles` dùng Identity đang có. Không có đăng ký công khai, mật khẩu mặc định, xóa tài khoản hay chức năng gửi/reset mật khẩu. MFA vẫn chưa triển khai và là điều kiện trước production.
+Các màn hình `/admin/users` và `/admin/roles` dùng Identity đang có. Không có đăng ký công khai, mật khẩu mặc định, xóa tài khoản hay chức năng gửi/reset mật khẩu. Đăng nhập không dùng MFA/TOTP theo quyết định SRS v1.2; đơn vị vận hành phải xem xét trong nghiệm thu ATTT trước khi mở Internet.
 
 ## Quyền và phạm vi ủy quyền
 
@@ -21,7 +21,7 @@ Mọi thay đổi Identity chạy trong transaction SQL Server có cùng applica
 
 ## Tạo tài khoản và mật khẩu tạm
 
-1. Mở **Tài khoản → Tạo tài khoản**. Nhập tên đăng nhập, email nội bộ, tên hiển thị và mật khẩu tạm riêng (tối thiểu 14 ký tự, có hoa/thường/số/ký tự đặc biệt).
+1. Mở **Tài khoản → Tạo tài khoản**. Nhập tên đăng nhập, email nội bộ, tên hiển thị và mật khẩu tạm riêng (tối thiểu 7 ký tự, không bắt buộc độ phức tạp).
 2. Cổng lưu password hash bằng Identity, không ghi mật khẩu vào audit, báo cáo hoặc log. Không gửi email. Chuyển mật khẩu qua kênh nội bộ được cơ quan chấp thuận.
 3. Tài khoản mới chưa có nhóm quyền. Người có quyền cấp nhóm chọn các nhóm phù hợp trên màn hình chi tiết rồi áp dụng. Không chọn quyền nhạy cảm khi không cần.
 4. Sau đăng nhập, người dùng bắt buộc đổi mật khẩu của mình tại `/admin/account/change-password` trước khi truy cập màn hình hoặc endpoint quản trị. Chỉ đổi mật khẩu và đăng xuất được phép trong thời gian này.

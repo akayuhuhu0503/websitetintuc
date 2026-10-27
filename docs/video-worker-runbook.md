@@ -42,4 +42,4 @@ Web Test mặc định5259; automated E2E5249 tạo tài khoản/password ngẫu
 
 Ước tính đĩa theo original + output/poster + upload chunks + output attempt tạm, cộng buffer và retention. Không chốt cấu hình máy chủ từ fixture vàiKiB. Chưa load test1GiB/IIS/reverseproxy/HA; request chunk Kestrel≤8MiB đã kiểm413 thật, không nới limit PDF/hỏi đáp. IIS/reverseproxy cần giới hạn riêng có phép, theo [ASP.NET Core10 upload](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/file-uploads?view=aspnetcore-10.0).
 
-Giữ SQL timeout **MONITORING / ROOT CAUSE UNKNOWN**, không tăng globaltimeout hoặc stressDev. V04 artifact incident **PARTIAL** không tạo lại raw giả. Scanner Production/privatePII, SMTP/MFA/HTTPS/restore/UAT/quyềnDev/2E/2F/Phase3 vẫn riêng. COPY_ONLY CHECKSUM + RESTORE VERIFYONLY là kiểm backup, **chưa phải thực hiện RESTORE**.
+Giữ SQL timeout **MONITORING / ROOT CAUSE UNKNOWN**, không tăng globaltimeout hoặc stressDev. V04 artifact incident **PARTIAL** không tạo lại raw giả. Scanner Production/privatePII, SMTP/HTTPS/restore/UAT/quyềnDev/2E/2F/Phase3 vẫn riêng. COPY_ONLY CHECKSUM + RESTORE VERIFYONLY là kiểm backup, **chưa phải thực hiện RESTORE**.

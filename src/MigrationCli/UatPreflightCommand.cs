@@ -50,7 +50,7 @@ public static class UatPreflightCommand
             database = config["Sql:ExpectedDatabase"], server = config["Deployment:ExpectedSqlServer"],
             approvalReference = config["Deployment:TargetApprovalReference"], sql = sqlStatus,
             scanner = "NOT RUN: use InquiryScan/Documents/Video --health on target", smtp = "NOT RUN: approved relay acceptance required",
-            iisHttps = "NOT RUN", mfa = "REQUIRED; actual enrolment NOT RUN", writes = 0, productionReady = false
+            iisHttps = "NOT RUN", authentication = "Password + configured CAPTCHA; ATTT acceptance pending", writes = 0, productionReady = false
         };
         Directory.CreateDirectory(Path.GetDirectoryName(report)!);
         await using var file = new FileStream(report, FileMode.CreateNew);

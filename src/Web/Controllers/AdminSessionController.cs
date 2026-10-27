@@ -35,7 +35,6 @@ public sealed class AdminSessionController(SignInManager<PortalUser> signIn,IAnt
         var user=await signIn.UserManager.FindByNameAsync(userName);
         if(user is null||user.Id!=expectedUserId||user.IsDisabled||user.MustChangePassword)return StatusCode(401,new{message="Xác thực lại bằng đúng tài khoản đã mở bản soạn."});
         var result=await signIn.PasswordSignInAsync(user,password,false,true);
-        if(result.RequiresTwoFactor){HttpContext.RequestServices.GetRequiredService<AdminMfaFlow>().Start(HttpContext,user,"/admin");return StatusCode(401,new{message="Cần xác thực hai bước. Mở trang xác thực trong tab riêng; bản soạn hiện tại được giữ.",mfaUrl="/admin/mfa"});}
         if(!result.Succeeded)return StatusCode(401,new{message="Không xác thực được. Nội dung đang nhập vẫn giữ trong trang này."});
         return Json(new{userId=user.Id});
     }

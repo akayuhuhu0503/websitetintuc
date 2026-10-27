@@ -45,7 +45,7 @@ public static class AdminLabels
     public static string Action(string value)=>value switch
     {
         "SaveDraft"=>"Lưu bản nháp","Autosave"=>"Tự lưu bản nháp","Submit"=>"Gửi duyệt","Approve"=>"Duyệt bài","Reject"=>"Trả lại bài","PublishDirect"=>"Xuất bản trực tiếp","PublishApproved"=>"Xuất bản bài đã duyệt","Unpublish"=>"Gỡ bài","Trash"=>"Chuyển vào thùng rác","RestoreRevision"=>"Khôi phục phiên bản","RestoreTrash"=>"Khôi phục bài","BeginEdit"=>"Mở bản sửa","Clone"=>"Nhân bản bài",
-        "AdminPasswordLogin"=>"Đăng nhập bằng mật khẩu","AdminPasswordFailed"=>"Đăng nhập chưa thành công","AdminPasswordLocked"=>"Đăng nhập bị khóa tạm thời","AdminPasswordMfaRequired"=>"Mật khẩu đúng, chờ xác thực hai bước","AdminMfaLogin"=>"Đăng nhập bằng xác thực hai bước","AdminMfaEnabled"=>"Bật xác thực hai bước","AdminMfaReset"=>"Đặt lại xác thực hai bước","AdminMfaRecoveryRegenerated"=>"Tạo lại mã khôi phục",
+        "AdminPasswordLogin"=>"Đăng nhập bằng mật khẩu","AdminPasswordFailed"=>"Đăng nhập chưa thành công","AdminPasswordLocked"=>"Đăng nhập bị khóa tạm thời",
         "SiteSaveDraft"=>"Lưu cấu hình nháp","SitePublish"=>"Áp dụng cấu hình","SiteRestoreDraft"=>"Khôi phục cấu hình","DisclosureCatalogConfirmed"=>"Xác nhận danh mục công khai thông tin",
         _=>value.StartsWith("interaction.",StringComparison.Ordinal)?"Xử lý tương tác":value.StartsWith("document.",StringComparison.Ordinal)?"Kiểm tra tài liệu":value.StartsWith("Account",StringComparison.Ordinal)?"Quản lý tài khoản":value.StartsWith("Role",StringComparison.Ordinal)?"Quản lý nhóm quyền":"Thao tác hệ thống"
     };

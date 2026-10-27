@@ -48,8 +48,8 @@ static class LanSchemaUpgrade
         var after=await Digest();await Write("after-tables.json",after);
         if(before.Any(x=>!after.TryGetValue(x.Key,out var value)||value!=x.Value))throw new InvalidOperationException("Existing LAN rows changed; stop and reconcile before restarting.");
         if(!after.TryGetValue("LandStatisticsVersions",out var stats)||stats.Rows!=0)throw new InvalidOperationException("Expected new empty statistics table, no official data seeded.");
-        await Write("upgrade.json",new{status="PASS",database=LanDemoDeployment.Database,migration=To,preservedTables=before.Count,mismatches=0,identityPasswordsMfaRolesPreserved=true,seeded=false,granted=false});
-        Console.WriteLine("LAN exact schema upgrade PASS; existing rows/Identity/MFA/roles preserved; no seed/grant.");
+        await Write("upgrade.json",new{status="PASS",database=LanDemoDeployment.Database,migration=To,preservedTables=before.Count,mismatches=0,identityPasswordsRolesPreserved=true,seeded=false,granted=false});
+        Console.WriteLine("LAN exact schema upgrade PASS; existing rows/Identity/roles preserved; no seed/grant.");
         async Task Write(string name,object data){var path=Path.Combine(report,name);await using var output=new FileStream(path,FileMode.CreateNew,FileAccess.Write);await JsonSerializer.SerializeAsync(output,data,new JsonSerializerOptions{WriteIndented=true});}
         async Task<Dictionary<string,TableDigest>> Digest()
         {

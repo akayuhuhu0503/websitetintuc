@@ -23,7 +23,7 @@ static class LanStatisticsCheck
             control=await scanner.ScanAsync(new MemoryStream(LanStatisticsSamples.MalwareControl));Check(control.State is InquiryScanState.Infected or InquiryScanState.ScanFailed,"real malware control blocked, never Clean");
             unknown=await scanner.ScanAsync(new MemoryStream(Encoding.UTF8.GetBytes("NONPUBLIC UNAPPROVED LAN BYTES")));Check(unknown.State==InquiryScanState.ScanFailed&&unknown.Error=="NotApprovedAnonymousLanSample","unknown bytes blocked before native/disk");
         }
-        if(!actor.Has(Permissions.ManageSite)||!user.TwoFactorEnabled)
+        if(!actor.Has(Permissions.ManageSite))
         {
             var media=new MediaService(db,storage,new MediaUploadOptions(),config);
             var results=new List<object>();foreach(var invalid in new[]{false,true})
@@ -32,7 +32,7 @@ static class LanStatisticsCheck
                 var testPath=Path.Combine(storage.TempRoot,"SAMPLE_TEST_"+Guid.NewGuid().ToString("N")+".xlsx");await File.WriteAllBytesAsync(testPath,bytes);OfficeDocumentPolicy.Validate(testPath,OfficeDocumentPolicy.Xlsx,media);var preview=LandStatisticsWorkbook.Read(testPath,true);
                 Check(invalid?!preview.Valid&&preview.Issues.Any(x=>x.Row==2&&x.Column=="C"):preview.Valid&&preview.Rows.Count==34,"scanned sample format/parser result correct");results.Add(new{invalid,scan,preview.Issues});
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new{status="PARTIAL_ACCOUNT_ONBOARDING",checks,checkCount=checks.Count,scannerAndParser=results,account=new{user.MustChangePassword,user.TwoFactorEnabled,manageSiteActive=false},identityChanged=false,roleGrantsChanged=false,mfaBypassed=false,malwareControl=new{state=control.State.ToString(),control.Error,control.EngineVersion},draftImport="BLOCKED_ACCOUNT_ONBOARDING",officialStatisticsPublished=false},new JsonSerializerOptions{WriteIndented=true}));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new{status="PARTIAL_ACCOUNT_ONBOARDING",checks,checkCount=checks.Count,scannerAndParser=results,account=new{user.MustChangePassword,manageSiteActive=false},identityChanged=false,roleGrantsChanged=false,malwareControl=new{state=control.State.ToString(),control.Error,control.EngineVersion},draftImport="BLOCKED_ACCOUNT_ONBOARDING",officialStatisticsPublished=false},new JsonSerializerOptions{WriteIndented=true}));
             Console.WriteLine("Real LAN scanner/parser checks PASS; admin draft import BLOCKED_ACCOUNT_ONBOARDING; no account reset/bypass.");return;
         }
         var bad=await service.PreviewAsync(new MemoryStream(LanStatisticsSamples.Workbook(true)),"SAMPLE_TEST_invalid.xlsx",2026,"ha","SAMPLE invalid",user.Id,"Development",default);
@@ -44,7 +44,7 @@ static class LanStatisticsCheck
         Check(await db.Set<LandStatisticsVersion>().AnyAsync(x=>x.Id==version.Id&&x.State=="Draft"&&!x.IsCurrent&&x.Source.StartsWith("SAMPLE/TEST LAN")),"admin confirmed SAMPLE draft, never official");
         try{await service.PublishAsync(version.Id,null,false,user.Id,"Development",default);throw new Exception("Sample publication allowed unexpectedly");}catch(InvalidOperationException){checks.Add("LAN sample publish endpoint service denied");}
         Check(await db.Set<LandStatisticsVersion>().CountAsync(x=>x.IsCurrent)==publicBefore,"public statistics unchanged");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new{status="PASS",checks,checkCount=checks.Count,adminRightsVerified=true,identityChanged=false,mfaBypassed=false,serviceTestNotBrowserLogin=true,sampleDraftId=version.Id,cleanProof=JsonSerializer.Deserialize<JsonElement>(version.ScanProofJson),malwareControl=new{state=control.State.ToString(),control.Error,control.EngineVersion},unknownBytes=unknown.Error,officialStatisticsPublished=false},new JsonSerializerOptions{WriteIndented=true}));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new{status="PASS",checks,checkCount=checks.Count,adminRightsVerified=true,identityChanged=false,serviceTestNotBrowserLogin=true,sampleDraftId=version.Id,cleanProof=JsonSerializer.Deserialize<JsonElement>(version.ScanProofJson),malwareControl=new{state=control.State.ToString(),control.Error,control.EngineVersion},unknownBytes=unknown.Error,officialStatisticsPublished=false},new JsonSerializerOptions{WriteIndented=true}));
         Console.WriteLine("LAN statistics focused checks PASS; SAMPLE draft retained; no Identity/official/Dev changes.");
     }
 }

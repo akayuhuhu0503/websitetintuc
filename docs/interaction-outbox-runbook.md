@@ -19,7 +19,7 @@ Kiểm thử thật: TCP sink nhận DATA rồi cắt kết nối trước ACK; 
 
 Chạy: `rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-interactions-test.ps1 -Finish -Component Worker -NoBuild` (terminal sink riêng trên2525); -Once xử lý một lượt. Không chạy mail worker trên Dev. Scheduler độc lập giữ2B, scanner là nhánh --scan riêng/Test-only, xem runbook scanner.
 
-SQL timeout vẫn MONITORING / ROOT CAUSE UNKNOWN, raw smoke2B V04 đã mất vẫn PARTIAL. Chưa scanner thật, SMTP Production/TLS/rotation/alerts, MFA/restore/UAT/retention pháp lý. Toàn dự án CHƯA PRODUCTION READY.
+SQL timeout vẫn MONITORING / ROOT CAUSE UNKNOWN, raw smoke2B V04 đã mất vẫn PARTIAL. Chưa scanner thật, SMTP Production/TLS/rotation/alerts, restore/UAT/retention pháp lý. Toàn dự án CHƯA PRODUCTION READY.
 
 ---
 

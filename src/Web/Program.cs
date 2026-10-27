@@ -27,7 +27,7 @@ builder.Services.AddSingleton(publicUrls);
 builder.Services.AddSingleton(storage);
 builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => DatabaseSettings.Options(builder.Configuration));
 builder.Services.AddScoped<PortalDbContext>();
-builder.Services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+builder.Services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders().AddSignInManager<PasswordOnlySignInManager>();
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/admin/login";
@@ -103,8 +103,6 @@ builder.Services.AddScoped<WorkflowService>();
 builder.Services.AddSingleton(SchedulerOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<SchedulerService>();
 builder.Services.AddScoped<CurrentPermissionService>();
-builder.Services.AddScoped<AdminMfaService>();
-builder.Services.AddScoped<AdminMfaFlow>();
 builder.Services.AddSingleton(InteractionMailOptions.FromConfiguration(builder.Configuration,builder.Environment.EnvironmentName));
 builder.Services.AddScoped<InteractionService>();
 builder.Services.AddSingleton(PublicCaptchaOptions.Load(builder.Configuration,storage,builder.Environment.EnvironmentName));
@@ -172,8 +170,6 @@ app.Use(async (context, next) =>
         var user = await manager.GetUserAsync(context.User);
         if (user?.MustChangePassword == true) { context.Response.Redirect("/admin/account/change-password"); return; }
     }
-    if(UatDeployment.RequireMfa(builder.Configuration)&&context.User.Identity?.IsAuthenticated==true&&context.Request.Path.StartsWithSegments("/admin")&&!context.Request.Path.StartsWithSegments("/admin/account/mfa")&&!context.Request.Path.StartsWithSegments("/admin/account/logout")&&!context.Request.Path.StartsWithSegments("/admin/logout")&&!context.Request.Path.StartsWithSegments("/admin/account/change-password")&&context.User.FindFirst("amr")?.Value!="mfa")
-    {if(context.Request.Headers["X-Editor-Request"]=="true"){context.Response.StatusCode=403;return;}context.Response.Redirect("/admin/account/mfa");return;}
     await next();
 });
 app.UseAuthorization();

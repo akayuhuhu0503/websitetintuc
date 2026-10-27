@@ -2,14 +2,14 @@
 
 Website trên LAN được cấp: `http://192.168.0.122:5188/`; quản trị `/admin/login`.
 Đây là demo hạn chế trên máy phát triển, chưa phải UAT/Production. Không dùng dữ liệu cá nhân thật.
-Tài khoản và mật khẩu cấp riêng ngoài Git; không đăng thông tin đăng nhập, khóa MFA hoặc tệp cấu hình lên repository.
+Tài khoản và mật khẩu cấp riêng ngoài Git; không đăng thông tin đăng nhập, tệp cấu hình lên repository.
 
-Đăng nhập bằng tài khoản riêng → đổi mật khẩu lần đầu nếu được yêu cầu → đăng ký/xác nhận TOTP tại `/admin/account/mfa`.
-Không reset tài khoản hoặc tắt MFA để kiểm thử. Người viết gửi duyệt; người duyệt xuất bản đúng revision; quản trị quản lý cấu hình theo quyền.
+Đăng nhập bằng tài khoản riêng → đổi mật khẩu lần đầu nếu được yêu cầu → vào quản trị theo quyền. Mật khẩu tối thiểu 7 ký tự, không yêu cầu độ phức tạp.
+Không reset tài khoản khi nâng code. Người viết gửi duyệt; người duyệt xuất bản đúng revision; quản trị quản lý cấu hình theo quyền.
 
 ## FR-14: thử Excel thống kê
 
-1. Sau khi hoàn tất MFA, mở `/admin/thong-ke-dat-dai` bằng tài khoản Quản trị.
+1. Sau khi đăng nhập, mở `/admin/thong-ke-dat-dai` bằng tài khoản Quản trị.
 2. Tải **SAMPLE/TEST hợp lệ** hoặc **SAMPLE/TEST lỗi** từ chính trang quản trị.
 3. Upload lại nguyên tệp, chọn năm từ 2025, đơn vị và nguồn có nhãn SAMPLE/TEST.
 4. Mẫu hợp lệ: Defender thật quét Clean → xem trước 34 tỉnh → xác nhận lưu nháp.
@@ -26,4 +26,6 @@ Muốn thử Excel nghiệp vụ khác cần policy riêng được phê duyệt
 `powershell -NoProfile -File scripts/run-lan-demo.ps1` khởi động; `scripts/stop-lan-demo.ps1` dừng.
 Giữ database `LandPortal_LanDemo`, private config/media/keys và tài khoản hiện có. Không chạy bootstrap/reseed khi nâng code.
 SMTP và Worker LAN vẫn tắt. Không mở firewall hoặc đổi profile mạng nếu chưa được cấp quyền.
-BA cần xác minh từ máy mình; HTTP smoke từ máy chủ không thay nghiệm thu MFA/ATTT/UAT.
+BA cần xác minh từ máy mình; HTTP smoke từ máy chủ không thay nghiệm thu ATTT/UAT.
+
+BA đã xác nhận upload SAMPLE, scanner, preview đủ34 tỉnh và lưu nháp thành công; không cần chạy lại FR-14 cho thay đổi xác thực này. Đây là xác nhận BA trên LAN, chưa phải nghiệm thu UAT tại TTDL.

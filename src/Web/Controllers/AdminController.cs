@@ -35,18 +35,18 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
             return await LoginView(model, error.StatusCode);
         }
         if (!ModelState.IsValid) { ModelState.AddModelError("", "Nhập tên đăng nhập và mật khẩu hợp lệ, rồi trả lời câu hỏi mới."); return await LoginView(model, 400); }
-        var result = await signIn.PasswordSignInAsync(model.UserName, model.Password, isPersistent: false, lockoutOnFailure: true);
         var loginAccount = await signIn.UserManager.FindByNameAsync(model.UserName);
+        var result = loginAccount is null || loginAccount.IsDisabled ? Microsoft.AspNetCore.Identity.SignInResult.Failed
+            : await signIn.PasswordSignInAsync(loginAccount, model.Password, isPersistent: false, lockoutOnFailure: true);
         if(loginAccount!=null&&!DevDemoPolicy.Allowed(await signIn.UserManager.GetClaimsAsync(loginAccount),environment.EnvironmentName,db.Database.GetDbConnection().Database))
         {await signIn.SignOutAsync();result=Microsoft.AspNetCore.Identity.SignInResult.Failed;}
         // Never log credentials, CAPTCHA answers, email/IP or the submitted name.
-        // MFA-required is a partial authentication result, not a completed login.
-        db.AuditLogs.Add(new(){Actor=loginAccount?.Id??"anonymous",Action=result.Succeeded?"AdminPasswordLogin":result.RequiresTwoFactor?"AdminPasswordMfaRequired":result.IsLockedOut?"AdminPasswordLocked":"AdminPasswordFailed",Detail="Identity password outcome; no credentials recorded"});
+        db.AuditLogs.Add(new(){Actor=loginAccount?.Id??"anonymous",Action=result.Succeeded?"AdminPasswordLogin":result.IsLockedOut?"AdminPasswordLocked":"AdminPasswordFailed",Detail="Identity password outcome; no credentials recorded"});
         try { await db.SaveChangesAsync(); }
-        catch { if(result.Succeeded||result.RequiresTwoFactor)await signIn.SignOutAsync();throw; }
-        if(result.RequiresTwoFactor){var account=await signIn.UserManager.FindByNameAsync(model.UserName);if(account==null||account.IsDisabled)return Forbid();HttpContext.RequestServices.GetRequiredService<AdminMfaFlow>().Start(HttpContext,account,Url.IsLocalUrl(model.ReturnUrl)?model.ReturnUrl!:"/admin");return Redirect("/admin/mfa");}
+        catch { if(result.Succeeded)await signIn.SignOutAsync();throw; }
         if (result.Succeeded) {
             var target=Url.IsLocalUrl(model.ReturnUrl) ? model.ReturnUrl! : "/admin";
+            if((target.StartsWith("/admin/account/mfa",StringComparison.OrdinalIgnoreCase)||target.StartsWith("/admin/mfa",StringComparison.OrdinalIgnoreCase)))target="/admin";
             if(target == "/admin") { var account=await signIn.UserManager.FindByNameAsync(model.UserName);var current=await permissions.GetAsync(account!.Id);if(!current.Has(Permissions.Create)&&!current.Has(Permissions.ViewOwn)&&!current.Has(Permissions.ViewAll)&&!current.Has(Permissions.Review)&&!current.Has(Permissions.PublishApproved)) target=current.Has(Permissions.ManageUsers)?"/admin/users":current.Has(Permissions.ManageRoles)?"/admin/roles":current.Has(Permissions.ManageSite)||current.Has(Permissions.PublishSite)||current.Has(Permissions.ViewSite)?"/admin/site":"/admin/account/change-password"; }
             return LocalRedirect(target);
         }

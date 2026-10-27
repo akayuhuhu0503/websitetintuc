@@ -6,7 +6,7 @@
 
 ## Ba tài khoản giả lập — chỉ Development Dev/Test
 
-Tên: `dev-srs12-writer`, `dev-srs12-reviewer`, `dev-srs12-admin`. Hai tài khoản đầu có phạm vi chuyên mục được chỉ định lúc tạo; Người viết không đăng, Người duyệt có duyệt/đăng bản được duyệt/gỡ và không quản trị tài khoản/menu. Quản trị có quyền nghiệp vụ hiện hành, chỉ trên local Dev/Test. Hết hạn14ngày; lần đầu đổi mật khẩu. Giữ CAPTCHA/lockout/MFA; không bật/tắt cơ chế xác thực để tiện thử.
+Tên: `dev-srs12-writer`, `dev-srs12-reviewer`, `dev-srs12-admin`. Hai tài khoản đầu có phạm vi chuyên mục được chỉ định lúc tạo; Người viết không đăng, Người duyệt có duyệt/đăng bản được duyệt/gỡ và không quản trị tài khoản/menu. Quản trị có quyền nghiệp vụ hiện hành, chỉ trên local Dev/Test. Hết hạn14ngày; lần đầu đổi mật khẩu. Giữ CAPTCHA/lockout; không bật/tắt cơ chế xác thực để tiện thử.
 
 Lệnh bootstrap tường minh, idempotent, cần backup và đúng target. Chuẩn bị biến môi trường private trước, không ghi secret vào lệnh/tài liệu:
 
@@ -76,7 +76,7 @@ Tạo/sửa cơ quan ban hành, loại văn bản và lĩnh vực qua mẫu, lư
 
 ## Phạm vi còn lại
 
-2C: tiếp nhận/kiểm duyệt câu hỏi, liên hệ, bình luận dưới bài và góp ý dự thảo; không có nút gửi thành công giả ở 2B. 2D: video upload trực tiếp từ máy và xử lý tệp. Chuyển toàn nguồn, scanner, MFA đặc quyền, restore toàn hệ, UAT và production thuộc các checkpoint sau. `RESTORE VERIFYONLY` không phải diễn tập restore toàn hệ.
+2C: tiếp nhận/kiểm duyệt câu hỏi, liên hệ, bình luận dưới bài và góp ý dự thảo; không có nút gửi thành công giả ở 2B. 2D: video upload trực tiếp từ máy và xử lý tệp. Chuyển toàn nguồn, scanner, kiểm soát tài khoản đặc quyền, restore toàn hệ, UAT và production thuộc các checkpoint sau. `RESTORE VERIFYONLY` không phải diễn tập restore toàn hệ.
 
 
 SRS1.1 — nhận diện và mẫu bài

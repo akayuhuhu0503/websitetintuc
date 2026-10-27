@@ -13,7 +13,7 @@ media, snapshot crawler, tài khoản, chứng chỉ hoặc cấu hình bí mậ
   phân công, SLA, tệp private và outbox có đối soát.
 - Upload video trực tiếp, worker quét/xử lý, poster và HTTP Range.
 - Lịch tuần có phiên bản, đọc DOCX và preview trước xuất bản.
-- Identity, CAPTCHA đăng nhập, TOTP/recovery codes và thu hồi phiên.
+- Identity, CAPTCHA đăng nhập, mật khẩu tối thiểu 7 ký tự và thu hồi phiên.
 - Crawler/import có checkpoint, chống trùng, manifest, chữ ký và verify/rollback.
 
 **CHƯA PRODUCTION READY.** Có chức năng còn chờ dữ liệu nghiệp vụ, quyền phê duyệt
@@ -71,7 +71,7 @@ rtk proxy powershell -NoProfile -File scripts/package-uat.ps1 -RunId <UNIQUE_RUN
 Xem [hướng dẫn UAT](scripts/uat-operator-steps.md),
 [config mẫu](scripts/uat-config.example.json) và [launcher](scripts/uat-runtime.ps1).
 UAT dùng Staging; `LandPortal_Uat` chỉ là tên đề xuất, chưa được cấp database.
-Config/kho private nằm ngoài publish; SQL TLS hợp lệ và MFA bắt buộc. Scanner là
+Config/kho private nằm ngoài publish; SQL TLS hợp lệ và phân quyền phía server. Scanner là
 Clamd hoặc MicrosoftDefenderOnPrem đã được đơn vị vận hành phê duyệt, pin đúng
 identity/hash và kiểm chứng tại đích. SMTP mặc định tắt.
 Gói publish không tự cài IIS/service, cấp quyền, migrate, gửi thư hoặc deploy.

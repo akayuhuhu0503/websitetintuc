@@ -58,4 +58,4 @@ Worker claim nguyên tử; commit bị chặn khi token/generation đã đổi h
 
 Mặc định local polling 5 giây, lease 60 giây, chạy bù tối đa 15 phút và 4 attempts SQL có backoff; validation/quyền không retry vô hạn. Đây là ngưỡng ứng dụng local, không cam kết SLA đến từng giây. Worker/web đọc cùng SQL/kho/environment; shutdown giữ lịch SQL và để lease hết hạn theo policy. `-AllowUnscannedMedia` chỉ là lựa chọn Development local tường minh, tệp vẫn NotScanned; Staging/Production/worker không được dùng quyền admin/query/header để lách scan policy.
 
-Các mốc 2C (tương tác công chúng có bình luận kiểm duyệt), 2D (video tải trực tiếp), Giai đoạn 3 (chuyển toàn nguồn), scanner/MFA/restore/UAT/production vẫn có ranh giới nghiệm thu riêng. Không suy ra các mốc đó hoàn tất từ model, UI hoặc test 2B.
+Các mốc 2C (tương tác công chúng có bình luận kiểm duyệt), 2D (video tải trực tiếp), Giai đoạn 3 (chuyển toàn nguồn), scanner/restore/UAT/production vẫn có ranh giới nghiệm thu riêng. Không suy ra các mốc đó hoàn tất từ model, UI hoặc test 2B.

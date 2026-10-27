@@ -112,7 +112,7 @@ if(args.Contains("--delivery-only"))
     // Receipt review deliberately accepts only its historical Test sink roots.
     // Run F4 separately under a unique phase3b sink artifact root, not by widening
     // the application's trusted receipt boundary for the new test namespace.
-    await Run("Delivery real HTTP Identity CAPTCHA TOTP enrollment login replay recovery reset session revoke",()=>DeliveryTests.MfaHttp(root,config,options));
+    await Run("Delivery password-only Identity and validation HTTP",()=>OwnPasswordHttpTests.RunAsync(root,config,options));
     foreach(var risk in VideoTests.Cases(root,options,config).Where(x=>x.Name.StartsWith("2D genuine Defender video")||x.Name.StartsWith("2D native FFmpeg")))await Run(risk.Name,risk.Test);
     var folder=TestEvidencePaths.At(root);Directory.CreateDirectory(folder);await File.WriteAllTextAsync(Path.Combine(folder,"delivery-tests.json"),JsonSerializer.Serialize(new{utc=DateTimeOffset.UtcNow,failures=failed,tests,fullRegression="NOT RUN",devWrites=0},new JsonSerializerOptions{WriteIndented=true}));return failed==0?0:1;
 }

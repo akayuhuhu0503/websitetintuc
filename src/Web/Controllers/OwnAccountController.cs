@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace LandPortal.Web.Controllers;
 
 [Authorize]
-public sealed class OwnAccountController(UserManager<PortalUser> users, SignInManager<PortalUser> signIn, PortalDbContext db) : Controller
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+public sealed class OwnAccountController(UserManager<PortalUser> users, SignInManager<PortalUser> signIn, PortalDbContext db, ILogger<OwnAccountController> logger) : Controller
 {
     [HttpGet("admin/account/change-password")]
     public async Task<IActionResult> ChangePassword()
@@ -32,16 +33,33 @@ public sealed class OwnAccountController(UserManager<PortalUser> users, SignInMa
                 {
                     db.AuditLogs.Add(new AuditLog { Actor = user.Id, Action = "AccountPasswordChanged", Detail = System.Text.Json.JsonSerializer.Serialize(new { user.Id, requiredChangeBefore = model.RequiredChange, requiredChangeAfter = false }) });
                     await db.SaveChangesAsync(); await transaction.CommitAsync();
-                    await signIn.RefreshSignInAsync(user); TempData["Success"] = "Đã đổi mật khẩu. Các phiên cũ bị thu hồi."; return Redirect("/admin");
+                    await signIn.RefreshSignInAsync(user);
+                    logger.LogInformation("Own password change committed; initial-change requirement cleared.");
+                    TempData["Success"] = "Đã đổi mật khẩu. Các phiên cũ bị thu hồi.";
+                    return Redirect("/admin");
                 }
                 ModelState.AddModelError("", "Không lưu được trạng thái tài khoản; đăng nhập lại và đổi mật khẩu.");
             }
-            else ModelState.AddModelError("", "Mật khẩu hiện tại không đúng hoặc mật khẩu mới không đáp ứng chính sách Identity.");
+            else
+            {
+                foreach (var error in result.Errors) ModelState.AddModelError("", PasswordError(error.Code));
+                logger.LogInformation("Own password change rejected by Identity: {ErrorCodes}", string.Join(",", result.Errors.Select(x => x.Code)));
+            }
         }
+        else logger.LogInformation("Own password form rejected by validation: {ErrorCount} errors", ModelState.ErrorCount);
         model.CurrentPassword = ""; model.NewPassword = ""; model.ConfirmPassword = "";
-        ModelState.Remove(nameof(model.CurrentPassword)); ModelState.Remove(nameof(model.NewPassword)); ModelState.Remove(nameof(model.ConfirmPassword));
+        // Clear submitted secrets without deleting field validation errors.
+        foreach (var key in new[] { nameof(model.CurrentPassword), nameof(model.NewPassword), nameof(model.ConfirmPassword) })
+            ModelState.SetModelValue(key, "", "");
         return View("~/Views/Accounts/ChangePassword.cshtml", model);
     }
+    private string PasswordError(string code) => code switch
+    {
+        "PasswordMismatch" => "Mật khẩu hiện tại không đúng. Vui lòng nhập lại.",
+        "PasswordTooShort" => $"Mật khẩu phải có tối thiểu {users.Options.Password.RequiredLength} ký tự.",
+        "ConcurrencyFailure" => "Tài khoản vừa được cập nhật. Vui lòng tải lại trang và thử lại.",
+        _ => "Chưa đổi được mật khẩu. Vui lòng kiểm tra thông tin và thử lại."
+    };
     [HttpPost("admin/account/logout")]
     public async Task<IActionResult> Logout() { await signIn.SignOutAsync(); return Redirect("/admin/login"); }
     private Task<PortalUser?> Current() => users.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "");

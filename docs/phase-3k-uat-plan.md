@@ -19,7 +19,7 @@ Trạng thái **PREPARED / UAT NOT RUN**. Áp dụng SRS v1.2 chính thức; kh�
 | U11 | Quản trị tài khoản/quyền/menu/cấu hình và nhật ký | Không tự nâng quyền, revoke có hiệu lực; draft không đổi live; private logo/banner không lộ; /admin/audit chỉ quản trị toàn hệ thống | 2 session, endpoint403, config revision/live pointers; audit không chứa credential/chi tiết hồ sơ riêng tư | NOT RUN UAT; audit/revoke PASS LOCAL mới |
 | U12 | Tìm kiếm/tra cứu tiếng Việt và public inquiry | Có dấu/không dấu, SQL paging/filter; không lộ draft/PII/chưa duyệt | Query, SQL/public IDs và HTTP negative | NOT RUN UAT |
 | U13 | Đối soát dữ liệu chuyển theo AC05.1–05.3 | 50 URL cũ từ cả2 nguồn,20 bài có media local, tổng đối chiếu từng loại | Danh sách chọn mẫu thật, mapping301/hash/report ngoại lệ | BLOCKED: NukeViet/coverage chưa đủ |
-| U14 | Bootstrap riêng, đăng nhập CAPTCHA/MFA và thu hồi phiên | Bootstrap/Web cùng password ≥14; thiếu/weak credential không tạo quyền; CAPTCHA không thay password/MFA; password outcome có audit; challenge/replay/recovery fail-closed | Binary cuối; tài khoản do đơn vị cấp; không ghi secret/OTP | NOT RUN UAT: bootstrap/password audit PASS LOCAL mới; MFA lịch sử riêng, cần identity/policy đích |
+| U14 | Bootstrap riêng, đăng nhập CAPTCHA/mật khẩu và thu hồi phiên | Password ≥7, 6 bị từ chối; CAPTCHA không thay xác thực; lockout5lần/15phút, idle30phút, CSRF và audit; phân quyền server | Binary cuối; tài khoản do đơn vị cấp; không ghi secret | NOT RUN UAT: kiểm tra tập trung local không thay nghiệm thu tại TTDL |
 | U15 | DBA/vận hành backup/restore/backout | SQL+media+keys+config nhất quán trên recovery DB riêng; không mất cập nhật sau backup | Restore thật mới nhất, RPO/RTO, hash/relations/ACL, biên bản | PARTIAL: actual restore250 local PASS riêng; backup mới nhất/target chưa restore thật |
 | U16 | Nghiệm thu HTTPS/IIS/Worker/SMTP/scanner/NFR | Host/TLS hợp lệ, không public private files, monitor/alert/least privilege, 4G/a11y/browser/an ninh | Target staging được cấp và ATTT/QA ký nhận | BLOCKED hạ tầng đích; profile Staging/LandPortal_Uat đã có |
 
@@ -32,14 +32,12 @@ Mỗi buổi ghi: người thực hiện/đơn vị, thời điểm, environment
 - Media/temp/quarantine/snapshot/keys roots ngoài webroot; ACL, backup retention/offsite/encryption, dung lượng video và quotas, worker lifecycle/restart/monitor/alert.
 - Scanner engine/policy PII/cloud submission/quarantine, chứng minh Clean/EICAR/failure/definitions và proof đúng byte trên đích. DefenderTest không được dùng làm provider Production.
 - SMTP host/port/TLS/from/relay rules và secret qua kho bí mật của đơn vị; chỉ test sink tại local. Không gửi thư thật hoặc chép secret vào `.env`/repository.
-- Người phụ trách MFA, phương thức được ATTT duyệt, quy trình enrol/recovery/revoke/hỗ trợ người dùng; tài khoản UAT và vai trò/phạm vi được phê duyệt.
+- Đầu mối ATTT xem xét quyết định không dùng MFA/TOTP trước khi mở Internet; tài khoản UAT, vai trò/phạm vi, quy trình cấp/reset/thu hồi phiên được phê duyệt.
 - Thời gian UAT/cutover, người chấp thuận coverage/ngoại lệ, mapping NukeViet, DNS301 và quyết định rollback. Public crawl authority không cấp quyền triển khai hoặc Apply Dev mới.
 
 ## Trạng thái phần mềm hiện hành (22/10/2026)
 
-Identity CAPTCHA + TOTP/recovery/replay/revoke đã có bằng chứng local ở delivery;
-không bật/reset tài khoản Dev. U14 vẫn NOT RUN UAT đến khi cán bộ dùng tài khoản,
-identity và policy MFA đích được cấp. Không dùng TwoFactorEnabled đơn lẻ làm bằng chứng.
+Mã nguồn hiện dùng Identity mật khẩu tối thiểu7 + CAPTCHA, không còn luồng MFA/TOTP; không reset tài khoản khi nâng code. U14 vẫn NOT RUN UAT đến khi cán bộ dùng tài khoản và hạ tầng đích được cấp; nghiệm thu ATTT riêng.
 
 Web/Worker có profile Staging; LandPortal_Uat chỉ là tên đề xuất chưa được cấp.
 SQL TLS/host/private roots fail-closed; scanner Clamd hoặc MicrosoftDefenderOnPrem

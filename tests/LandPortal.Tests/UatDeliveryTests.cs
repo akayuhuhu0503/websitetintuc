@@ -72,7 +72,7 @@ public static class UatDeliveryTests
     public static async Task TrafficSql(DbContextOptions<PortalDbContext> options)
     {
         var protection=new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider();
-        PublicTraffic Service(PortalDbContext db)=>new(db,protection,new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicTraffic>.Instance);
+        PublicTraffic Service(PortalDbContext db)=>new(db,protection,new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicTraffic>.Instance,new PublicContentQuery(db));
         var now=DateTimeOffset.UtcNow;var hash=ScannerTests.Hash(Encoding.ASCII.GetBytes(Guid.NewGuid().ToString()));
         await using var before=new PortalDbContext(options);var baseline=(await Service(before).ReadAsync())!;await Service(before).RecordAsync(hash,now);
         async Task Record(DateTimeOffset at){await using var other=new PortalDbContext(options);await Service(other).RecordAsync(hash,at);}

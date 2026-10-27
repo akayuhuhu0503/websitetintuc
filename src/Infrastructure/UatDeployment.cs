@@ -14,7 +14,6 @@ public static class UatDeployment
         !database.Contains("REPLACE", StringComparison.OrdinalIgnoreCase);
 
     public static bool Enabled(IConfiguration c) => c["Deployment:Profile"] == "UAT";
-    public static bool RequireMfa(IConfiguration c) => Enabled(c) || c["AdminSession:RequireMfa"] == "true";
     public static bool Validate(IConfiguration c, string environment)
     {
         if (!Enabled(c)) return false;

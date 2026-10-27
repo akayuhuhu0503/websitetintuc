@@ -85,4 +85,4 @@ Người có `content.schedule` và quyền xuất bản phù hợp mở **Hẹn
 
 Banner/logo/menu/trang chủ có cấu hình nháp, xem trước riêng và thao tác áp dụng có quyền riêng; lưu nháp không đổi public. Xem [hướng dẫn quản trị cổng](site-admin-guide.md). Quản trị tài khoản, nhóm và thu hồi phiên xem [hướng dẫn tài khoản](account-admin-guide.md); không tự thêm quyền vào tài khoản vận hành khi thiếu quyền.
 
-Bình luận dưới bài và các nội dung công chúng gửi phải có kiểm duyệt ở 2C. Video mới phải tải trực tiếp từ máy biên tập viên ở 2D, không thay bằng YouTube. Chuyển toàn bộ dữ liệu nguồn thuộc Giai đoạn 3 bằng công cụ tự động, không yêu cầu biên tập viên nhập lại từng tin. Scanner, restore thực, MFA, UAT và nghiệm thu production chưa được xác nhận bởi tài liệu hướng dẫn này.
+Bình luận dưới bài và các nội dung công chúng gửi phải có kiểm duyệt ở 2C. Video mới phải tải trực tiếp từ máy biên tập viên ở 2D, không thay bằng YouTube. Chuyển toàn bộ dữ liệu nguồn thuộc Giai đoạn 3 bằng công cụ tự động, không yêu cầu biên tập viên nhập lại từng tin. Scanner, restore thực, UAT và nghiệm thu production chưa được xác nhận bởi tài liệu hướng dẫn này.

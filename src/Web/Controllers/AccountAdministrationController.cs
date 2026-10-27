@@ -39,7 +39,7 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
             catch (UnauthorizedAccessException) { return Forbid(); }
             catch (InvalidOperationException error) { ModelState.AddModelError("", error.Message); }
         }
-        model.TemporaryPassword = ""; ModelState.Remove(nameof(model.TemporaryPassword));
+        model.TemporaryPassword = ""; ModelState.SetModelValue(nameof(model.TemporaryPassword), "", "");
         return View("~/Views/Accounts/Create.cshtml", model);
     }
     [HttpGet("admin/users/{id}")]

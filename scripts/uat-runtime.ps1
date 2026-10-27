@@ -23,7 +23,7 @@ foreach($node in @($configPath,$homePath,$publishPath)){if((Get-Item -LiteralPat
 $env:LANDPORTAL_HOME=$homePath;$env:LANDPORTAL_CONFIG=$configPath
 $env:DOTNET_ENVIRONMENT='Staging';$env:ASPNETCORE_ENVIRONMENT='Staging'
 # Avoid ambient local/project override of security/SQL values. No persistent env
-# is changed. Runtime validates SQL TLS/target, private paths, MFA and scanner.
+# is changed. Runtime validates SQL TLS/target, private paths, authorization and scanner.
 foreach($entry in @(Get-ChildItem Env:|Where-Object {$_.Name -match '^(ConnectionStrings|Sql|Storage|Runtime|Mail|Scanner|Video|Media|Deployment|Public|AdminSession|Captcha|Bootstrap)__'})){
  [Environment]::SetEnvironmentVariable($entry.Name,$null,'Process')
 }

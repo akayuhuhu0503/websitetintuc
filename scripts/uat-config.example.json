@@ -51,7 +51,7 @@
     "PolicyReference": ""
   },
   "AdminSession": {
-    "RequireMfa": "true"
+    "IdleMinutes": "30"
   },
   "Video": {
     "Enabled": "true",
