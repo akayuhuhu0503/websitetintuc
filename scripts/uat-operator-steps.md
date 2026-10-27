@@ -252,6 +252,8 @@ Gốc XLSX nằm trong private media `land-statistics/`, không có public Media
 
 ## Bàn giao source và dữ liệu là hai việc riêng
 
+Gói dữ liệu và công cụ bổ sung được mô tả tại [hướng dẫn bàn giao dữ liệu UAT](../docs/uat-data-handoff.md). Dữ liệu `Ready` tách khỏi ứng viên cần phê duyệt/quét tại đích; không đưa 53 NotScanned vào dữ liệu nhập. Source công cụ nằm tại `tools/UatDataHandoff/`, launcher tại `scripts/uat-data.ps1`; build từ đúng commit bàn giao đã được push. Các gói dữ liệu cũ không tự được cập nhật khi pull source. Không chạy import khi thiếu target, signer tổ chức, approval đúng manifest/plan và backup được verify.
+
 ### Chính sách xác thực bàn giao SRS v1.2
 
 Đăng nhập bằng tên tài khoản + mật khẩu và CAPTCHA theo cấu hình; MFA/TOTP đã được loại bỏ khỏi mã nguồn. Mật khẩu tối thiểu 7 ký tự, không bắt buộc hoa/thường/số/ký tự đặc biệt. Identity dùng cùng policy khi tạo, đổi và reset; không tự reset mật khẩu hoặc thay quyền của tài khoản hiện hữu. Schema Identity cũ giữ nguyên, cờ hai bước cũ không chặn đăng nhập.

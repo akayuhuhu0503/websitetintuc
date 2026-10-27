@@ -53,6 +53,9 @@
   "AdminSession": {
     "IdleMinutes": "30"
   },
+  "SafeImport": {
+    "ApprovedSignerThumbprints": ""
+  },
   "Video": {
     "Enabled": "true",
     "ProcessorApproved": "false",
