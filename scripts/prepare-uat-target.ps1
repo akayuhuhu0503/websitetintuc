@@ -21,7 +21,18 @@ $c=Get-Content -LiteralPath (Join-Path $code 'ops/uat-config.example.json') -Raw
 $c.Deployment.TargetApproved='true';$c.Deployment.TargetApprovalReference=$t.ApprovalReference;$c.Deployment.ExpectedSqlServer=$t.SqlServer;$c.Deployment.ExpectedHost=$t.HostName
 $c.Sql.ExpectedDatabase=$t.Database
 $sql=New-Object System.Data.SqlClient.SqlConnectionStringBuilder
-$sql['Data Source']=$t.SqlServer;$sql['Initial Catalog']=$t.Database;$sql['Integrated Security']=$true;$sql['Encrypt']=$true;$sql['TrustServerCertificate']=$false
+$mode=if($t.PSObject.Properties.Name -contains 'SqlAuthentication'){[string]$t.SqlAuthentication}else{'Windows'}
+if($mode -cnotin @('Windows','SqlPassword')){throw 'Explicit supported SQL authentication required'}
+$sql['Data Source']=$t.SqlServer;$sql['Initial Catalog']=$t.Database;$sql['Integrated Security']=($mode -eq 'Windows');$sql['Encrypt']=$true;$sql['TrustServerCertificate']=$false
+$c.Deployment|Add-Member NoteProperty SqlAuthentication $mode -Force
+if($mode -eq 'SqlPassword'){
+ if(-not($t.PSObject.Properties.Name -contains 'SqlLogin') -or [string]::IsNullOrWhiteSpace($t.SqlLogin) -or $t.SqlLogin -imatch '^(sa)$|REPLACE|[\r\n]'){throw 'Approved non-sa SQL login required; password is supplied separately in private configuration'}
+ $sql['User ID']=[string]$t.SqlLogin
+ $c.Deployment|Add-Member NoteProperty ExpectedSqlLogin ([string]$t.SqlLogin) -Force
+}
+$physical=if($t.PSObject.Properties.Name -contains 'SqlServerIdentity' -and -not [string]::IsNullOrWhiteSpace($t.SqlServerIdentity)){[string]$t.SqlServerIdentity}else{if($mode -eq 'SqlPassword'){throw 'DBA-confirmed physical SQL Server identity required'};[string]$t.SqlServer}
+if($physical -match 'REPLACE|[\r\n]'){throw 'Confirmed physical SQL Server identity required'}
+$c.Deployment|Add-Member NoteProperty ExpectedSqlServerIdentity $physical -Force
 $c.ConnectionStrings.Portal=$sql.ConnectionString;$c.Public.BaseUrl='https://'+$t.HostName
 $c.Storage.MediaRoot=Join-Path $homePath 'media';$c.Storage.SnapshotRoot=Join-Path $homePath 'snapshots';$c.Storage.TempRoot=Join-Path $homePath 'temp';$c.Storage.KeysRoot=Join-Path $homePath 'keys'
 $c.Scanner.Provider=if($t.PSObject.Properties.Name -contains 'ScannerProvider'){[string]$t.ScannerProvider}else{'Clamd'}
@@ -35,11 +46,12 @@ elseif($c.Scanner.Provider -cne 'Clamd'){throw 'Unsupported UAT scanner provider
 $c.Scanner.ClamdHost=$t.ScannerHost;$c.Scanner.ClamdPort=[string]$t.ScannerPort;$c.Scanner.PolicyReference=$t.ScannerPolicyReference
 $c.Mail.Host=$t.SmtpHost;$c.Mail.Port=[string]$t.SmtpPort;$c.Mail.From=$t.SmtpFrom
 # Runtime role secret, mail credentials and bootstrap credentials remain absent.
-Assert-UatTarget $c
+# SQL-password packet intentionally has no secret and cannot start runtime yet.
+if($mode -eq 'Windows'){Assert-UatTarget $c}
 $schema=Get-Content -LiteralPath (Join-Path $code 'ops/schema-idempotent.sql') -Raw -Encoding UTF8
 $marker='-- LANDPORTAL_SCHEMA_BODY';$offset=$schema.IndexOf($marker,[StringComparison]::Ordinal)
 if($offset -lt 0 -or $schema.LastIndexOf($marker,[StringComparison]::Ordinal) -ne $offset){throw 'Schema template marker missing or duplicated'}
-$serverLiteral=([string]$t.SqlServer).Replace("'","''");$dbLiteral=([string]$t.Database).Replace("'","''")
+$serverLiteral=$physical.Replace("'","''");$dbLiteral=([string]$t.Database).Replace("'","''")
 $header=":ON ERROR EXIT`r`nUSE ["+$t.Database+"];`r`nGO`r`nIF DB_NAME() <> N'"+$dbLiteral+"' OR COALESCE(CAST(SERVERPROPERTY('ServerName') AS nvarchar(128)),N'') <> N'"+$serverLiteral+"'`r`nBEGIN`r`n ;THROW 51000, 'UAT exact target mismatch: stop without applying schema.', 1;`r`nEND`r`nGO`r`n"
 [void][IO.Directory]::CreateDirectory($output)
 $encoding=[Text.UTF8Encoding]::new($false)

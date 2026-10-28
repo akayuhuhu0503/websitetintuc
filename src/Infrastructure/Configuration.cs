@@ -55,7 +55,9 @@ public static class DatabaseSettings
     {
         var raw = config.GetConnectionString("Portal");
         if (string.IsNullOrWhiteSpace(raw)) throw new InvalidOperationException("Thiếu ConnectionStrings__Portal. Cấu hình SQL Server trong .env hoặc environment.");
-        var sql = new SqlConnectionStringBuilder(raw);
+        SqlConnectionStringBuilder sql;
+        try { sql = new SqlConnectionStringBuilder(raw); }
+        catch (ArgumentException) { throw new InvalidOperationException("Invalid private SQL connection configuration; values are not logged."); }
         var expected = config["Sql:ExpectedDatabase"];
         if (string.IsNullOrWhiteSpace(expected) || !string.Equals(sql.InitialCatalog, expected, StringComparison.Ordinal))
             throw new InvalidOperationException("CSDL kết nối không khớp Sql__ExpectedDatabase. Đã chặn thao tác.");

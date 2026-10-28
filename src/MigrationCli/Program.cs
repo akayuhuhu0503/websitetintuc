@@ -10,6 +10,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 try
 {
     var command = args.FirstOrDefault() ?? "help";
+    if(command=="uat-sql-probe")return await UatSqlProbe.ExecuteAsync(args);
     var workspace = PortalConfiguration.FindWorkspace();
     if(command=="schema-script")
     {
@@ -22,6 +23,16 @@ try
         await using var offline=new PortalDbContext(new DbContextOptionsBuilder<PortalDbContext>().UseSqlServer("Server=127.0.0.1;Database=LandPortal_OfflineSchemaOnly;Integrated Security=true;Encrypt=true").Options);
         var migrator=offline.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
         var sql=":ON ERROR EXIT\n;THROW 51000, 'UNALLOCATED UAT TARGET: bind a new SQLCMD artifact using prepare-uat-target.ps1 after operator approval. Do not execute this template.', 1;\nGO\n-- LANDPORTAL_SCHEMA_BODY\n"+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+        if(Option("--target-database") is string target)
+        {
+            var server=Option("--server-identity")??throw new InvalidDataException("DBA-confirmed --server-identity required; IP/port is not the physical SQL identity.");
+            var header=UatSqlScripts.Header(target,server);
+            sql=header+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+            var roleOutput=Path.GetFullPath(Option("--runtime-role-output")??throw new InvalidDataException("New --runtime-role-output required"),workspace);
+            if(!roleOutput.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)||roleOutput==output||File.Exists(roleOutput))throw new InvalidDataException("New separate private publish role artifact required");
+            var login=Option("--app-login")??throw new InvalidDataException("--app-login required");UatSqlScripts.RequireLogin(login);
+            Directory.CreateDirectory(Path.GetDirectoryName(roleOutput)!);await File.WriteAllTextAsync(roleOutput,UatSqlScripts.RuntimeRole(header,login));
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);await File.WriteAllTextAsync(output,sql);Console.WriteLine("Offline idempotent schema script generated; SQL execution NOT RUN.");return 0;
     }
     var config = PortalConfiguration.Load(workspace);

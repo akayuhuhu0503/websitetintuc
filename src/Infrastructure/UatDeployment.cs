@@ -14,6 +14,30 @@ public static class UatDeployment
         !database.Contains("REPLACE", StringComparison.OrdinalIgnoreCase);
 
     public static bool Enabled(IConfiguration c) => c["Deployment:Profile"] == "UAT";
+    public static bool AuthenticationMatches(IConfiguration c, SqlConnectionStringBuilder sql)
+    {
+        var mode=c["Deployment:SqlAuthentication"]??"Windows";
+        if(mode=="Windows")return sql.IntegratedSecurity&&string.IsNullOrEmpty(sql.UserID)&&string.IsNullOrEmpty(sql.Password);
+        var login=c["Deployment:ExpectedSqlLogin"];
+        return mode=="SqlPassword"&&!sql.IntegratedSecurity&&
+            (sql.Authentication is SqlAuthenticationMethod.NotSpecified or SqlAuthenticationMethod.SqlPassword)&&
+            !string.IsNullOrWhiteSpace(login)&&!login.Equals("sa",StringComparison.OrdinalIgnoreCase)&&
+            !login.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)&&!login.Any(char.IsControl)&&
+            sql.UserID==login&&!string.IsNullOrWhiteSpace(sql.Password)&&!sql.PersistSecurityInfo;
+    }
+    // A TCP address/port is not SERVERPROPERTY('ServerName'). Binding the latter
+    // is mandatory for SQL-password deployment after the read-only DBA probe.
+    public static string PhysicalServer(IConfiguration c)
+    {
+        var name=c["Deployment:ExpectedSqlServerIdentity"];
+        if(string.IsNullOrWhiteSpace(name))
+        {
+            if(c["Deployment:SqlAuthentication"]=="SqlPassword")throw new InvalidOperationException("Bind the DBA-confirmed physical SQL server identity before runtime/schema/import.");
+            return c["Deployment:ExpectedSqlServer"]??throw new InvalidOperationException("SQL target missing.");
+        }
+        if(name.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)||name.Any(char.IsControl))throw new InvalidOperationException("Confirmed physical SQL identity required.");
+        return name;
+    }
     public static bool Validate(IConfiguration c, string environment)
     {
         if (!Enabled(c)) return false;
@@ -22,10 +46,11 @@ public static class UatDeployment
         var sql = new SqlConnectionStringBuilder(DatabaseSettings.Connection(c));
         if (c["Deployment:TargetApproved"] != "true" || c["Deployment:TargetApprovalReference"] is not { Length: > 4 } ||
             !IsTargetDatabase(c["Sql:ExpectedDatabase"]) || sql.InitialCatalog != c["Sql:ExpectedDatabase"] ||
-            !sql.IntegratedSecurity || sql.DataSource != c["Deployment:ExpectedSqlServer"] ||
+            !AuthenticationMatches(c,sql) || sql.DataSource != c["Deployment:ExpectedSqlServer"] ||
             string.IsNullOrWhiteSpace(c["Deployment:ExpectedSqlServer"]) || sql.DataSource.Contains("REPLACE", StringComparison.OrdinalIgnoreCase) ||
             sql.Encrypt == SqlConnectionEncryptOption.Optional || sql.TrustServerCertificate)
-            throw new InvalidOperationException("UAT requires allocated database, explicit target approval reference, exact server, Windows identity and validated encrypted SQL transport.");
+            throw new InvalidOperationException("UAT requires allocated database, target approval, exact server/login authentication and validated encrypted SQL transport.");
+        _=PhysicalServer(c);
         if (!Uri.TryCreate(c["Public:BaseUrl"], UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
             uri.AbsolutePath != "/" || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
             !string.Equals(uri.IdnHost, c["Deployment:ExpectedHost"], StringComparison.OrdinalIgnoreCase))

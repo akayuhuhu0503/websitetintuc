@@ -23,7 +23,8 @@ foreach($project in @('Web','Worker','MigrationCli','UatDataHandoff')){
 $ops=Join-Path $destination 'ops';[void][IO.Directory]::CreateDirectory($ops)
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-runtime.ps1') -Destination $ops
 foreach($name in @('uat-common.ps1','uat-target.example.json','prepare-uat-target.ps1','install-uat-iis.ps1','test-uat-preparation.ps1','probe-uat-defender.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
-foreach($name in @('uat-data.ps1','prepare-iis-config.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
+foreach($name in @('uat-data.ps1','prepare-iis-config.ps1','shared-sql.env.example')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
+Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/shared-sql-iis.md') -Destination $ops
 Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/uat-data-handoff.md') -Destination ($ops+'/uat-data-runbook.md')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-operator-steps.md') -Destination $ops
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'export-uat-worker-tasks.ps1') -Destination $ops

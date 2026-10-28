@@ -138,7 +138,7 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
    GRANT SELECT,INSERT,UPDATE,DELETE ON SCHEMA::dbo; DENY ALTER;
    DENY UPDATE,DELETE cho AuditLogs,InteractionPublicSnapshots,InquiryAssignments,
    InquiryCalendars,InquiryCalendarExceptions,InquiryExtensions,OutboxReconciliations.
-   Windows login Web/Worker chỉ CONNECT + quyền kích hoạt approle, không db_owner.
+   Login Web/Worker (Windows hoặc SQL Password được cấu hình tường minh) chỉ CONNECT + quyền kích hoạt approle, không db_owner. SQL dùng chung xem `docs/shared-sql-iis.md`; không dùng tài khoản runtime chạy schema/import.
    Với commit31cbb8b7, DBA phải kiểm __EFMigrationsHistory cuối =
    `20261023074121_Srs12MenuAndInquiryLookup`. Với bản bàn giao sau, đối chiếu
    schema trong chính gói đã duyệt; không hạ về migration1.1 hoặc sửa history.

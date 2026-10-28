@@ -11,9 +11,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace LandPortal.UatData;
-public sealed record TargetPlan(Guid PackageId,string ManifestSha256,string TargetServer,string TargetDatabase,string TargetMediaRootSha256,string Migration,string Selection,Guid[] Contents,Guid[] Media,int Aliases,string OperatorSid);
+public sealed record TargetPlan(Guid PackageId,string ManifestSha256,string TargetServer,string TargetDatabase,string TargetMediaRootSha256,string Migration,string Selection,Guid[] Contents,Guid[] Media,int Aliases,string OperatorSid,string TargetSqlServerIdentity);
 public sealed record ImportReceipt(Guid PackageId,string ManifestSha256,string PlanSha256,string State,Dictionary<Guid,string> RowVersions,Guid[] Media,string[] Aliases,Guid? SiteDraftId);
-public sealed record TargetApproval(Guid PackageId,string ManifestSha256,string PlanSha256,string TargetServer,string TargetDatabase,string OperatorSid,DateTimeOffset ExpiresUtc,string[] Actions,string ApprovalReference);
+public sealed record TargetApproval(Guid PackageId,string ManifestSha256,string PlanSha256,string TargetServer,string TargetDatabase,string OperatorSid,DateTimeOffset ExpiresUtc,string[] Actions,string ApprovalReference,string TargetSqlServerIdentity);
 
 public static class PackageImport
 {
@@ -32,7 +32,7 @@ public static class PackageImport
         await using var locked=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);using var bytes=new MemoryStream();await locked.CopyToAsync(bytes);var content=bytes.ToArray();
         var line=Encoding.UTF8.GetString(content).Split('\n').SingleOrDefault(x=>x.StartsWith("# LANDPORTAL_UAT_DATA_APPROVAL ",StringComparison.Ordinal))??throw new InvalidDataException("Signed metadata missing.");
         var approval=JsonSerializer.Deserialize<TargetApproval>(line["# LANDPORTAL_UAT_DATA_APPROVAL ".Length..].Trim(),Json)??throw new InvalidDataException("Approval missing.");
-        if(approval.PackageId!=plan.PackageId||approval.ManifestSha256!=plan.ManifestSha256||approval.PlanSha256!=planSha||approval.TargetServer!=plan.TargetServer||approval.TargetDatabase!=plan.TargetDatabase||approval.OperatorSid!=WindowsIdentity.GetCurrent().User?.Value||approval.ExpiresUtc<=DateTimeOffset.UtcNow||approval.ExpiresUtc>DateTimeOffset.UtcNow.AddDays(7)||approval.Actions?.Contains(action)!=true||string.IsNullOrWhiteSpace(approval.ApprovalReference))throw new UnauthorizedAccessException("Approval scope, target, identity, expiry or action differs.");
+        if(approval.PackageId!=plan.PackageId||approval.ManifestSha256!=plan.ManifestSha256||approval.PlanSha256!=planSha||approval.TargetServer!=plan.TargetServer||approval.TargetSqlServerIdentity!=plan.TargetSqlServerIdentity||approval.TargetDatabase!=plan.TargetDatabase||approval.OperatorSid!=WindowsIdentity.GetCurrent().User?.Value||approval.ExpiresUtc<=DateTimeOffset.UtcNow||approval.ExpiresUtc>DateTimeOffset.UtcNow.AddDays(7)||approval.Actions?.Contains(action)!=true||string.IsNullOrWhiteSpace(approval.ApprovalReference))throw new UnauthorizedAccessException("Approval scope, target, identity, expiry or action differs.");
         await PowerShellSignatureBridge.VerifyAsync(path,DataPackage.Hash(content),trusted);
     }
     static async Task<ImportReceipt?> Receipt(PortalDbContext db,Guid id)
@@ -61,7 +61,7 @@ public static class PackageImport
         if(!UatDeployment.Validate(config,Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")??"Production"))throw new UnauthorizedAccessException("Approved allocated Staging UAT required; never Dev/Test/LAN/Production.");
         await using var db=new PortalDbContext(DatabaseSettings.Options(config,forMigration:true));await UatPreflightCommand.VerifySqlTargetAsync(db,config);
         var storage=StorageOptions.FromConfiguration(config);var sid=OperatingSystem.IsWindows()?WindowsIdentity.GetCurrent().User?.Value??"":"";
-        var plan=new TargetPlan(data.PackageId,sha,config["Deployment:ExpectedSqlServer"]!,config["Sql:ExpectedDatabase"]!,DataPackage.Hash(Encoding.UTF8.GetBytes(Path.GetFullPath(storage.MediaRoot).ToUpperInvariant())),data.SourceMigration,args.Contains("--reviewed-candidates")?"ReviewedCandidates":"Ready",rows.Select(x=>x.Id).ToArray(),mids,rows.Sum(x=>x.Aliases.Count),sid);
+        var plan=new TargetPlan(data.PackageId,sha,config["Deployment:ExpectedSqlServer"]!,config["Sql:ExpectedDatabase"]!,DataPackage.Hash(Encoding.UTF8.GetBytes(Path.GetFullPath(storage.MediaRoot).ToUpperInvariant())),data.SourceMigration,args.Contains("--reviewed-candidates")?"ReviewedCandidates":"Ready",rows.Select(x=>x.Id).ToArray(),mids,rows.Sum(x=>x.Aliases.Count),sid,UatDeployment.PhysicalServer(config));
         var planSha=DataPackage.Hash(JsonSerializer.SerializeToUtf8Bytes(plan,Json));
         if(data.SourceMigration!=db.Database.GetMigrations().Last())throw new InvalidDataException("Source/target schema versions differ.");
         if(command=="backup")
@@ -79,7 +79,7 @@ public static class PackageImport
             await Conflicts(db,data,rows,media,receipt!=null);
             var output=Path.GetFullPath(Arg(args,"--output")??throw new InvalidDataException("New --output directory required."));if(!output.StartsWith(Path.GetFullPath(config["WorkspaceRoot"]!)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Directory.Exists(output))throw new InvalidDataException("New plan directory under target private data home required.");DataPackage.NoReparse(output);Directory.CreateDirectory(output);
             await DataPackage.Write(Path.Combine(output,"plan.json"),plan);
-            var draft=new{data.PackageId,ManifestSha256=sha,PlanSha256=planSha,plan.TargetServer,plan.TargetDatabase,OperatorSid=sid,ExpiresUtc=(DateTimeOffset?)null,Actions=new[]{"Import"},ApprovalReference=(string?)null};
+            var draft=new{data.PackageId,ManifestSha256=sha,PlanSha256=planSha,plan.TargetServer,plan.TargetDatabase,plan.TargetSqlServerIdentity,OperatorSid=sid,ExpiresUtc=(DateTimeOffset?)null,Actions=new[]{"Import"},ApprovalReference=(string?)null};
             await File.WriteAllTextAsync(Path.Combine(output,"approval-UNSIGNED.ps1"),"# Draft only; complete exact scope/expiry/reference then organization-sign. Do not execute.\n# LANDPORTAL_UAT_DATA_APPROVAL "+JsonSerializer.Serialize(draft)+"\n");
             Console.WriteLine(JsonSerializer.Serialize(new{status="TARGET_READ_ONLY_PLAN_NEEDS_APPROVAL",sha,planSha,delta=Summary(data,rows),siteDraftImport=siteReady,receipt=receipt?.State,sqlWrites=0}));return 0;
         }

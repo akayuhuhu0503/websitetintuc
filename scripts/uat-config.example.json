@@ -5,6 +5,9 @@
     "TargetApproved": "false",
     "TargetApprovalReference": "",
     "ExpectedSqlServer": "REPLACE_WITH_APPROVED_SQL_INSTANCE",
+    "SqlAuthentication": "Windows",
+    "ExpectedSqlLogin": "",
+    "ExpectedSqlServerIdentity": "",
     "ExpectedHost": "REPLACE_WITH_UAT_HTTPS_HOST"
   },
   "Sql": {

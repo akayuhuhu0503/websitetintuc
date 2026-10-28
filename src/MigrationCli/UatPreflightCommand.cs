@@ -18,7 +18,7 @@ public static class UatPreflightCommand
             await using var command=db.Database.GetDbConnection().CreateCommand();
             command.CommandText="SELECT CAST(SERVERPROPERTY('ServerName') AS nvarchar(128)),DB_NAME(),(SELECT MAX(MigrationId) FROM dbo.__EFMigrationsHistory),compatibility_level FROM sys.databases WHERE name=DB_NAME()";
             await using var reader=await command.ExecuteReaderAsync();
-            if(!await reader.ReadAsync()||!string.Equals(reader.GetString(0),config["Deployment:ExpectedSqlServer"],StringComparison.OrdinalIgnoreCase)||reader.GetString(1)!=config["Sql:ExpectedDatabase"]||reader.GetString(2)!=db.Database.GetMigrations().Last()||reader.GetByte(3)<160)throw new InvalidOperationException("UAT physical SQL target/schema mismatch; stop before writes.");
+            if(!await reader.ReadAsync()||!string.Equals(reader.GetString(0),UatDeployment.PhysicalServer(config),StringComparison.OrdinalIgnoreCase)||reader.GetString(1)!=config["Sql:ExpectedDatabase"]||reader.GetString(2)!=db.Database.GetMigrations().Last()||reader.GetByte(3)<160)throw new InvalidOperationException("UAT physical SQL target/schema mismatch; stop before writes.");
         }
         finally{await db.Database.CloseConnectionAsync();}
     }
