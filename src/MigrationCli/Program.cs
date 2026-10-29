@@ -22,12 +22,19 @@ try
         // credentials or allocated SQL. This context is never opened/migrated.
         await using var offline=new PortalDbContext(new DbContextOptionsBuilder<PortalDbContext>().UseSqlServer("Server=127.0.0.1;Database=LandPortal_OfflineSchemaOnly;Integrated Security=true;Encrypt=true").Options);
         var migrator=offline.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
-        var sql=":ON ERROR EXIT\n;THROW 51000, 'UNALLOCATED UAT TARGET: bind a new SQLCMD artifact using prepare-uat-target.ps1 after operator approval. Do not execute this template.', 1;\nGO\n-- LANDPORTAL_SCHEMA_BODY\n"+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+        var fromMigration=Option("--from-migration");var toMigration=Option("--to-migration");
+        var knownMigrations=offline.Database.GetMigrations().ToArray();
+        if((fromMigration is not null&&!knownMigrations.Contains(fromMigration,StringComparer.Ordinal))
+            ||(toMigration is not null&&!knownMigrations.Contains(toMigration,StringComparer.Ordinal))
+            ||(fromMigration is not null&&Array.IndexOf(knownMigrations,fromMigration)>=Array.IndexOf(knownMigrations,toMigration??knownMigrations[^1])))
+            throw new InvalidDataException("Reviewed known forward-only migration range required; no SQL connection attempted.");
+        var migrationsSql=migrator.GenerateScript(fromMigration:fromMigration,toMigration:toMigration,options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+        var sql=UatSqlScripts.UnboundSchema(migrationsSql);
         if(Option("--target-database") is string target)
         {
             var server=Option("--server-identity")??throw new InvalidDataException("DBA-confirmed --server-identity required; IP/port is not the physical SQL identity.");
             var header=UatSqlScripts.Header(target,server);
-            sql=header+migrator.GenerateScript(options:Microsoft.EntityFrameworkCore.Migrations.MigrationsSqlGenerationOptions.Idempotent);
+            sql=UatSqlScripts.BoundSchema(target,server,migrationsSql);
             var roleOutput=Path.GetFullPath(Option("--runtime-role-output")??throw new InvalidDataException("New --runtime-role-output required"),workspace);
             if(!roleOutput.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)||roleOutput==output||File.Exists(roleOutput))throw new InvalidDataException("New separate private publish role artifact required");
             var login=Option("--app-login")??throw new InvalidDataException("--app-login required");UatSqlScripts.RequireLogin(login);

@@ -1,0 +1,7 @@
+# Diagnostic artifact v0.5 — PARTIAL provenance, 15/10/2026
+
+Một helper chẩn đoán tạm `.local/v05-video-probe/Program.cs` đã dùng lại tên `native-readonly-diagnostic.json` trong task`v05-20261015T073755Z-f680ab6e`. Lần chạy trước sửa MemoryWatch trả5nativePASS rồi1FAIL với stack `Process.get_WorkingSet64 → VideoProcessor.Run/MemoryWatch line59`; lần sau sửa ghi10PASS vào cùngfile. **Raw JSON lần đầu đã bị ghi đè**, không có hash/copy trước ghi để phục hồi nguyên bytes. Không tái tạo JSONraw từ transcript rồi gọi đó là bản gốc.
+
+Kết quả và stack lần đầu vẫn có trong tool transcript của lượt này; chỉ có thể trích lại với nhãn **transcript-derived**, không đủ bảo toàn artifactraw đầu. Bằng chứng full114/115, SQL read-only `video-final-run-failure-readonly.json`, worker logs và SQL trạng tháiFailed/`VIDEO_InvalidOperationException` còn nguyên ởrun riêng. Filehiện tại10PASS được giữ thêm `native-diagnostic-retained-c142f24f.json`, rõ là **sau sửa**, không đại diện lần đầu. Helper đã sửa sang timestamp+GUID để không dùng lại tên.
+
+Đây là lỗi quản lý artifact mới của lượt v0.5, tách incidentV04 vàD15 lịch sử. Không thay dữ liệu nguồn, khôngghiđèrawcủa2D/V04 cũ. V05overall vẫnPARTIAL, gồm thiếu hụt provenance này; không gọi toànbộartifactmới immutable/PASS. Các full/focused test chính đều dùng directoryunique và có hashguard; report cuối ghi actualrun/code/hash/exit. Không dùng10PASSdiagnostic thay fullregression saufix.

@@ -4,12 +4,30 @@ namespace LandPortal.MigrationCli;
 
 public static class UatSqlScripts
 {
+    // sqlcmd (ODBC) defaults QUOTED_IDENTIFIER to OFF without -I. These are
+    // session options, not database/server settings. GO makes the parse-time
+    // options effective before EF batches and their nested CREATE INDEX EXEC.
+    public const string SessionOptions = """
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET XACT_ABORT ON;
+GO
+
+""";
+    public static string UnboundSchema(string migrations)=>":ON ERROR EXIT\n;THROW 51000, 'UNALLOCATED UAT TARGET: bind a reviewed target before execution.', 1;\nGO\n-- LANDPORTAL_SCHEMA_BODY\n"+SessionOptions+migrations;
+    public static string BoundSchema(string database,string server,string migrations)=>Header(database,server)+migrations;
     static string Literal(string value)=>"N'"+value.Replace("'","''")+"'";
     public static string Header(string database,string server)
     {
         if(!UatDeployment.IsTargetDatabase(database)||string.IsNullOrWhiteSpace(server)||server.Any(char.IsControl)||server.Contains("REPLACE",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Confirmed target database and physical SQL identity required.");
         return $"""
 :ON ERROR EXIT
+{SessionOptions}
 USE [{database}];
 GO
 IF DB_NAME() <> {Literal(database)} OR COALESCE(CAST(SERVERPROPERTY('ServerName') AS nvarchar(128)),N'') <> {Literal(server)}

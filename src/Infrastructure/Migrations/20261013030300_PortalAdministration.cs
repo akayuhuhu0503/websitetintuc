@@ -489,8 +489,15 @@ namespace Infrastructure.Migrations
                     (ContentId,PublicationDate,Unit,Number,DocumentType,IssuingBody,Signer,Field,IssuedDate,EffectiveDate,EffectivenessStatus,EffectivenessEvidence,ConsultationStartDate,ConsultationEndDate,ConsultationStartUtc,ConsultationEndUtc,ConsultationDateEvidence,MappingStatus,MetadataOrigin)
                 SELECT d.ContentId,m.PublicationDate,m.Unit,m.Number,m.DocumentType,m.IssuingBody,m.Signer,m.Field,m.IssuedDate,m.EffectiveDate,m.EffectivenessStatus,m.EffectivenessEvidence,m.ConsultationStartDate,m.ConsultationEndDate,m.ConsultationStartUtc,m.ConsultationEndUtc,m.ConsultationDateEvidence,m.MappingStatus,m.MetadataOrigin
                 FROM dbo.ContentDrafts d JOIN dbo.Contents c ON c.Id=d.ContentId JOIN dbo.RevisionMetadata m ON m.RevisionId=c.CurrentRevisionId;
-                UPDATE c SET ApprovedByUserId=(SELECT TOP(1) a.Actor FROM dbo.AuditLogs a JOIN dbo.AspNetUsers u ON u.Id=a.Actor WHERE a.ContentId=c.Id AND a.RevisionId=c.ApprovedRevisionId AND a.Action=N'Approve' ORDER BY a.CreatedUtc DESC,a.Id DESC)
+                """);
+            // SQL Server binds columns on existing tables before executing the
+            // idempotent migration batch. Defer binding until AddColumn above
+            // has run; preserve the backfill and EF transaction unchanged.
+            migrationBuilder.Sql("""
+                EXEC(N'
+                UPDATE c SET ApprovedByUserId=(SELECT TOP(1) a.Actor FROM dbo.AuditLogs a JOIN dbo.AspNetUsers u ON u.Id=a.Actor WHERE a.ContentId=c.Id AND a.RevisionId=c.ApprovedRevisionId AND a.Action=N''Approve'' ORDER BY a.CreatedUtc DESC,a.Id DESC)
                 FROM dbo.Contents c WHERE c.ApprovedRevisionId IS NOT NULL;
+                ');
                 """);
         }
 

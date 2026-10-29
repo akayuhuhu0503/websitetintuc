@@ -1,0 +1,26 @@
+# Kho ảnh/PDF trong mốc 2A
+
+`MediaService` lưu bản gốc bất biến vào `Storage:MediaRoot/uploads/<UUID>.<đuôi chuẩn>`, ngoài static/publish. Tên người dùng gửi chỉ là metadata hiển thị. Multipart được đọc streaming với buffer 64 KiB vào `Storage:TempRoot/media-incoming`; không bind `IFormFile` và không đọc một tệp không giới hạn vào RAM. Tệp tạm được dọn khi thành công, bị từ chối hoặc huỷ. Kho không được đi qua reparse point hoặc nằm trong `wwwroot`/`publish`.
+
+Allowlist gồm JPEG, PNG, GIF, WebP và PDF, không có video, SVG, HTML, Word hoặc tải từ URL. Giới hạn mặc định: ảnh 16 MiB, PDF 32 MiB; mỗi ảnh tối đa 30 triệu điểm ảnh, tổng điểm ảnh giải mã của ảnh động 80 triệu và tối đa 100 khung; PDF tối đa 1.000 trang. Các giới hạn đọc từ `Media:MaxImageBytes`, `Media:MaxPdfBytes`, `Media:MaxImagePixels`, `Media:MaxDecodedFramePixels`, `Media:MaxImageFrames`, `Media:MaxPdfPages`, có kiểm tra miền giá trị. Giới hạn request upload là 64 MiB cộng 64 KiB cho multipart; chỉ một trường `file` được phép.
+
+MIME/đuôi phải phù hợp định dạng thực. SkiaSharp giải mã điểm ảnh của từng khung và ghi chiều rộng/cao; PdfPig đọc cấu trúc và trang PDF ở chế độ strict, với giới hạn độ sâu 64. PDF cần có header/EOF hợp lệ. Đây là kiểm tra định dạng, **không phải quét mã độc**, cũng không chứng minh một PDF không có mọi loại nội dung nguy hiểm.
+
+Không có scanner được triển khai trong 2A. Upload mặc định bị chặn. Chỉ khi `Media:AllowUnscannedDevelopmentUploads=true`, môi trường `Development` và `Public:BaseUrl` là loopback, upload mới mở theo ngoại lệ phát triển đã nêu rõ trên UI. Kết quả ghi `ValidationStatus=Validated`, `ScanStatus=NotScanned`, `Origin=Uploaded`; không ghi `Clean`. Dù cờ được đặt, Production không nhận/không phục vụ upload NotScanned. Scanner production còn là blocker. 53 tài nguyên nguồn có trạng thái gốc giữ nguyên; không dùng việc thêm upload để tuyên bố nguồn đã được quét.
+
+SHA256 unique trong SQL chống trùng byte. Trùng tệp của cùng người hoặc trong phạm vi được phép dùng sẽ tái dùng bản gốc và ID; không đổi owner/tên/hash/metadata nguồn. Nếu trùng tệp riêng tư của người khác mà không có quyền toàn bộ, yêu cầu bị từ chối. Hai tên hiển thị giống nhau với byte khác lưu vào hai UUID khác nhau. Khi tái dùng, kiểm tra tệp thực trong kho hiện tại, độ dài và SHA256; thiếu file không được báo upload thành công. Race hai upload giống nhau xử lý theo unique index, giữ bản thắng và chỉ dọn tệp mới của request thua.
+
+Các tuyến:
+
+Khi SQL lỗi/huỷ sau khi đã thử commit, bộ dọn kiểm tra lại ID mới trước khi xoá tệp. Nếu SQL còn không truy cập được và kết quả commit chưa xác định, giữ tệp riêng tư để đối soát thay vì có nguy cơ xoá bản gốc đã được SQL lưu. Không báo upload thành công trong trường hợp đó. Đối soát/dọn orphan do hạ tầng mất kết nối cần bước vận hành riêng; tệp không có public grant không có static route để lộ ra.
+
+- `GET /admin/media?contentId=<id>&kind=image|pdf&search=<từ khoá>&page=1`: gallery có phân trang SQL; bản upload của mình, tài nguyên public, hoặc tài nguyên gắn nội dung có quyền xem. `ViewAll/EditAll` cho phép phạm vi toàn bộ. `media.manage` một mình không mở tệp riêng tư của người khác.
+- `POST /admin/media/upload?contentId=<id>`: multipart chỉ có `file`, header `X-CSRF-TOKEN`; kiểm tra quyền hiện thời từ SQL (`media.manage` và quyền sửa nội dung cụ thể, hoặc quyền tạo/sửa khi chưa có ID). JSON chỉ báo thành công sau khi file và metadata SQL đã lưu.
+- `GET /admin/media/<asset>/preview?contentId=<id>`: kiểm tra quyền SQL hiện thời và quan hệ draft/revision của nội dung. Upload của chính người dùng có thể xem trước khi chưa gắn bài. Không dựa vào UUID/cookie claim cũ để mở quyền.
+- `GET /media/<asset>`: chỉ mở khi còn ít nhất một tham chiếu từ revision của bài `IsPublic`, chưa vào thùng rác. Media dùng chung không bị gỡ vì một trong hai bài bị gỡ. Không có static route cho kho gốc/snapshot/temp, không có thumbnail/rendition mới trong 2A.
+
+Tất cả tuyến file/gallery/preview dùng `no-store, private`; file route kiểm tra lại trạng thái public trước mỗi request và không trả 304 từ conditional validator cũ. Gỡ tham chiếu public cuối cùng thu hồi các request tiếp theo, kể cả biết URL/ID. Không hứa thu hồi bản người đọc đã tải trước đó. PDF thêm CSP sandbox; các loại chủ động không thuộc allowlist không được phục vụ cùng origin.
+
+Phụ thuộc mới được pin: [SkiaSharp 3.119.4](https://www.nuget.org/packages/SkiaSharp/3.119.4) (MIT, các native assets Win32/macOS cùng phiên bản), [PdfPig 0.1.14](https://www.nuget.org/packages/PdfPig/0.1.14) (Apache-2.0). Bản local đã chọn Windows. Chưa nghiệm thu Linux: nếu triển khai Linux cần matching SkiaSharp native assets và kiểm thử thực trên môi trường đó. Không dùng giấy phép ImageSharp có điều kiện thương mại hoặc dịch vụ trả phí để thay luồng này.
+
+Kiểm thử parser/storage thực trong `MediaValidationTests` dùng SQL `LandPortal_Test` và kho riêng `.local/phase2a-media-tests/<run>`. Ảnh/PDF nguồn chỉ đọc và đối chiếu hash; fixture mới tạo từ ảnh nguồn dùng cho test, không được tính là tài nguyên nguồn mới. Bằng chứng thực được ghi sau chạy vào `docs/evidence/media-validation-report.json`; HTTP/E2E kiểm chứng truy cập ở suite 2A. Tài liệu này mô tả triển khai; trạng thái nghiệm thu cuối cùng nằm trong `acceptance-matrix.md`.

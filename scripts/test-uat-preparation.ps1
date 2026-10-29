@@ -12,7 +12,8 @@ foreach($name in @('uat-common.ps1','uat-runtime.ps1','prepare-uat-target.ps1','
 }
 $code=Join-Path $report 'fixture-code';[void][IO.Directory]::CreateDirectory((Join-Path $code 'ops'));[void][IO.Directory]::CreateDirectory((Join-Path $code 'web'))
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-config.example.json') -Destination (Join-Path $code 'ops')
-[IO.File]::WriteAllText((Join-Path $code 'ops/schema-idempotent.sql'),":ON ERROR EXIT`n;THROW 51000, 'UNALLOCATED',1;`nGO`n-- LANDPORTAL_SCHEMA_BODY`n-- TECHNICAL FIXTURE ONLY: no schema or data`nGO`n",[Text.UTF8Encoding]::new($false))
+$sessionSettings=(@('QUOTED_IDENTIFIER ON','ANSI_NULLS ON','ANSI_PADDING ON','ANSI_WARNINGS ON','ARITHABORT ON','CONCAT_NULL_YIELDS_NULL ON','NUMERIC_ROUNDABORT OFF','XACT_ABORT ON')|ForEach-Object {'SET '+$_+';'}) -join "`n"
+[IO.File]::WriteAllText((Join-Path $code 'ops/schema-idempotent.sql'),(":ON ERROR EXIT`n;THROW 51000, 'UNALLOCATED',1;`nGO`n-- LANDPORTAL_SCHEMA_BODY`n"+$sessionSettings+"`nGO`n-- TECHNICAL FIXTURE ONLY: no schema or data`nGO`n"),[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText((Join-Path $code 'web/web.config'),'<configuration><location><system.webServer><aspNetCore><environmentVariables><environmentVariable name="LANDPORTAL_HOME" value="REPLACE"/><environmentVariable name="LANDPORTAL_CONFIG" value="REPLACE"/></environmentVariables></aspNetCore></system.webServer></location></configuration>',[Text.UTF8Encoding]::new($false))
 $records=@(Get-ChildItem -LiteralPath $code -Recurse -File|ForEach-Object {@{path=$_.FullName.Substring($code.Length+1).Replace('\','/');sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
 [IO.File]::WriteAllText((Join-Path $code 'manifest.json'),(@{files=$records}|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))

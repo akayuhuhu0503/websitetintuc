@@ -51,13 +51,19 @@ if($mode -eq 'Windows'){Assert-UatTarget $c}
 $schema=Get-Content -LiteralPath (Join-Path $code 'ops/schema-idempotent.sql') -Raw -Encoding UTF8
 $marker='-- LANDPORTAL_SCHEMA_BODY';$offset=$schema.IndexOf($marker,[StringComparison]::Ordinal)
 if($offset -lt 0 -or $schema.LastIndexOf($marker,[StringComparison]::Ordinal) -ne $offset){throw 'Schema template marker missing or duplicated'}
+$schemaBody=$schema.Substring($offset+$marker.Length)
+# Reject historical generated templates missing the required filtered-index SET
+# policy. Do not silently rebind an old reviewed artifact with unsafe defaults.
+foreach($setting in @('QUOTED_IDENTIFIER ON','ANSI_NULLS ON','ANSI_PADDING ON','ANSI_WARNINGS ON','ARITHABORT ON','CONCAT_NULL_YIELDS_NULL ON','NUMERIC_ROUNDABORT OFF','XACT_ABORT ON')){
+ if($schemaBody -notmatch ('(?im)^SET\s+'+[regex]::Escape($setting)+'\s*;\s*$')){throw 'Stale schema template lacks required SET options; regenerate from current MigrationCli before preparing a new target packet'}
+}
 $serverLiteral=$physical.Replace("'","''");$dbLiteral=([string]$t.Database).Replace("'","''")
 $header=":ON ERROR EXIT`r`nUSE ["+$t.Database+"];`r`nGO`r`nIF DB_NAME() <> N'"+$dbLiteral+"' OR COALESCE(CAST(SERVERPROPERTY('ServerName') AS nvarchar(128)),N'') <> N'"+$serverLiteral+"'`r`nBEGIN`r`n ;THROW 51000, 'UAT exact target mismatch: stop without applying schema.', 1;`r`nEND`r`nGO`r`n"
 [void][IO.Directory]::CreateDirectory($output)
 $encoding=[Text.UTF8Encoding]::new($false)
 [IO.File]::WriteAllText((Join-Path $output 'uat.private-template.json'),($c|ConvertTo-Json -Depth 8),$encoding)
 [IO.File]::WriteAllText((Join-Path $output 'target.json'),($t|ConvertTo-Json -Depth 5),$encoding)
-[IO.File]::WriteAllText((Join-Path $output 'schema-bound.sqlcmd'),($header+$schema.Substring($offset+$marker.Length)),$encoding)
+[IO.File]::WriteAllText((Join-Path $output 'schema-bound.sqlcmd'),($header+$schemaBody),$encoding)
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
 foreach($v in $web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable){if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',[string]$homePath)};if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',[string]$config)}}
 $web.Save((Join-Path $output 'web.config'))
