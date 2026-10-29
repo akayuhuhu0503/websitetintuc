@@ -1,0 +1,12 @@
+# Retention cho artifact local
+
+- Source/lockfile nằm trong Git. Không xóa tracked file, private config/key, dữ liệu nguồn duy nhất, file MDF/LDF/NDF hoặc artifact phục hồi/audit bắt buộc.
+- Giữ `.local/publish/TTDL-IIS` hiện hành; publisher một lệnh có current/staging và tối đa một previous để bảo vệ rollback, từ chối ghi đè bộ sealed/đang chạy. Publish đã loại PDB, không đổi policy đó. Không tạo kit với RunId mới để né việc xem xét retention.
+- `package-uat.ps1` từ chối tạo thêm kit nếu đã có kit đầy đủ. Chỉ dùng `-AllowAdditionalPackage` khi operator đã xem xét bàn giao/rollback và dung lượng. Không tự xóa kit sealed.
+- Giữ một bộ SQL/media/dependencies **đã xác minh**, ghi rõ checkpoint; backup mới phải hoàn tất và verify trước khi thay thế bộ này. Không coi Git là backup dữ liệu, hoặc VERIFYONLY là restore thật. Bộ duy nhất/backup LAN chưa có bộ thay thế vẫn phải giữ.
+- Sau khi có `.local/cleanup-retention.json`, `backup-project.ps1` và `backup-approved-batch.ps1` yêu cầu `-AllowAdditionalRestorePoint` để tạo restore point tiếp theo. Sau khi point mới PASS, cập nhật policy và trình danh sách cũ để dọn; không tự cắt backup theo tuổi. Policy local này không thay đổi pipeline backup riêng của SQL Server dùng chung.
+- SQL207: giữ packet đã pin, manifest/hash, Inspect/Apply/backup receipts và private plan. Không rebuild/thay byte các packet được duyệt. Backup trên SQL server khác và dữ liệu ngoài workspace nằm ngoài phạm vi cleanup.
+- Đầu ra build/debug cũ có thể tạo lại từ source. Dùng lại đường dẫn build ổn định cho lần phát triển tiếp theo; giữ toàn bộ output đang được LAN/IIS/Worker hoặc job đang chạy sử dụng. Unique source/helper trong `.local` không phải cache.
+- Dọn bằng `scripts/cleanup-reviewed-artifacts.ps1 -PlanFile <danh-sách-file-đã-kiểm-kê> -PlanSha256 <SHA256>` trước; mặc định không xóa. Chỉ thêm `-Apply` khi đã có quyền cho đúng scope. Không có mode tự quét rồi xóa theo tên hoặc tuổi.
+- Danh sách chỉ gồm từng file, kích thước và mtime; kiểm tra lại đường dẫn nằm trong workspace, reparse, Git-tracked, process/IIS/LAN, file lock và bản giữ lại trước xóa. Không recursive delete `.local`, không Recycle Bin, không sửa ACL để vượt lỗi. Dữ liệu chưa rõ giữ lại.
+- Ledger dung lượng/xóa và bằng chứng xác minh để trong `.local/cleanup/`, không commit. Không tái tạo bằng chứng lịch sử đã mất, không tuyên bố manifest của output đã nghỉ là package còn nguyên byte.

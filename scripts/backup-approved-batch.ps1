@@ -5,7 +5,8 @@ param(
  [Parameter(Mandatory=$true)][string]$EvidenceDirectory,
  [Parameter(Mandatory=$true)][string]$DependencyManifest,
  [Parameter(Mandatory=$true)][string]$DependencyManifestSha,
- [Parameter(Mandatory=$true)][string[]]$AdditionalFiles
+ [Parameter(Mandatory=$true)][string[]]$AdditionalFiles,
+ [switch]$AllowAdditionalRestorePoint
 )
 # A complete backup receipt is emitted only after all SQL/files/dependencies verify.
 # No ACL or application guard changes. The configured root must already be private
@@ -13,6 +14,8 @@ param(
 . (Join-Path $PSScriptRoot 'dev-signing-common.ps1')
 $ProgressPreference='SilentlyContinue'
 Assert-DevSigningScope Development
+$retention=Join-Path $script:ProjectRoot '.local/cleanup-retention.json'
+if((Test-Path -LiteralPath $retention) -and -not $AllowAdditionalRestorePoint){throw 'A verified restore point is retained. Review capacity/retention and explicitly use -AllowAdditionalRestorePoint for this approved operation. No automatic backup deletion.'}
 $parent=Resolve-SigningPath $BackupRoot '.local/backups'
 if(-not (Test-Path -LiteralPath $parent -PathType Container)){throw 'Existing private backup root required; no automatic ACL grants'}
 $parentAcl=Get-Acl -LiteralPath $parent

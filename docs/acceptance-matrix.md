@@ -1,3 +1,12 @@
+## Maintenance 29/10 — cleanup, không nghiệm thu lại chức năng SRS
+
+| Mục | Bằng chứng |
+|---|---|
+| Dung lượng | 195.80→31.08GB;85026files xóa164.81GB,giảm ròng164.72GB; ledger private theo nhóm |
+| Dữ liệu/khôi phục | i5dda5e7b7 checkpoint309 trước5intro giữSQL/media/dependencies,byteSHA PASS;0protected/unexplainedmissing,6MDF/LDF giữ;noSQLwrite/restore/backup |
+| Runtime/SQL207 | CurrentIIS386fileshashPASS, LAN/SDK/currentdata preserved; packet664de13e.../relatedreceipts/privateplan nguyên;không chạy migration/import |
+| Retention | Explicitpinnedfileplan/defaultnoDelete/runtime-source-DBguards;extraPublish/restorepoint requiresack;4syntax/1prebuildnegative/staticSQL-open-order PASS, nofullsuite/build/UI |
+
 ## SQL207 owner Inspect / backup preparation — 29/10/2026
 
 | Hạng mục | Trạng thái |

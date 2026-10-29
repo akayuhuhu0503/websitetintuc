@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
  [Parameter(Mandatory=$true)][ValidatePattern('^[a-zA-Z0-9-]+$')][string]$RunId,
- [switch]$SkipSchemaGeneration
+ [switch]$SkipSchemaGeneration,
+ [switch]$AllowAdditionalPackage
 )
 # Publishing does not load the workspace .env or initialize application/SQL code.
 $script:ProjectRoot=Split-Path -Parent $PSScriptRoot
@@ -11,6 +12,13 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $destination=Join-Path $script:ProjectRoot ('.local/publish/'+$RunId)
 if(Test-Path -LiteralPath $destination){throw 'New unique package required'}
+# The one-command IIS publisher already bounds current/previous/staging itself.
+# Other releases require an explicit retention decision before accumulating a
+# second complete code package. Never remove sealed/live outputs automatically.
+if($RunId -cne 'TTDL-IIS-building' -and -not $AllowAdditionalPackage){
+ $existing=@(Get-ChildItem -LiteralPath (Join-Path $script:ProjectRoot '.local/publish') -Directory -ErrorAction SilentlyContinue|Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'web/Web.dll') -PathType Leaf})
+ if($existing.Count){throw 'A current publish already exists. Review retention/rollback, then explicitly use -AllowAdditionalPackage for a separate release. Nothing was built or removed.'}
+}
 [void][IO.Directory]::CreateDirectory($destination)
 foreach($project in @('Web','Worker','MigrationCli','UatDataHandoff')){
  $folder=switch($project){'Web'{'web'}'Worker'{'worker'}'MigrationCli'{'tools'}'UatDataHandoff'{'tools/uat-data'}}

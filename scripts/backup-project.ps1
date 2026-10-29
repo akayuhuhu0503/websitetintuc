@@ -1,6 +1,8 @@
 ﻿[CmdletBinding()]
-param([ValidateSet('LandPortal_Dev','LandPortal_Test')][string]$Database='LandPortal_Dev', [switch]$GrantSqlBackupFolderAccess, [ValidateSet('phase2a','phase2b','v04','phase2c','phase2d','phase3b','phase3c')][string]$EvidencePhase='phase2a',[string]$EvidenceDirectory,[Guid]$InventorySession=[Guid]::Empty)
+param([ValidateSet('LandPortal_Dev','LandPortal_Test')][string]$Database='LandPortal_Dev', [switch]$GrantSqlBackupFolderAccess, [ValidateSet('phase2a','phase2b','v04','phase2c','phase2d','phase3b','phase3c')][string]$EvidencePhase='phase2a',[string]$EvidenceDirectory,[Guid]$InventorySession=[Guid]::Empty,[switch]$AllowAdditionalRestorePoint)
 . (Join-Path $PSScriptRoot 'common.ps1')
+$retention=Join-Path $script:ProjectRoot '.local/cleanup-retention.json'
+if((Test-Path -LiteralPath $retention) -and -not $AllowAdditionalRestorePoint){throw 'A verified restore point is retained. Review capacity/retention and explicitly use -AllowAdditionalRestorePoint before creating another. No backup or automatic deletion performed.'}
 $builder=Get-ProjectConnectionBuilder $Database
 $conn=New-Object System.Data.SqlClient.SqlConnection $builder.ConnectionString
 $stamp=[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
