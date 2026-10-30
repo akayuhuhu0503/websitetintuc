@@ -36,11 +36,7 @@ foreach($line in [IO.File]::ReadAllLines($source)){
  $node|Add-Member -MemberType NoteProperty -Name $parts[-1] -Value $value -Force
 }
 # All validation below is in memory. No SqlConnection.Open or application startup.
-Assert-UatTarget $settings
-foreach($name in @('MediaRoot','SnapshotRoot','TempRoot','KeysRoot')){
- $store=Get-UatSafePath ([string]$settings.Storage.$name)
- if(-not $store.StartsWith($homePath+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'All private stores must be inside the approved private home'}
-}
+Assert-UatRuntimeConfiguration $settings $homePath $config $code
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
 foreach($v in $web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable){
  if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',[string]$homePath)}

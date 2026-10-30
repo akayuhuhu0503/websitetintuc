@@ -22,12 +22,12 @@ public static class P0ReadyTests
         var services=new ServiceCollection();services.AddLogging();services.AddDataProtection();services.AddScoped(_=>new PortalDbContext(options));
         services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();var users=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
-        Check(users.Options.Password.RequiredLength==14&&users.Options.Lockout.MaxFailedAccessAttempts==5&&users.Options.Lockout.DefaultLockoutTimeSpan==TimeSpan.FromMinutes(15),"Bootstrap/Web Identity policies diverged.");
-        foreach(var validator in users.PasswordValidators){Check(!(await validator.ValidateAsync(users,new(),"Aa1!12345678")).Succeeded,"Weak initial administrator password accepted.");Check((await validator.ValidateAsync(users,new(),"Aa1!12345678901234")).Succeeded,"Strong initial password denied.");}
+        Check(users.Options.Password.RequiredLength==8&&users.Options.Lockout.MaxFailedAccessAttempts==5&&users.Options.Lockout.DefaultLockoutTimeSpan==TimeSpan.FromMinutes(15),"Bootstrap/Web Identity policies diverged.");
+        foreach(var validator in users.PasswordValidators){Check(!(await validator.ValidateAsync(users,new(),"abcdefg")).Succeeded,"Weak initial administrator password accepted.");Check((await validator.ValidateAsync(users,new(),PortalIdentityPolicy.NewTemporaryPassword())).Succeeded,"Generated initial password denied.");}
         var absent=new ConfigurationBuilder().Build();var denied=false;try{await BootstrapIdentity.InitializeAsync(provider,absent);}catch(InvalidOperationException){denied=true;}Check(denied,"Missing bootstrap credentials reported false success.");
         await using var beforeDb=new PortalDbContext(options);var roles=await beforeDb.Roles.CountAsync();var accounts=await beforeDb.Users.CountAsync();
-        var weak=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Bootstrap:AdminEmail","p0-policy@landportal.invalid"},{"Bootstrap:AdminPassword","Aa1!12345678"}}).Build();denied=false;
-        try{await BootstrapIdentity.InitializeAsync(provider,weak);}catch(InvalidOperationException){denied=true;}Check(denied&&await beforeDb.Roles.CountAsync()==roles&&await beforeDb.Users.CountAsync()==accounts,"Invalid bootstrap changed roles/accounts.");
+        var missingDelivery=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Bootstrap:AdminEmail","p0-policy-"+Guid.NewGuid().ToString("N")+"@landportal.invalid"}}).Build();denied=false;
+        try{await BootstrapIdentity.InitializeAsync(provider,missingDelivery);}catch(InvalidOperationException){denied=true;}Check(denied&&await beforeDb.Roles.CountAsync()==roles&&await beforeDb.Users.CountAsync()==accounts,"Bootstrap without private delivery storage changed roles/accounts.");
     }
     public static Task HomeAndAuditPolicy()
     {

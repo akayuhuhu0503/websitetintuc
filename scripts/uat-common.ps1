@@ -34,3 +34,45 @@ function Assert-UatSeparatePaths([string]$DataHome,[string]$Config,[string]$Publ
  $data=Get-UatSafePath $DataHome;$cfg=Get-UatSafePath $Config;$code=Get-UatSafePath $PublishRoot
  if(-not $cfg.StartsWith($data+'\',[StringComparison]::OrdinalIgnoreCase) -or $data -ieq $code -or $data.StartsWith($code+'\',[StringComparison]::OrdinalIgnoreCase) -or $code.StartsWith($data+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Separate private home/config and published application required'}
 }
+
+# Offline parity with UatDeployment.Validate: reject incomplete runtime settings
+# before writing private config or starting any Web/Worker/SQL process. This is
+# configuration validation, not authority to provision or deploy a target.
+function Assert-UatRuntimeConfiguration($Settings,[string]$DataHome,[string]$Config,[string]$PublishRoot) {
+ Assert-UatTarget $Settings
+ Assert-UatSeparatePaths $DataHome $Config $PublishRoot
+ $homePath=Get-UatSafePath $DataHome
+ $physical=[string]$Settings.Deployment.ExpectedSqlServerIdentity
+ if(([string]$Settings.Deployment.SqlAuthentication -ceq 'SqlPassword' -and [string]::IsNullOrWhiteSpace($physical)) -or $physical -match 'REPLACE|[\r\n]'){throw 'Bind the DBA-confirmed physical SQL server identity before runtime preparation'}
+ $origin=$null
+ if(-not [Uri]::TryCreate([string]$Settings.Public.BaseUrl,[UriKind]::Absolute,[ref]$origin) -or
+    $origin.Scheme -cne 'https' -or $origin.AbsolutePath -cne '/' -or $origin.UserInfo.Length -ne 0 -or
+    $origin.Query.Length -ne 0 -or $origin.Fragment.Length -ne 0 -or
+    -not [string]::Equals($origin.IdnHost,[string]$Settings.Deployment.ExpectedHost,[StringComparison]::OrdinalIgnoreCase)){
+  throw 'UAT public origin must use the exact approved HTTPS host without credentials, path, query or fragment'
+ }
+ $roots=@(foreach($name in @('MediaRoot','SnapshotRoot','TempRoot','KeysRoot')){
+  $root=Get-UatSafePath ([string]$Settings.Storage.$name)
+  if(-not $root.StartsWith($homePath+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'All UAT stores must be private children of the approved data home'}
+  $root
+ })
+ for($i=0;$i -lt $roots.Count;$i++){
+  for($j=$i+1;$j -lt $roots.Count;$j++){
+   if($roots[$i] -ieq $roots[$j] -or $roots[$i].StartsWith($roots[$j]+'\',[StringComparison]::OrdinalIgnoreCase) -or $roots[$j].StartsWith($roots[$i]+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'UAT media, snapshot, temporary and key stores must be distinct and not nested'}
+  }
+ }
+ $roleSecret=[string]$Settings.Runtime.RolePassword
+ if($roleSecret.Length -lt 24 -or $roleSecret.Length -gt 128){throw 'Runtime role secret must contain 24 to 128 characters; value is not logged'}
+ if([string]$Settings.Media.AllowUnscannedDevelopmentUploads -ine 'false'){throw 'UAT unscanned development uploads must be explicitly disabled'}
+ $provider=[string]$Settings.Scanner.Provider
+ if(([string]$Settings.Scanner.PolicyReference).Length -lt 5){throw 'Approved on-prem scanner policy reference required'}
+ if($provider -ceq 'Clamd'){
+  $port=0
+  if([string]::IsNullOrWhiteSpace([string]$Settings.Scanner.ClamdHost) -or -not [int]::TryParse([string]$Settings.Scanner.ClamdPort,[ref]$port) -or $port -lt 1024 -or $port -gt 65535){throw 'Approved Clamd host and valid service port required'}
+ }elseif($provider -ceq 'MicrosoftDefenderOnPrem'){
+  if(([string]$Settings.Scanner.DefenderPrivacyPolicyReference).Length -lt 5 -or
+     [string]$Settings.Scanner.DefenderBinarySha256 -cnotmatch '^[A-Fa-f0-9]{64}$' -or
+     ([string]$Settings.Scanner.DefenderServiceIdentity).Length -lt 4 -or
+     [string]$Settings.Scanner.DefenderServiceIdentity -match 'REPLACE|[\r\n]'){throw 'Approved Defender privacy policy, binary pin and service identity required'}
+ }else{throw 'Only approved on-prem Clamd or Microsoft Defender is supported for UAT'}
+}

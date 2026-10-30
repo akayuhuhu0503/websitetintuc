@@ -13,7 +13,7 @@ media, snapshot crawler, tài khoản, chứng chỉ hoặc cấu hình bí mậ
   phân công, SLA, tệp private và outbox có đối soát.
 - Upload video trực tiếp, worker quét/xử lý, poster và HTTP Range.
 - Lịch tuần có phiên bản, đọc DOCX và preview trước xuất bản.
-- Identity, CAPTCHA đăng nhập, mật khẩu tối thiểu 7 ký tự và thu hồi phiên.
+- Identity, CAPTCHA đăng nhập, mật khẩu tối thiểu 8 ký tự (hoa, thường, số, ký tự đặc biệt) và thu hồi phiên.
 - Crawler/import có checkpoint, chống trùng, manifest, chữ ký và verify/rollback.
 
 **CHƯA PRODUCTION READY.** Có chức năng còn chờ dữ liệu nghiệp vụ, quyền phê duyệt

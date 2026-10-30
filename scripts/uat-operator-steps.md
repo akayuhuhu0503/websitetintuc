@@ -152,13 +152,11 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
    lệnh migrate/site-initialize Development để thay cho kiểm chứng target UAT.
 3. Chưa có quyền cấp tài khoản UAT trong lượt Dev này. Người được phân công bootstrap
    admin riêng bằng công cụ đã có trên target (LANDPORTAL_HOME/CONFIG, Staging;
-   dotnet tools/MigrationCli.dll bootstrap). Trong uat.json private, dùng hai khóa
-   Bootstrap.AdminEmail và Bootstrap.AdminPassword (mật khẩu riêng theo policy,
-   tối thiểu 7 ký tự, không bắt buộc độ phức tạp); không đưa giá trị vào command line/log. Đặt process env
+   dotnet tools/MigrationCli.dll bootstrap). Trong uat.json private, chỉ cấu hình Bootstrap.AdminEmail. Hệ thống sinh mật khẩu tạm riêng 24 ký tự, ghi tệp private trong Storage.TempRoot/identity-credentials (ACL process identity + SYSTEM); không dùng Bootstrap.AdminPassword. Đặt process env
    LANDPORTAL_HOME=<PRIVATE_HOME>, LANDPORTAL_CONFIG=<PRIVATE_HOME>\uat.json,
    DOTNET_ENVIRONMENT=Staging và ASPNETCORE_ENVIRONMENT=Staging trước lệnh CLI.
    Xác minh tài khoản/role bằng đăng nhập thật; không coi dòng CLI success là
-   chứng cứ nếu cấu hình bootstrap trống. Xóa hai bootstrap secret sau hoàn tất.
+   chứng cứ nếu cấu hình bootstrap trống. Bàn giao mật khẩu qua kênh an toàn, xóa tệp bàn giao theo quy chế sau khi người dùng đã đổi mật khẩu.
    Không đặt mật khẩu mẫu, không chạy bootstrap Dev hoặc reset người đã có.
    Admin đăng nhập bằng tên tài khoản, mật khẩu và CAPTCHA theo cấu hình;
    đổi mật khẩu lần đầu nếu được cấp mật khẩu tạm, rồi vào quản trị theo quyền.
@@ -202,8 +200,8 @@ LandPortal_Dev/Test; không copy toàn SQL Test có fixture. Không mang .env m�
 
 ## Delta P0 đã kiểm chứng local 23/10/2026
 
-- Web và CLI bootstrap dùng cùng chính sách mật khẩu tối thiểu 7 ký tự. Thiếu
-  cấu hình bootstrap hoặc mật khẩu yếu trả lỗi; không coi CLI success là tạo được
+- Web và CLI bootstrap dùng cùng chính sách mật khẩu tối thiểu 8 ký tự với đủ hoa/thường/số/ký tự đặc biệt theo cập nhật BA sau SRS v1.2. Thiếu
+  email hoặc kho bàn giao private trả lỗi; bootstrap tự sinh mật khẩu tạm ngẫu nhiên, không coi CLI success là tạo được
   admin. Không chạy bootstrap lên Dev đã có hoặc dùng password Test cho UAT.
 - Nhật ký `/admin/audit`: cần đồng thời `users.manage`, `roles.manage` và phạm vi
   toàn hệ thống. Không tự cấp các quyền này. Chỉ đọc metadata sự kiện; không xuất
@@ -256,7 +254,7 @@ Gói dữ liệu và công cụ bổ sung được mô tả tại [hướng dẫ
 
 ### Chính sách xác thực bàn giao SRS v1.2
 
-Đăng nhập bằng tên tài khoản + mật khẩu và CAPTCHA theo cấu hình; MFA/TOTP đã được loại bỏ khỏi mã nguồn. Mật khẩu tối thiểu 7 ký tự, không bắt buộc hoa/thường/số/ký tự đặc biệt. Identity dùng cùng policy khi tạo, đổi và reset; không tự reset mật khẩu hoặc thay quyền của tài khoản hiện hữu. Schema Identity cũ giữ nguyên, cờ hai bước cũ không chặn đăng nhập.
+Đăng nhập bằng tên tài khoản + mật khẩu và CAPTCHA theo cấu hình; MFA/TOTP đã được loại bỏ khỏi mã nguồn. Mật khẩu tối thiểu 8 ký tự, bắt buộc chữ hoa, chữ thường, chữ số và ký tự đặc biệt. Identity dùng cùng policy khi tạo, đổi và reset; không tự reset mật khẩu hoặc thay quyền của tài khoản hiện hữu. Schema Identity cũ giữ nguyên, cờ hai bước cũ không chặn đăng nhập.
 
 Giữ khóa 15 phút sau 5 lần sai liên tiếp, giới hạn CAPTCHA/login, cookie HttpOnly/SameSite/Secure theo HTTPS, CSRF, audit và phân quyền server. `AdminSession:IdleMinutes=30` trong cấu hình mẫu. Các khóa cấu hình MFA cũ không có tác dụng và không cần sao chép sang đích mới.
 

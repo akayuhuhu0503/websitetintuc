@@ -1,3 +1,46 @@
+## Ba credential BA — 29/10/2026
+
+| Mục | Kết quả / phạm vi |
+|---|---|
+| Đúng3 account | READY:lan-ba-writer/reviewer/admin tồn tại,active/no lockout;roleLanDemo.writer/reviewer/admin và5/6/49quyền gán giữ nguyên |
+| Identity reset | 3/3 token-reset/native passwordreadback/realCAPTCHAlogin/302forcedchange/GETpage200 PASS;3uniqueCSPRNG24/8+4groups;MustChangePassword=true/securitystampchanged;không đổi password mới thayBA |
+| Safe delivery |3privateJSON ngoàiGit,folder/fileADMIN-onlyACL PASS;username/role/password/URL/instructions;khôngDPAPI,khôngplaintextHTTP/log/audit/report |
+| Guard | Windowsowner/restrictednames/exactrole/exactLANphysical+database/expiry/ACL/nooverwrite/lockout/preservation giữ;newBAcommanddenyadmin PASS. CMScredentialoldfailed→0CMSresets;CMSselfreset/lastadmin guard unchanged |
+| Bảo toàn |22tablegroups0mismatch;roles/claims/tokens/otheraccounts/siteconfig/env/Web unchanged;285/285/703/570,15migration;khôngbackup/deploy/otherDB |
+| Giới hạn bằng chứng |Extra403HTTP NOTRUN vì CAPTCHAhost5/10min→429,khôngbypass/re-reset. Không fullsuite/BAdevice/UAT/SQLTest full password-change acceptance |
+
+## BA change request sau SRS1.2 — password/first login, 29/10
+
+| Mục | Kết quả / giới hạn |
+|---|---|
+| Policy BA | PASS LOCAL OFFLINE:8+upper/lower/digit/nonalphanumeric; Identity/validation/hướng dẫn cùng policy, lockout5/15 giữ; existing7 vẫn xác thực được, không reflag |
+| Tạo/reset/bootstrap | IMPLEMENTED: CSPRNG24 riêng, privatefile ACL/no webroot/no HTTPplaintext; reset đúng quyền/concurrency/lastadmin, flagtrue/stamp/audit; bootstrap existinguser no-op; không reset tài khoản hiện hữu khi deploy |
+| First-login server gate | PASS OFFLINE:exact change/logout allowlist,admin+Authorize endpoints,editor403; currentpassword/confirmation/flag+audittransaction/stamp+refresh implemented. SQL/HTTP E2E PARTIAL/NOT RUN, không dùng unitstore thaySQL |
+| Schema/backup guard | Không migration mới (cờ đã có); owner backup vẫnDEFERRED, freshTestbackup guard không bỏ;sharedSQL31/2 không kết nối/thay đổi |
+| Final validation | Web/CLI/tests/LanDemoSetup build0warning/0error;34focusedofflinePASS;5LANauthHTTPsmokePASS riêng; không full regression |
+| LAN preservation | Binary mới đang chạy192.168.0.122:5188;285/285/703/570,15migration,11nhóm0mismatch;Identity/passwords/roles/flags/config/credentials nguyên SHA;BAdevice chưa test |
+| Overall | First-login/reset PARTIAL đến SQLTest/BA UAT; GitWIP chưacommit/push, khôngProductiondeploy. CHƯA PRODUCTION READY |
+
+## LAN redeploy 29/10 — latest source, dữ liệu giữ nguyên
+
+| Mục | Bằng chứng / trạng thái |
+|---|---|
+| Web LAN | Release build PASS0warning/0error; pointer→lan-refresh-20261029-6f18c2, listener192.168.0.122:5188 PID45256; HOST READY / CLIENT NOT VERIFIED |
+| Bảo toàn | Read-only LAN285/285/703/570,15migration;11nhóm bảng0mismatch; config/env/credentials/migration list SHA unchanged; không đổi password/roles/MFA/scanner/SMTP/firewall |
+| Khác biệt | Source Web/views/frontend/Identity policy giữ như mốc LANc307344; DLL cập nhật Infrastructure SQL-auth/UAT validation/error redaction. Ops/recovery/handoff thay đổi không tự thực thi; không migration/import/backup |
+| Smoke |10/10 HTTP sau deploy PASS;2admin routes→login,log0fail/0unhandled. Không dùng credentials người dùng/full regression/UAT acceptance; comparison.json trong.local/lan-refresh-20261029-6f18c2 |
+| Shared SQL / vận hành | Không truy cập shared SQL, checkpoint31bảng/2migration và backupDEFERRED/ApplyBLOCKED giữ nguyên. CHƯA PRODUCTION READY |
+
+## Hiện hành 29/10 — backup tạm hoãn theo owner / công cụ offline
+
+| Mục | Trạng thái / bằng chứng |
+|---|---|
+| Backup mới | **DEFERRED_BY_OWNER**, bỏ khỏi kế hoạch đang thực hiện; không backup hoặc sao chép dữ liệu. Plan cũ giữ lịch sử, không phải lệnh được phép chạy |
+| Shared SQL / Apply14 | Giữ trạng thái owner Inspect 31 bảng/2 migration, không truy vấn lại; **BLOCKED** do backup phù hợp chưa có và chưa được phép tạo. Packet664de13e…/guard nguyên vẹn;0DDL/DML/role/import |
+| Công cụ chuẩn bị IIS/Web/Worker | **PASS OFFLINE phần sửa**: kiểm tra physical identity/HTTPS origin/separate private stores/role secret/scanner policy và pin/no unscanned bypass trước ghi config hoặc chạy process; strict TLS UAT giữ nguyên |
+| Kiểm tra | 11 nhóm cấu hình offline +3 file syntax PASS; result `.local/offline-uat-20261029-ae724b/result.json`; không SQL/build/publish/full regression; không thay nghiệm thu IIS/UAT/ATTT |
+| SRS v1.2 / vận hành | Giữ các chức năng local đã đạt; gói IIS hiện tại chưa rebuild với delta này. Target schema/role/data, TTDL scannerSMTP/HTTPS/ACL và UAT thực tế chưa hoàn tất; **CHƯA PRODUCTION READY** |
+
 ## Maintenance 29/10 — cleanup, không nghiệm thu lại chức năng SRS
 
 | Mục | Bằng chứng |

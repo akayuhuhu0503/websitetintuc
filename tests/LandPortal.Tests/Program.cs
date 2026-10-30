@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 // An executable risk-focused suite. It refuses to connect to any database except
 // LandPortal_Test; fixtures never become official-looking public production data.
 var root = PortalConfiguration.FindWorkspace();
+if(args.Contains("--ba-password-offline")){await BaPasswordOfflineTests.RunAsync(root);return 0;}
 if(args.Contains("--nuke-cache-only"))
 {
     await NukeRealTests.RunAsync(root);Console.WriteLine("PASS real cached NukeViet parsing/normalized private drafts; SQL/network NOT RUN");return 0;
@@ -34,6 +35,12 @@ if (new SqlConnectionStringBuilder(connection).InitialCatalog != "LandPortal_Tes
 var options = DatabaseSettings.Options(config, forMigration: true);
 var tests = new List<object>();
 var failed = 0;
+if(args.Contains("--ba-password-http"))
+{
+    var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Fresh verified Test backup required; no bypass for password tests.");
+    await using(var backup=new PortalDbContext(options))await ApprovedBatchExecution.VerifyBackupAsync(backup,root,"LandPortal_Test",args[at+1]);
+    await OwnPasswordHttpTests.RunAsync(root,config,options);return 0;
+}
 if(args.Contains("--srs12-only"))
 {
     var at=Array.IndexOf(args,"--test-backup-receipt");if(at<0||at+1>=args.Length)throw new InvalidOperationException("Verified Test backup required.");

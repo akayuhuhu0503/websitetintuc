@@ -76,10 +76,15 @@ public static class Phase2bAccountHttpTests
             });
             await Check("Temporary account must change its own password before any sensitive endpoint", async () =>
             {
-                tempName = "QA-2B-HTTP-Temp-" + Guid.NewGuid().ToString("N"); var form = await Form(administrator, "/admin/users/create"); form["UserName"] = tempName; form["Email"] = tempName + "@example.invalid"; form["DisplayName"] = "QA temporary editor"; form["TemporaryPassword"] = password;
+                tempName = "QA-2B-HTTP-Temp-" + Guid.NewGuid().ToString("N"); var form = await Form(administrator, "/admin/users/create"); form["UserName"] = tempName; form["Email"] = tempName + "@example.invalid"; form["DisplayName"] = "QA temporary editor";
                 using var created = await administrator.PostAsync("/admin/users/create", new FormUrlEncodedContent(form)); Assert(created.StatusCode == HttpStatusCode.Redirect, "Temporary account creation failed."); tempId = created.Headers.Location!.OriginalString.Split('/').Last();
-                await Login(temporary, tempName, password); using var forced = await temporary.GetAsync("/admin/users"); Assert(forced.StatusCode == HttpStatusCode.Redirect && forced.Headers.Location?.OriginalString == "/admin/account/change-password", "Temporary account bypassed password change.");
-                form = await Form(temporary, "/admin/account/change-password"); form["CurrentPassword"] = password; form["NewPassword"] = newPassword; form["ConfirmPassword"] = newPassword;
+                using var handoffResponse=await administrator.GetAsync(created.Headers.Location);var handoff=new HtmlParser().ParseDocument(await handoffResponse.Content.ReadAsStringAsync());
+                var credentialPath=handoff.QuerySelector("code")!.TextContent;
+                Assert(Path.GetFullPath(credentialPath).StartsWith(StorageOptions.FromConfiguration(config).TempRoot+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Credential path escaped private store.");
+                using var credential=JsonDocument.Parse(await File.ReadAllTextAsync(credentialPath));var temporaryPassword=credential.RootElement.GetProperty("password").GetString()!;
+                Assert(!handoff.DocumentElement.TextContent.Contains(temporaryPassword),"HTTP response leaked credential.");
+                await Login(temporary, tempName, temporaryPassword); using var forced = await temporary.GetAsync("/admin/users"); Assert(forced.StatusCode == HttpStatusCode.Redirect && forced.Headers.Location?.OriginalString == "/admin/account/change-password", "Temporary account bypassed password change.");
+                form = await Form(temporary, "/admin/account/change-password"); form["CurrentPassword"] = temporaryPassword; form["NewPassword"] = newPassword; form["ConfirmPassword"] = newPassword;
                 using var changed = await temporary.PostAsync("/admin/account/change-password", new FormUrlEncodedContent(form)); Assert(changed.StatusCode == HttpStatusCode.Redirect, "Own password change failed.");
                 await using var db = new PortalDbContext(options); var user = await db.Users.AsNoTracking().SingleAsync(x => x.Id == tempId); Assert(!user.MustChangePassword && new PasswordHasher<PortalUser>().VerifyHashedPassword(user, user.PasswordHash!, newPassword) != PasswordVerificationResult.Failed, "Password change did not persist in SQL."); Assert(!await db.UserRoles.AnyAsync(x => x.UserId == tempId), "Temporary account gained permissions implicitly.");
             });

@@ -16,12 +16,11 @@ try {
     $lines = [IO.File]::ReadAllLines((Join-Path $script:ProjectRoot '.env.example'))
     $output = foreach ($line in $lines) {
         if ($line.StartsWith('Runtime__RolePassword=')) { 'Runtime__RolePassword=' + (New-LocalSecret) }
-        elseif ($line.StartsWith('Bootstrap__AdminPassword=')) { 'Bootstrap__AdminPassword=' + (New-LocalSecret) }
         elseif ($line.StartsWith('Bootstrap__AdminEmail=')) { 'Bootstrap__AdminEmail=' + $AdminEmail }
         else { $line }
     }
     $encoding = New-Object Text.UTF8Encoding $false
     [IO.File]::WriteAllLines($target, $output, $encoding)
-    Write-Output 'CREATED ignored project .env with cryptographic random secrets. Credentials are available only in that local file; no default password.'
+    Write-Output 'CREATED ignored project .env with a random runtime-role secret. Bootstrap generates its own temporary account credential in the private delivery store; no default password.'
     exit 0
 } catch { Write-Error ('Local initialization failed: ' + $_.Exception.GetType().Name); exit 1 }

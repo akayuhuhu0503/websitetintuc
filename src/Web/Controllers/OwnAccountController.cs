@@ -22,6 +22,7 @@ public sealed class OwnAccountController(UserManager<PortalUser> users, SignInMa
     public async Task<IActionResult> ChangePassword(ChangeOwnPasswordModel model)
     {
         var user = await Current(); if (user is null || user.IsDisabled) return Forbid(); model.RequiredChange = user.MustChangePassword;
+        if(!string.IsNullOrEmpty(model.NewPassword)&&model.NewPassword==model.CurrentPassword)ModelState.AddModelError(nameof(model.NewPassword),"Mật khẩu mới phải khác mật khẩu hiện tại.");
         if (ModelState.IsValid)
         {
             await using var transaction = await db.Database.BeginTransactionAsync();
@@ -56,7 +57,7 @@ public sealed class OwnAccountController(UserManager<PortalUser> users, SignInMa
     private string PasswordError(string code) => code switch
     {
         "PasswordMismatch" => "Mật khẩu hiện tại không đúng. Vui lòng nhập lại.",
-        "PasswordTooShort" => $"Mật khẩu phải có tối thiểu {users.Options.Password.RequiredLength} ký tự.",
+        "PasswordTooShort" or "PasswordRequiresUpper" or "PasswordRequiresLower" or "PasswordRequiresDigit" or "PasswordRequiresNonAlphanumeric" => PortalIdentityPolicy.PasswordError(code),
         "ConcurrencyFailure" => "Tài khoản vừa được cập nhật. Vui lòng tải lại trang và thử lại.",
         _ => "Chưa đổi được mật khẩu. Vui lòng kiểm tra thông tin và thử lại."
     };

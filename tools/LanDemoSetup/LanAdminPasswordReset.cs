@@ -19,7 +19,18 @@ using Microsoft.Extensions.DependencyInjection;
 public static class LanAdminPasswordReset
 {
     public static string Stage { get; private set; }="target-guard";
-    public static async Task RunAsync(IConfiguration config,PortalDbContext db,string[] args)
+    public static Task RunAsync(IConfiguration config,PortalDbContext db,string[] args) => RunCoreAsync(config,db,args,"lan-ba-admin");
+
+    // Separate owner-authorized Windows operator command. The original admin
+    // command remains admin-only. This is never callable through a CMS route.
+    public static Task RunBaAccountAsync(IConfiguration config,PortalDbContext db,string[] args)
+    {
+        var at=Array.IndexOf(args,"--user-name");
+        if(at<0||at+1>=args.Length||args[at+1] is not("lan-ba-writer" or "lan-ba-reviewer"))
+            throw new InvalidOperationException("Only the two existing named BA test accounts are allowed by this operator command.");
+        return RunCoreAsync(config,db,args,args[at+1]);
+    }
+    private static async Task RunCoreAsync(IConfiguration config,PortalDbContext db,string[] args,string expectedUserName)
     {
         if(!LanDemoDeployment.Validate(config,"Development"))throw new InvalidOperationException("Exact password-only LAN target required.");
         var who=WindowsIdentity.GetCurrent();var sid=who.User??throw new InvalidOperationException("Windows identity missing.");
@@ -40,8 +51,11 @@ public static class LanAdminPasswordReset
         var services=new ServiceCollection();services.AddLogging();services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(StorageOptions.FromConfiguration(config).KeysRoot)).SetApplicationName("LandPortal");services.AddScoped(_=>db);
         services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();var manager=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
-        var user=await manager.FindByNameAsync("lan-ba-admin")??throw new InvalidOperationException("Existing admin missing.");
-        if(user.UserName!="lan-ba-admin"||user.IsDisabled||await manager.IsLockedOutAsync(user))throw new InvalidOperationException("Account disabled or locked; no password change.");
+        var user=await manager.FindByNameAsync(expectedUserName)??throw new InvalidOperationException("Existing named LAN account missing.");
+        if(user.UserName!=expectedUserName||user.IsDisabled||await manager.IsLockedOutAsync(user))throw new InvalidOperationException("Account disabled or locked; no password change.");
+        var expectedRole=expectedUserName switch{"lan-ba-writer"=>"LanDemo.writer","lan-ba-reviewer"=>"LanDemo.reviewer","lan-ba-admin"=>"LanDemo.admin",_=>throw new InvalidOperationException("Named LAN scope mismatch.")};
+        var assignedRoles=await manager.GetRolesAsync(user);
+        if(assignedRoles.Count!=1||assignedRoles[0]!=expectedRole)throw new InvalidOperationException("Existing BA role differs; stop without changing it.");
         async Task<string> PreservedDigest()
         {
             var others=await db.Users.AsNoTracking().Where(x=>x.Id!=user.Id).OrderBy(x=>x.Id).ToListAsync();
@@ -54,10 +68,10 @@ public static class LanAdminPasswordReset
         if(verifyExisting)
         {
             using var credentials=JsonDocument.Parse(await File.ReadAllTextAsync(path));
-            if(credentials.RootElement.GetProperty("userName").GetString()!="lan-ba-admin"||credentials.RootElement.GetProperty("database").GetString()!=LanDemoDeployment.Database)throw new InvalidOperationException("Credential scope mismatch.");
+            if(credentials.RootElement.GetProperty("userName").GetString()!=expectedUserName||credentials.RootElement.GetProperty("database").GetString()!=LanDemoDeployment.Database)throw new InvalidOperationException("Credential scope mismatch.");
             password=credentials.RootElement.GetProperty("password").GetString()!;
         }
-        else password=Convert.ToBase64String(RandomNumberGenerator.GetBytes(18)).Replace('+','-').Replace('/','_');
+        else password=PortalIdentityPolicy.NewTemporaryPassword();
         if(!verifyExisting){
         Stage="identity-reset";
         // Open the ACL-checked file before committing; secrets never enter CLI arguments or logs.
@@ -65,15 +79,15 @@ public static class LanAdminPasswordReset
         await using(var transaction=await db.Database.BeginTransactionAsync())
         {
             var token=await manager.GeneratePasswordResetTokenAsync(user);Ok(await manager.ResetPasswordAsync(user,token,password));
-            user.MustChangePassword=false;Ok(await manager.UpdateAsync(user));
-            db.AuditLogs.Add(new AuditLog{Actor=sid.Value,Action="LanAdminPasswordReset",Detail=JsonSerializer.Serialize(new{user.Id,user.UserName,database=LanDemoDeployment.Database,mustChangePassword=false,ownerRequested=true,noSecretRecorded=true})});
+            user.MustChangePassword=true;Ok(await manager.UpdateAsync(user));
+            db.AuditLogs.Add(new AuditLog{Actor=sid.Value,Action=expectedUserName=="lan-ba-admin"?"LanAdminPasswordReset":"LanBaPasswordReset",Detail=JsonSerializer.Serialize(new{user.Id,user.UserName,database=LanDemoDeployment.Database,mustChangePassword=true,ownerRequested=true,noSecretRecorded=true})});
             await db.SaveChangesAsync();if(before!=await PreservedDigest())throw new InvalidOperationException("Other accounts or permissions changed; rollback.");
-            await JsonSerializer.SerializeAsync(output,new{userName=user.UserName,password,database=LanDemoDeployment.Database,loginUrl=config["Public:BaseUrl"]!.TrimEnd('/')+"/admin/login",mustChangePassword=false,createdUtc=DateTimeOffset.UtcNow},new JsonSerializerOptions{WriteIndented=true});
+            await JsonSerializer.SerializeAsync(output,new{userName=user.UserName,password,database=LanDemoDeployment.Database,loginUrl=config["Public:BaseUrl"]!.TrimEnd('/')+"/admin/login",mustChangePassword=true,createdUtc=DateTimeOffset.UtcNow},new JsonSerializerOptions{WriteIndented=true});
             await output.FlushAsync();output.Flush(true);await transaction.CommitAsync();
         }
         }
         Stage="identity-password-readback";
-        if(!await manager.CheckPasswordAsync(user,password)||user.MustChangePassword)throw new InvalidOperationException("Reset readback failed.");
+        if(!await manager.CheckPasswordAsync(user,password)||!verifyExisting&&!user.MustChangePassword)throw new InvalidOperationException("Reset readback failed.");
         using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false,CookieContainer=new()}){BaseAddress=new(config["Public:BaseUrl"]!),Timeout=TimeSpan.FromSeconds(30)};
         Stage="login-form";
         using var login=await http.GetAsync("/admin/login");Console.WriteLine("Login form HTTP "+(int)login.StatusCode);if(!login.IsSuccessStatusCode)throw new InvalidOperationException("Login form unavailable after reset; credential file retained.");
@@ -81,15 +95,16 @@ public static class LanAdminPasswordReset
         Stage="captcha-form";
         var question=doc.QuerySelector("#captcha-question")?.TextContent??throw new InvalidOperationException("CAPTCHA missing.");var numbers=Regex.Matches(question,@"\d+").Select(x=>int.Parse(x.Value,CultureInfo.InvariantCulture)).ToArray();
         if(numbers.Length!=2||!question.Contains("cộng")&&!question.Contains("trừ"))throw new InvalidOperationException("Unknown CAPTCHA format.");
-        var fields=new Dictionary<string,string>{["__RequestVerificationToken"]=doc.QuerySelector("input[name=__RequestVerificationToken]")!.GetAttribute("value")!,["CaptchaId"]=doc.QuerySelector("input[name=CaptchaId]")!.GetAttribute("value")!,["CaptchaAnswer"]=(question.Contains("cộng")?numbers[0]+numbers[1]:numbers[0]-numbers[1]).ToString(CultureInfo.InvariantCulture),["UserName"]="lan-ba-admin",["Password"]=password,["ReturnUrl"]="/admin"};
+        var fields=new Dictionary<string,string>{["__RequestVerificationToken"]=doc.QuerySelector("input[name=__RequestVerificationToken]")!.GetAttribute("value")!,["CaptchaId"]=doc.QuerySelector("input[name=CaptchaId]")!.GetAttribute("value")!,["CaptchaAnswer"]=(question.Contains("cộng")?numbers[0]+numbers[1]:numbers[0]-numbers[1]).ToString(CultureInfo.InvariantCulture),["UserName"]=expectedUserName,["Password"]=password,["ReturnUrl"]="/admin"};
         Stage="login-submit";
         using var signed=await http.PostAsync("/admin/login",new FormUrlEncodedContent(fields));Console.WriteLine("Login POST HTTP "+(int)signed.StatusCode);
-        if(signed.StatusCode!=HttpStatusCode.Redirect||signed.Headers.Location?.OriginalString!="/admin")throw new InvalidOperationException("Reset committed but HTTP login did not reach admin; credential file retained.");
+        var target=user.MustChangePassword?"/admin/account/change-password":"/admin";
+        if(signed.StatusCode!=HttpStatusCode.Redirect||signed.Headers.Location?.OriginalString!=target)throw new InvalidOperationException("Reset committed but HTTP login did not reach the expected password gate; credential file retained.");
         Stage="dashboard";
-        using var dashboard=await http.GetAsync("/admin");if(!dashboard.IsSuccessStatusCode)throw new InvalidOperationException("Dashboard unavailable after successful login.");
+        using var dashboard=await http.GetAsync(target);if(!dashboard.IsSuccessStatusCode)throw new InvalidOperationException("Expected authenticated page unavailable after login.");
         var page=parser.ParseDocument(await dashboard.Content.ReadAsStringAsync());var csrf=page.QuerySelector("form[action='/admin/account/logout'] input[name=__RequestVerificationToken]")?.GetAttribute("value");
         if(csrf!=null){using var logout=await http.PostAsync("/admin/account/logout",new FormUrlEncodedContent(new Dictionary<string,string>{{"__RequestVerificationToken",csrf}}));}
         if(before!=await PreservedDigest())throw new InvalidOperationException("Other accounts/permissions changed during smoke.");
-        Console.WriteLine("RESET PASS: lan-ba-admin / LandPortal_LanDemo; Identity reset, protected credential file, login/dashboard smoke PASS; no forced change; other accounts/roles preserved.");
+        Console.WriteLine("RESET PASS: "+expectedUserName+" / LandPortal_LanDemo; Identity reset, protected credential file, login/password gate smoke PASS; first change required for new reset; other accounts/roles preserved.");
     }
 }

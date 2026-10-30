@@ -74,7 +74,8 @@ public static class Phase2bAccountTests
         {
             using var provider = Provider(options); var admin = await Fixture(provider, Permissions.All);
             using var scope = provider.CreateScope(); var name = "QA-2B-Temp-" + Guid.NewGuid().ToString("N");
-            var id = await scope.ServiceProvider.GetRequiredService<AccountAdministrationService>().CreateUserAsync(admin.UserId, name, name + "@example.invalid", "QA temporary account", Guid.NewGuid().ToString("N") + "Aa!7");
+            var receipt = await scope.ServiceProvider.GetRequiredService<AccountAdministrationService>().CreateUserAsync(admin.UserId, name, name + "@example.invalid", "QA temporary account");
+            var id=receipt.UserId;
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>(); var user = await db.Users.AsNoTracking().SingleAsync(x => x.Id == id);
             Assert(user.MustChangePassword && !await db.UserRoles.AnyAsync(x => x.UserId == id), "Temporary user did not require change or gained a role.");
             Assert(!(await scope.ServiceProvider.GetRequiredService<CurrentPermissionService>().GetAsync(id)).Permissions.Any(), "Temporary-password user could use sensitive permissions.");
@@ -124,8 +125,10 @@ public static class Phase2bAccountTests
     internal static ServiceProvider Provider(DbContextOptions<PortalDbContext> options)
     {
         var services = new ServiceCollection(); services.AddLogging(); services.AddSingleton(options); services.AddScoped<PortalDbContext>();
-        services.AddIdentityCore<PortalUser>(options => { options.User.RequireUniqueEmail = true; options.Password.RequiredLength = 14; })
-            .AddRoles<IdentityRole>().AddEntityFrameworkStores<PortalDbContext>();
+        services.AddIdentityCore<PortalUser>(PortalIdentityPolicy.Configure)
+            .AddRoles<IdentityRole>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+        services.AddDataProtection();
+        services.AddSingleton(new TemporaryPasswordDelivery(TestEvidencePaths.At(PortalConfiguration.FindWorkspace(),"account-private")));
         services.AddScoped<CurrentPermissionService>(); services.AddScoped<AccountAdministrationService>(); return services.BuildServiceProvider();
     }
     internal static async Task<(string UserId, string RoleId, string UserName)> Fixture(ServiceProvider provider, IEnumerable<string> permissions)

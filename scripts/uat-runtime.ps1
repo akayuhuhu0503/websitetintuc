@@ -18,7 +18,7 @@ if(-not $configPath.StartsWith($homePath.TrimEnd('\')+'\',[StringComparison]::Or
 if($homePath.StartsWith($publishPath.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)-or $publishPath.StartsWith($homePath.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Private data/config must be outside published app'}
 if(-not(Test-Path -LiteralPath $configPath -PathType Leaf)){throw 'UAT private JSON required'}
 $c=Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json
-Assert-UatTarget $c
+Assert-UatRuntimeConfiguration $c $homePath $configPath $publishPath
 foreach($node in @($configPath,$homePath,$publishPath)){if((Get-Item -LiteralPath $node).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse entry refused'}}
 $env:LANDPORTAL_HOME=$homePath;$env:LANDPORTAL_CONFIG=$configPath
 $env:DOTNET_ENVIRONMENT='Staging';$env:ASPNETCORE_ENVIRONMENT='Staging'

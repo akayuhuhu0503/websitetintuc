@@ -45,6 +45,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         try { await db.SaveChangesAsync(); }
         catch { if(result.Succeeded)await signIn.SignOutAsync();throw; }
         if (result.Succeeded) {
+            if(loginAccount!.MustChangePassword)return Redirect("/admin/account/change-password");
             var target=Url.IsLocalUrl(model.ReturnUrl) ? model.ReturnUrl! : "/admin";
             if((target.StartsWith("/admin/account/mfa",StringComparison.OrdinalIgnoreCase)||target.StartsWith("/admin/mfa",StringComparison.OrdinalIgnoreCase)))target="/admin";
             if(target == "/admin") { var account=await signIn.UserManager.FindByNameAsync(model.UserName);var current=await permissions.GetAsync(account!.Id);if(!current.Has(Permissions.Create)&&!current.Has(Permissions.ViewOwn)&&!current.Has(Permissions.ViewAll)&&!current.Has(Permissions.Review)&&!current.Has(Permissions.PublishApproved)) target=current.Has(Permissions.ManageUsers)?"/admin/users":current.Has(Permissions.ManageRoles)?"/admin/roles":current.Has(Permissions.ManageSite)||current.Has(Permissions.PublishSite)||current.Has(Permissions.ViewSite)?"/admin/site":"/admin/account/change-password"; }

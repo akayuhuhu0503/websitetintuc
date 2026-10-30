@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 [Authorize(Policy = Permissions.ManageUsers)]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class AccountAdministrationController(PortalDbContext db, AccountAdministrationService administration, CurrentPermissionService permissions) : Controller
 {
     private string ActorId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException();
@@ -32,14 +33,14 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
         {
             try
             {
-                var id = await administration.CreateUserAsync(ActorId, model.UserName, model.Email, model.DisplayName, model.TemporaryPassword);
-                TempData["Success"] = "Đã tạo tài khoản nội bộ. Tài khoản phải đổi mật khẩu trước khi thực hiện thao tác quản trị; chưa được gán nhóm quyền.";
-                return Redirect("/admin/users/" + Uri.EscapeDataString(id));
+                var receipt = await administration.CreateUserAsync(ActorId, model.UserName, model.Email, model.DisplayName);
+                TempData["CredentialFile"] = receipt.CredentialFile;
+                TempData["Success"] = "Đã tạo tài khoản với mật khẩu tạm ngẫu nhiên riêng. Tài khoản phải đổi mật khẩu trước khi quản trị; chưa được gán nhóm quyền.";
+                return Redirect("/admin/users/" + Uri.EscapeDataString(receipt.UserId));
             }
             catch (UnauthorizedAccessException) { return Forbid(); }
             catch (InvalidOperationException error) { ModelState.AddModelError("", error.Message); }
         }
-        model.TemporaryPassword = ""; ModelState.SetModelValue(nameof(model.TemporaryPassword), "", "");
         return View("~/Views/Accounts/Create.cshtml", model);
     }
     [HttpGet("admin/users/{id}")]
@@ -59,6 +60,20 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
     [HttpPost("admin/users/{id}/revoke-sessions")]
     public Task<IActionResult> Revoke(string id, string concurrencyStamp) => Operation(id,
         () => administration.RevokeSessionsAsync(ActorId, id, concurrencyStamp), "Đã thu hồi các phiên đăng nhập của tài khoản.");
+    [HttpPost("admin/users/{id}/reset-password")]
+    public async Task<IActionResult> ResetPassword(string id,string concurrencyStamp)
+    {
+        try
+        {
+            var receipt=await administration.ResetPasswordAsync(ActorId,id,concurrencyStamp);
+            TempData["CredentialFile"]=receipt.CredentialFile;
+            TempData["Success"]="Đã tạo mật khẩu tạm ngẫu nhiên mới và thu hồi các phiên cũ. Người dùng phải đổi mật khẩu khi đăng nhập tiếp theo.";
+            return Redirect("/admin/users/"+Uri.EscapeDataString(id));
+        }
+        catch(UnauthorizedAccessException){return Forbid();}
+        catch(DbUpdateConcurrencyException){return await Failure(id,409,"Tài khoản đã thay đổi; tải lại trước khi reset mật khẩu.");}
+        catch(InvalidOperationException error){return await Failure(id,400,error.Message);}
+    }
     [Authorize(Policy = Permissions.GrantPermissions), HttpPost("admin/users/{id}/roles")]
     public Task<IActionResult> Roles(string id, string concurrencyStamp, List<string> roleIds) => Operation(id,
         () => administration.AssignRolesAsync(ActorId, id, concurrencyStamp, roleIds), "Đã cập nhật nhóm quyền và thu hồi các phiên đăng nhập cũ.");

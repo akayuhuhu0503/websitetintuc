@@ -16,7 +16,6 @@ public sealed class CreateAccountModel
     [Required, StringLength(256), Display(Name = "Tên đăng nhập")] public string UserName { get; set; } = "";
     [Required, EmailAddress, StringLength(256), Display(Name = "Email nội bộ")] public string Email { get; set; } = "";
     [StringLength(200), Display(Name = "Tên hiển thị")] public string DisplayName { get; set; } = "";
-    [Required, StringLength(256), IdentityPasswordLength, DataType(DataType.Password), Display(Name = "Mật khẩu tạm")] public string TemporaryPassword { get; set; } = "";
 }
 public sealed class AccountDetailModel
 {
@@ -60,7 +59,7 @@ public sealed record PermissionChoice(string Key, bool Sensitive, bool CanDelega
 public sealed class ChangeOwnPasswordModel
 {
     [Required, StringLength(256), DataType(DataType.Password), Display(Name = "Mật khẩu hiện tại")] public string CurrentPassword { get; set; } = "";
-    [Required, StringLength(256), IdentityPasswordLength, DataType(DataType.Password), Display(Name = "Mật khẩu mới")] public string NewPassword { get; set; } = "";
+    [Required, StringLength(256), IdentityPasswordPolicy, DataType(DataType.Password), Display(Name = "Mật khẩu mới")] public string NewPassword { get; set; } = "";
     [Required, StringLength(256), DataType(DataType.Password), Compare(nameof(NewPassword), ErrorMessage = "Mật khẩu nhập lại không khớp."), Display(Name = "Nhập lại mật khẩu mới")] public string ConfirmPassword { get; set; } = "";
     public bool RequiredChange { get; set; }
 }

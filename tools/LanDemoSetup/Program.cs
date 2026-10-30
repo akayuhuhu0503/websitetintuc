@@ -23,6 +23,10 @@ if(args.FirstOrDefault()=="reset-lan-admin-password"){
     if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
     try{await LanAdminPasswordReset.RunAsync(c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN password operation stopped at "+LanAdminPasswordReset.Stage+": "+error.GetType().Name+"; no secret logged.");Environment.ExitCode=1;}return;
 }
+if(args.FirstOrDefault()=="reset-lan-ba-test-password"){
+    if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
+    try{await LanAdminPasswordReset.RunBaAccountAsync(c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN BA password operation stopped at "+LanAdminPasswordReset.Stage+": "+error.GetType().Name+"; no secret logged.");Environment.ExitCode=1;}return;
+}
 if(args.FirstOrDefault()=="statistics-sample-info"){
     Console.WriteLine(JsonSerializer.Serialize(new{hashes=LanStatisticsSamples.Hashes().Order().ToArray(),provider=LanStatisticsSamples.Provider}));return;
 }

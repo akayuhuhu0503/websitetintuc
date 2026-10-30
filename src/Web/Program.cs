@@ -122,6 +122,7 @@ builder.Services.AddScoped<InquiryExcelService>();
 builder.Services.AddScoped<InteractionBatchService>();
 builder.Services.AddScoped<OutboxReconciliationService>();
 builder.Services.AddScoped<AccountAdministrationService>();
+builder.Services.AddSingleton(new TemporaryPasswordDelivery(storage.TempRoot,builder.Environment.WebRootPath??Path.Combine(builder.Environment.ContentRootPath,"wwwroot")));
 builder.Services.AddScoped<IAuthorizationHandler, FreshPermissionHandler>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<EditorialDocumentService>();
@@ -162,13 +163,11 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
-    if (context.User.Identity?.IsAuthenticated == true && context.Request.Path.StartsWithSegments("/admin") &&
-        !context.Request.Path.StartsWithSegments("/admin/account/change-password") &&
-        !context.Request.Path.StartsWithSegments("/admin/account/logout"))
+    if (FirstLoginPasswordGate.Restricts(context))
     {
         var manager = context.RequestServices.GetRequiredService<UserManager<PortalUser>>();
         var user = await manager.GetUserAsync(context.User);
-        if (user?.MustChangePassword == true) { context.Response.Redirect("/admin/account/change-password"); return; }
+        if (user?.MustChangePassword == true) { await FirstLoginPasswordGate.RejectAsync(context); return; }
     }
     await next();
 });

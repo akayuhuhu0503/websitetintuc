@@ -11,7 +11,7 @@ namespace LandPortal.Infrastructure;
 // Every identity mutation uses the same database transaction/application lock.
 // The final administrator check therefore also covers requests changing shared roles.
 public sealed class AccountAdministrationService(PortalDbContext db, UserManager<PortalUser> users,
-    RoleManager<IdentityRole> roles, CurrentPermissionService current)
+    RoleManager<IdentityRole> roles, CurrentPermissionService current, TemporaryPasswordDelivery? delivery = null)
 {
     public static readonly IReadOnlySet<string> PrivilegedPermissions = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -25,19 +25,37 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
         permission.StartsWith("site.", StringComparison.Ordinal) || permission.StartsWith("schedule.", StringComparison.Ordinal) ||
         permission == Permissions.PublishDirect || permission == Permissions.PublishApproved || permission == Permissions.Schedule;
 
-    public async Task<string> CreateUserAsync(string actorId, string userName, string email, string displayName, string temporaryPassword)
+    public async Task<TemporaryPasswordReceipt> CreateUserAsync(string actorId, string userName, string email, string displayName)
     {
         return await Mutate(actorId, Permissions.ManageUsers, async actor =>
         {
+            displayName??="";
             ValidateText(userName, 256, "Tên đăng nhập", true); ValidateText(email, 256, "Email", true);
             ValidateText(displayName, 200, "Tên hiển thị", false);
             var user = new PortalUser { UserName = userName.Trim(), Email = email.Trim(), DisplayName = displayName.Trim(),
                 EmailConfirmed = true, LockoutEnabled = true, MustChangePassword = true };
+            var temporaryPassword=PortalIdentityPolicy.NewTemporaryPassword();
+            var file=(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa tạo tài khoản.")).Write(user.Id,user.UserName!,temporaryPassword);
             Check(await users.CreateAsync(user, temporaryPassword));
             Audit(actorId, "AccountCreated", new { user.Id, user.UserName, user.Email, user.DisplayName, user.MustChangePassword });
-            return user.Id;
+            return new TemporaryPasswordReceipt(user.Id,file);
         });
     }
+
+    public Task<TemporaryPasswordReceipt> ResetPasswordAsync(string actorId,string targetId,string concurrencyStamp) =>
+        Mutate(actorId,Permissions.ManageUsers,async actor =>
+        {
+            var user=await User(targetId,concurrencyStamp);await ProtectTarget(actor,user);
+            if(user.Id==actorId)throw new UnauthorizedAccessException("Dùng chức năng đổi mật khẩu của bạn; không tự reset mật khẩu quản trị.");
+            if(user.IsDisabled)throw new InvalidOperationException("Tài khoản đang vô hiệu hóa; chưa đặt lại mật khẩu.");
+            var password=PortalIdentityPolicy.NewTemporaryPassword();
+            var file=(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa reset tài khoản.")).Write(user.Id,user.UserName!,password);
+            var token=await users.GeneratePasswordResetTokenAsync(user);
+            Check(await users.ResetPasswordAsync(user,token,password));
+            user.MustChangePassword=true;Check(await users.UpdateAsync(user));
+            Audit(actorId,"AccountPasswordReset",new {user.Id,mustChangePassword=true,sessionsRevoked=true});
+            return new TemporaryPasswordReceipt(user.Id,file);
+        });
 
     public async Task UpdateProfileAsync(string actorId, string targetId, string concurrencyStamp, string email, string displayName)
     {
@@ -212,7 +230,7 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
     private void Audit(string actor, string action, object detail) => db.AuditLogs.Add(new AuditLog { Actor = actor, Action = action, Detail = JsonSerializer.Serialize(detail) });
     private static void Require(ContentActor actor, string permission) { if (!actor.Has(permission)) throw new UnauthorizedAccessException("Thiếu quyền thực hiện thao tác."); }
     private static void CheckCatalog(IEnumerable<string> permissions) { if (permissions.Any(x => !Permissions.All.Contains(x, StringComparer.Ordinal))) throw new InvalidOperationException("Quyền ngoài catalog không được phép."); }
-    private static void ValidateText(string value, int max, string label, bool required) { if (value.Length > max || (required && string.IsNullOrWhiteSpace(value)) || value.Any(char.IsControl)) throw new InvalidOperationException(label + " không hợp lệ."); }
+    private static void ValidateText(string value, int max, string label, bool required) { if (value is null || value.Length > max || (required && string.IsNullOrWhiteSpace(value)) || value.Any(char.IsControl)) throw new InvalidOperationException(label + " không hợp lệ."); }
     private static void Check(IdentityResult result)
     {
         if(result.Succeeded)return;
@@ -222,7 +240,7 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
             "DuplicateUserName"=>"Tên đăng nhập đã được sử dụng.","DuplicateEmail"=>"Email đã được sử dụng.","DuplicateRoleName"=>"Tên nhóm quyền đã được sử dụng.",
             "InvalidUserName"=>"Tên đăng nhập chưa hợp lệ.","InvalidEmail"=>"Địa chỉ email chưa hợp lệ.","InvalidRoleName"=>"Tên nhóm quyền chưa hợp lệ.",
             "ConcurrencyFailure"=>"Thông tin đã thay đổi; tải lại trước khi thao tác.","UserAlreadyInRole"=>"Tài khoản đã thuộc nhóm quyền này.","UserNotInRole"=>"Tài khoản chưa thuộc nhóm quyền này.",
-            _ when code.StartsWith("Password",StringComparison.Ordinal)=>"Mật khẩu chưa đáp ứng chính sách bảo mật.",
+            _ when code.StartsWith("Password",StringComparison.Ordinal)=>PortalIdentityPolicy.PasswordError(code),
             _=>"Chưa thể hoàn tất thay đổi tài khoản; kiểm tra thông tin và thử lại."
         };
         throw new InvalidOperationException(string.Join(" ",result.Errors.Select(x=>Label(x.Code)).Distinct()));

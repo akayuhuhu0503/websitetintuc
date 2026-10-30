@@ -1,12 +1,11 @@
 @model CreateAccountModel
-@inject Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Identity.IdentityOptions> IdentityPolicy
-@{ Layout = "_AdminLayout"; ViewData["Title"] = "Tạo tài khoản nội bộ"; var minimum = IdentityPolicy.Value.Password.RequiredLength; }
-<p><a href="/admin/users">← Danh sách tài khoản</a></p><h1>Tạo tài khoản nội bộ</h1><p>Nhập mật khẩu tạm riêng cho tài khoản này và chuyển cho người dùng qua kênh nội bộ. Mật khẩu không được lưu trong báo cáo hoặc gửi email từ cổng thông tin. Người dùng phải đổi mật khẩu trước khi quản trị.</p>
+@{ Layout = "_AdminLayout"; ViewData["Title"] = "Tạo tài khoản nội bộ"; }
+<p><a href="/admin/users">← Danh sách tài khoản</a></p><h1>Tạo tài khoản nội bộ</h1><p>Hệ thống tự sinh mật khẩu tạm ngẫu nhiên, riêng cho mỗi tài khoản. Người vận hành nhận mật khẩu qua tệp private trên máy chủ và bàn giao qua kênh an toàn; mật khẩu không được gửi qua trang LAN hoặc email từ cổng thông tin. Người dùng phải đổi mật khẩu khi đăng nhập lần đầu.</p>
 <form method="post" action="/admin/users/create" class="account-card">@Html.AntiForgeryToken()<div asp-validation-summary="All" class="validation-summary" role="alert"></div>
 <div class="form-field"><label asp-for="UserName"></label><input asp-for="UserName" autocomplete="off" maxlength="256" /><span asp-validation-for="UserName"></span></div>
 <div class="form-field"><label asp-for="Email"></label><input asp-for="Email" autocomplete="off" maxlength="256" /><span asp-validation-for="Email"></span></div>
 <div class="form-field"><label asp-for="DisplayName"></label><input asp-for="DisplayName" maxlength="200" /><span asp-validation-for="DisplayName"></span></div>
-<div class="form-field"><label asp-for="TemporaryPassword"></label><input asp-for="TemporaryPassword" autocomplete="new-password" minlength="@minimum" maxlength="256" /><span asp-validation-for="TemporaryPassword"></span><small>Mật khẩu phải có ít nhất @minimum ký tự. Tài khoản mới chưa có nhóm quyền.</small></div>
+<p class="form-help">@LandPortal.Infrastructure.PortalIdentityPolicy.Guidance Tài khoản mới chưa có nhóm quyền.</p>
 <button type="submit" class="button">Tạo tài khoản</button></form>
 
 @section Styles { <link rel="stylesheet" href="~/css/accounts.css" asp-append-version="true" /> }
