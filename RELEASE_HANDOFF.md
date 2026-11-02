@@ -1,6 +1,6 @@
 # Trạng thái bàn giao — 02/11/2026
 
-Source bàn giao trước lượt closure: [`ed7f5e64d68a18e953c9531421e5bf90c0d9a56c`](https://github.com/akayuhuhu0503/websitetintuc/commit/ed7f5e64d68a18e953c9531421e5bf90c0d9a56c), nhánh `main`. Commit tiếp theo chỉ ghi SHA này vào tài liệu; mã ứng dụng/publish không đổi. Dùng `git rev-parse HEAD` và kết quả push để đối chiếu HEAD cuối. Không tuyên bố PRODUCTION READY.
+Source closure: [`d99584a0ae6b1c95362942c56a88c750bb315de0`](https://github.com/akayuhuhu0503/websitetintuc/commit/d99584a0ae6b1c95362942c56a88c750bb315de0), nhánh `main`. Commit tiếp theo chỉ ghi SHA này vào tài liệu; mã ứng dụng/publish không đổi. Dùng `git rev-parse HEAD` và kết quả push để đối chiếu HEAD cuối. Không tuyên bố PRODUCTION READY.
 
 Publish cuối 02/11/2026: **PASS**, Release Web/Worker/MigrationCli/UatDataHandoff; `.local/publish/TTDL-IIS`, 396 file đối chiếu manifest, 0 mismatch. Đây là **cấu hình fixture kỹ thuật**, không phải cấu hình TTDL được cấp. `.env` thật không thay đổi; không kết nối SQL hoặc cài IIS/service. Hai tài liệu bàn giao ở gốc Git này đi kèm `START.md` trong gói. LAN public smoke 6 URL HTTP200; kiểm tra JS UUID ở HTTP context PASS, không thực hiện restore revision. Không chạy lại full regression/E2E BA.
 
