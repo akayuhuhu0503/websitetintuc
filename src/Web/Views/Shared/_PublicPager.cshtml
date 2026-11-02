@@ -1,0 +1,9 @@
+@model int[]
+@{var page=Model[0];var count=Model[1];string Link(int value){var values=Context.Request.Query.ToDictionary(x=>x.Key,x=>(string?)x.Value.ToString());values["page"]=value.ToString(System.Globalization.CultureInfo.InvariantCulture);return Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(Context.Request.Path.Value??"/",values);}var first=Math.Max(1,page-2);var last=Math.Min(count,page+2);}
+@if(count>1){<nav class="pagination public-pagination" aria-label="Phân trang">
+@if(page>1){<a href="@Link(page-1)" aria-label="Trang trước">‹</a>}else{<span class="page-disabled" aria-disabled="true">‹</span>}
+@if(first>1){<a href="@Link(1)">1</a>@if(first>2){<span class="page-gap">…</span>}}
+@for(var i=first;i<=last;i++){if(i==page){<span class="page-current" aria-current="page">@i</span>}else{<a href="@Link(i)">@i</a>}}
+@if(last<count){@if(last<count-1){<span class="page-gap">…</span>}<a href="@Link(count)">@count</a>}
+@if(page<count){<a href="@Link(page+1)" aria-label="Trang tiếp">›</a>}else{<span class="page-disabled" aria-disabled="true">›</span>}
+<span class="pagination-summary">Trang @(page) / @count</span></nav>}

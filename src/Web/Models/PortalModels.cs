@@ -116,7 +116,6 @@ public sealed class EditorModel
     [StringLength(2000, ErrorMessage = "Mô tả tối đa 2.000 ký tự.")]
     [Display(Name = "Mô tả ngắn")]
     public string? Summary { get; set; }
-    [Required(ErrorMessage = "Chọn chuyên mục.")]
     [Display(Name = "Chuyên mục chính")]
     public int? CategoryId { get; set; }
     [StringLength(1000000, ErrorMessage = "Nội dung vượt giới hạn 1.000.000 ký tự.")]
@@ -166,6 +165,7 @@ public sealed class EditorAssetInput { public Guid Id { get; set; } public strin
 public sealed record AdminRow(Guid Id, string Title, string Status, string? CategoryName, string UpdatedAt, bool IsPublished = false, bool IsTrashed = false, string? Owner = null);
 public sealed class AdminListModel
 {
+    public int? PendingReviewCount { get; init; }
     public string? Kind { get; init; }
     public IReadOnlyList<AdminRow> Items { get; init; } = [];
     public string? Query { get; init; }

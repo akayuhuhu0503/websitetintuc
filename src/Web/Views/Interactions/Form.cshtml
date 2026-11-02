@@ -1,6 +1,7 @@
 @model LandPortal.Web.Models.InteractionForm
 @using LandPortal.Domain
 @{var label=Model.Input.Kind switch{InteractionKind.Comment=>"Gửi bình luận",InteractionKind.Inquiry=>"Gửi câu hỏi",InteractionKind.Contact=>"Hòm thư góp ý và liên hệ",_=>"Góp ý dự thảo"};ViewData["Title"]=label;}
+<partial name="_PublicBreadcrumb" model="label" />
 <section class="interaction-panel public-interaction-panel"><h1>@label</h1>
 <p>Thông tin được lưu riêng tư để xử lý. Bình luận/câu hỏi chỉ xuất hiện sau kiểm duyệt và đồng ý công khai. Góp ý và liên hệ giữ riêng tư. Thời hạn lưu giữ đang chờ đơn vị xác nhận.</p>
 <p>Email chưa được xác minh. Vui lòng kiểm tra địa chỉ để nhận phản hồi; CAPTCHA chỉ giúp chống gửi tự động.</p>

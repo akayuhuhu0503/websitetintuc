@@ -87,6 +87,7 @@ builder.Services.AddScoped<InquiryCaptchaLookup>();
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    options.Filters.Add(new LoginAntiforgeryRecoveryFilter());
     options.ModelMetadataDetailsProviders.Add(new LandPortal.Web.Models.VietnameseValidationMetadata());
     options.ModelBindingMessageProvider.SetValueMustNotBeNullAccessor(_=>"Thông tin này không được để trống.");
     options.ModelBindingMessageProvider.SetAttemptedValueIsInvalidAccessor((_,name)=>$"{name} chưa hợp lệ. Vui lòng kiểm tra lại.");

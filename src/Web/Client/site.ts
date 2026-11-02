@@ -18,6 +18,13 @@
         links?.classList.toggle('is-open', !expanded);
     });
     const menus = Array.from(document.querySelectorAll<HTMLDetailsElement>('.nav-dropdown'));
+    links?.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(link => {
+        const url = new URL(link.href, location.href);
+        if (url.origin === location.origin && url.pathname.replace(/\/$/, '') === location.pathname.replace(/\/$/, '')) {
+            link.setAttribute('aria-current', 'page');
+            link.closest('.nav-dropdown')?.classList.add('is-active');
+        }
+    });
     menus.forEach(menu => menu.addEventListener('toggle', () => {
         if (menu.open) menus.forEach(other => { if (other !== menu) other.open = false; });
     }));

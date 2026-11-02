@@ -1,3 +1,95 @@
+## Cập nhật LAN FR-06/FR-10 — 02/11/2026, sau xác nhận gia hạn
+
+- Người dùng đã duyệt gia hạn đúng LAN thêm 7 ngày. Chỉ đổi ExpiresUtc đến 09/11/2026 10:55:08 giờ Việt Nam; kiểm tra cấu hình ngoài trường này không đổi, SMTP Disabled, LandPortal_LanDemo. Không thao tác SQL, tài khoản, quyền, backup hoặc migration.
+- Đã active Web .local/build/fr0610-20261102/bin/Web/release/Web.dll, xác minh listener PID41476 đúng binary. HTTP /van-ban, /du-thao, /admin/login: 3/3 PASS; hai trang tra cứu có datalist mới theo SRS. Lần assertion đầu chưa giải mã HTML entities thất bại, sửa harness unescape rồi kiểm tra lại PASS, không sửa ứng dụng vì lỗi harness.
+- Thay thế trạng thái LAN UPDATE BLOCKED bên dưới: LAN đã cập nhật. Build/8 kiểm tra offline kế thừa lượt sửa ngay trước, không chạy lại. Không thao tác xuất bản thử hoặc kiểm tra lại toàn workflow BA. FR-06 vẫn PARTIAL do thiếu email góp ý theo revision; không tuyên bố cả hai FR CODE COMPLETE/UAT/Production.
+- Evidence .local/fr0610-20261102/{renewal.json,final-activation.json,lan-http.json}; URL http://192.168.0.122:5188/admin/login. Không push GitHub.
+
+## FR-06 / FR-10 — 02/11/2026
+
+| Phạm vi | Trạng thái / bằng chứng |
+|---|---|
+| FR-06 | PARTIAL: lọc/PDF/counters/biên ngày có code; bổ sung gợi ý SRS và nhãn đóng góp ý. Thiếu email nhận góp ý theo revision, cần schema change riêng (không migration lượt này) |
+| FR-10 | Sửa featured-only revision fingerprint và chống tái dùng snapshot cũ khi bỏ cờ; giữ workflow/validation BA đã PASS. Code mới build PASS; chưa nghiệm thu LAN mới |
+| Kiểm tra mới | Sau sửa cuối 8/8 offline PASS; không SQL/full regression, không cộng với kết quả BA trước |
+| LAN | Chưa cập nhật: hết hạn 02/11 10:55 VN, chờ người dùng cho phép gia hạn. Không thay đổi dữ liệu/tài khoản/quyền |
+
+## BA tương tác — kết quả cuối trên LAN 30/10/2026 (thay PARTIAL bên dưới)
+
+| Tiêu chí | Trạng thái và bằng chứng |
+|---|---|
+| Reviewer kiểm duyệt/từ chối bình luận | PASS LOCAL: chủ dự án xác nhận trên trình duyệt; SELECT xác nhận bình luận thử Rejected, không public; audit15:48:15 |
+| Admin phân công Inquiry | PASS LOCAL: chủ dự án xác nhận; hồ sơ thử có Assignee lan-ba-reviewer |
+| Reviewer lưu trả lời | PASS LOCAL: chủ dự án xác nhận nội dung đúng; SQL Answered/HasAnswer=true, không public; không giải mã nội dung trong lượt kiểm tra |
+| Ba dòng trạng thái thư | 3 outbox/3 EventKey answer/3 command receipt/audit riêng lúc16:13:27,16:13:35,16:15:49; không render nhân bản. Không so sánh payload để kết luận trùng nội dung |
+| Gửi thư | DISABLED / NOT RUN: cả3 Pending, thử0, chưa có AcceptedUtc/receipt SMTP, không đối soát hoặc retry; cần xử lý hàng chờ thử trước khi bật SMTP |
+| ACL ngoài phạm vi, BR-16/editor/validation/quyền | Giữ PASS LOCAL đã kiểm tra trước; không chạy lại và không cộng thành suite mới |
+| Nghiệm thu chính thức | UAT/Production chưa nghiệm thu; PASS LAN không thay thế nghiệm thu máy chủ TTDL/SMTP thật |
+
+Lượt này chỉ kiểm kê metadata read-only LAN và cập nhật2tài liệu; không sửa code/build/redeploy/tài khoản/quyền/outbox. Evidence `.local/ba-outbox-20261030T093500Z-538755.json`. Các trạng thái PARTIAL tương tác bên dưới là lịch sử, đã được thay bởi xác nhận người dùng và readback ở trên.
+
+## Login LAN form cũ — 30/10/2026
+
+- PASS LOCAL: log xác nhận antiforgery khác claims-user gây 400; chỉ POST login thất bại CSRF chuyển 303 sang GET mới, không thực thi xác thực từ POST bị chặn. Build cuối0 lỗi/cảnh báo; HTTP4/4 tập trung PASS. LAN PID5272 đã cập nhật; không kiểm thử lại mật khẩu hoặc full suite.
+- Admin đã tự đổi mật khẩu15:28:10, MustChangePassword=false/không khóa/failed0; không reset hoặc thay quyền. Dùng mật khẩu người dùng vừa đổi, không dùng file mật khẩu tạm cũ. Các kiểm thử tương tác BA bên dưới vẫn giữ trạng thái riêng.
+
+## Finalize tương tác LAN — kiểm kê lại 30/10/2026
+
+| Mục | Kết quả |
+|---|---|
+| Kiểm duyệt bình luận thực | BLOCKED: chưa bật tiếp nhận/0bình luận; cần Admin tại `/admin/tuong-tac/tiep-nhan-binh-luan` bật toàn site và1bài để gửi bình luận thử riêng tư, tắt lại sau kiểm tra |
+| Trả lời Inquiry được giao | BLOCKED: hồ sơ thử `430d6490-1a74-40bb-a0dc-20007eb68c12` vẫn chưa giao; Admin mở chi tiết → chọn Người duyệt (LAN demo) → lý do → Lưu phân công có audit |
+| ACL ngoài phạm vi | PASS HTTP lượt trước (listẩn/404/403); lượt này read-only xác nhận vẫn unassigned, không chạy lại HTTP/auth không cần thiết |
+| An toàn/trạng thái BA | Không phiên Admin hợp lệ, không reset/đoán mật khẩu/giả actor/nâng quyền. MailDisabled giữ; không mutation/build/deploy/fullsuite. BA tương tác còn PARTIAL, các PASS khác giữ nguyên |
+
+## BA final trên LAN — 30/10/2026 (thay trạng thái Reviewer bị chặn bên dưới)
+
+| Mục | Kết quả thực tế |
+|---|---|
+| Reviewer5quyền | PASS: owner-approved Windows operator + Identity API/audit/stamp,6→11; inspect lại0write; các nhóm khác giữ |
+| Inbox/menu | PASS: Reviewer2menu/Comment200/Inquiry200; roles và cấu hình tiếp nhận403 |
+| Inquiry ACL | PASS negative:1fixture chưa giao, listẩn/detail404/reply403; không email. Assigned reply BLOCKED chờ Admin phân công đúng hồ sơ thử quaCMS |
+| Comment moderation | BLOCKED E2E: LAN chưa bật tiếp nhận,0bình luận; không tự sửa site settings/quyền để vượt chặn |
+| Writer | PASS actual: InboxComment/Inquiry/roles403,save intentPublish403 |
+| BR16 | PASS actual vòng1Tin: gửi→count1/listđúng→trả→count0. Account category-scope thực chưa có, kiểm tra ngoài phạm vi NOT RUN |
+| Draft/validation | PASS actual: draft chưa đủ được lưu trênHTTP; missingSummary400/lỗiViệt/focus/giữID và input; không nhân đôi content |
+| Thông báoPDF | PASS actual Submit200 khi chỉtitle/category/PDF753192byteClean/hashkhớp; không body/sapo/author/cover; trả bài/khôngpublish. Scannerengine mới NOT RUN, dùng media nguồn hợp lệ hiện hữu |
+| Bảo toàn/build | 19nhóm cũ0diff;285bài cũ +2fixture private, tổng287/289/703/570;15migration/3users/config/env/credential giữ. Toolbuild0warning/error;Webkhôngđổi,khôngredeploy/fullsuite |
+| Còn cần Admin | Mở tiếp nhận bình luận ở1bài phù hợp và phân công Inquiry thử `430d6490-1a74-40bb-a0dc-20007eb68c12` cho Reviewer; không cần cấp lại5quyền, khôngreset |
+
+## Làm rõ Thông báo PDF — 30/10/2026
+
+| Mục | Kết quả / giới hạn |
+|---|---|
+| FR-05/FR-10 | FIXED theo SRS và làm rõ BA: Thông báo tiêu đề/chuyên mục + nội dung hoặc PDF hợp lệ; không ép sapo/tác giả/ảnh giả. Tin giữ bộ trường bắt buộc cũ; draft chưa hoàn chỉnh được lưu |
+| Guard PDF | Persisted attachment đúng draft/revision + MIME/Clean/quarantine/origin/environment/proof/bytes; publish guards không đổi, không nới scanner |
+| Kiểm tra | Build Web PASS;11policyofflinePASS. HTTPlogin200/anonymouseditorredirect PASS. SQLworkflowPDF và engine scanner NOT RUN; không fullsuite |
+| LAN/bảo toàn | UPDATED;22nhóm0diff,285/285/703/570,3users/15migration;Identity/config/env/scannerstates giữ |
+| Admin/Reviewer | Owner giữ mật khẩu hiện tại, tự cấp5quyền quaCMS. Không reset hoặc grant; Inbox sau người dùng cấp chưa nghiệm thu |
+
+## BA editor / Reviewer / BR-16 — 30/10/2026
+
+| Mục | Kết quả / giới hạn |
+|---|---|
+| Editor nháp/submit | IMPLEMENTED: draft tiêu đề + category scope; required fields theo loại lúc gửi/đăng; field errors/focus/giữ input + ID/version sau lỗi bước tiếp theo. Không SQL mutation E2E trong lượt này |
+| Lưu trên HTTP LAN | FIXED/HTTP CHECK: randomUUID không có trên insecure context; fallback CSPRNG UUIDv4. POST form rỗng trả lỗiTitle/no draft; không bỏ idempotency/concurrency |
+| BR-16 | PASS READ-ONLY LAN: Reviewer count0 = SQL0, filteredlist200; predicate current/submitted/revision/trash/category. Offline SQLtranslation PASS; chuyển trạng thái fixture chưa chạy |
+| Reviewer tương tác | BLOCKED AUTHORITY LOGIN: role còn6quyền, cần5quyền catalog chỉ định; admin credential bị từ chối1lần, không reset/bypass. Reviewer thực đăng nhập được nhưng Inbox403; chưa grant hoặc xử lý hồ sơ |
+| Writer/anonymous | Actual Writer Comment/Inquiry/roles403 và directPublishPOST403; không tăng quyền. Menu endpoint vẫn cùng catalog |
+| Validation | Build0warning/error;10offlinePASS riêng; real error/focus/disclosure visibility/1440+390 nooverflow. Không full regression/screenshots/SQLTestfixture |
+| LAN/data | UPDATED ba-editor-20261030;285/285/703/570,15migration,3users.21tablegroupssame;AspNetUsers loginmetadata đổi, không reset/grant. Config/env/credential và scannerstates giữ |
+| Admin password audit | Reset29/10 16:47:33; tự đổi30/10 08:50:10 và09:35:53; không reset sau đó. Active/no lockout/MustChange=false/stamp đổi saureset. Chờ owner quyết định, không thử thêm hoặc reset tự động |
+
+## Redesign public theo ảnh BA — 30/10/2026
+
+| Mục | Bằng chứng / giới hạn |
+|---|---|
+| Design system | IMPLEMENTED: token chung, shell/nav/footer, card/lead/document/notice, breadcrumb/pager, filter/table/form/empty state; menu và nội dung CMS giữ nguyên |
+| LAN | UPDATED: Release mới trên5188; 17/17 HTTP200 sau sửa cuối, category link200 riêng; không deploy Production |
+| Responsive/accessibility | PASS DOM CHECK: homepage6viewport;6 trang con360px; listdesktop3cột; mobile menu/dropdown/Escape/focus; không tràn ngang/cắt title trong mẫu kiểm tra. Không screenshot hoặc nghiệm thu thị giác thayBA |
+| Bảo toàn |22nhóm bảng0mismatch;285/285/703/570,15migration;Identity/config/env/credential giữ. Không SQL DDL/DML trực tiếp, backup/import/resetaccount |
+| Giới hạn |Banner trung tính, không ảnh/logo chưaduyệt; carddocumenthome chưa có trường số/ký hiệu riêng trong projection. SQLread trung gian timeout, finalreadbackPASS không chứng minh rootcause. BA thẩm mỹ/UAT vẫn chờ |
+
 ## Ba credential BA — 29/10/2026
 
 | Mục | Kết quả / phạm vi |

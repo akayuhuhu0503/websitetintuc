@@ -39,7 +39,8 @@ public static class LanAdminPasswordReset
         var path=Path.GetFullPath(args[at+1]);var parent=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"LandPortal-LanDemo-Credentials")+Path.DirectorySeparatorChar;
         if(!path.StartsWith(parent,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Credentials must stay outside Git in the ADMIN profile.");
         for(string? node=path;node!=null;node=Path.GetDirectoryName(node))if((File.Exists(node)||Directory.Exists(node))&&(File.GetAttributes(node)&FileAttributes.ReparsePoint)!=0)throw new InvalidOperationException("Reparse credential path refused.");
-        var verifyExisting=args.Contains("--verify-existing");
+        var hashOnly=args.Contains("--verify-hash-only");
+        var verifyExisting=hashOnly||args.Contains("--verify-existing");
         var info=new FileInfo(path);if(!info.Exists||!verifyExisting&&info.Length!=0||verifyExisting&&info.Length==0)throw new InvalidOperationException("Protected credential file state mismatch; no overwrite.");
         var acl=info.GetAccessControl();var rules=acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().ToArray();
         if(!acl.AreAccessRulesProtected||!sid.Equals(acl.GetOwner(typeof(SecurityIdentifier)))||rules.Length!=1||!sid.Equals(rules[0].IdentityReference)||rules[0].AccessControlType!=AccessControlType.Allow||rules[0].FileSystemRights!=FileSystemRights.FullControl)throw new UnauthorizedAccessException("Credential ACL must allow only the current ADMIN SID.");
@@ -72,6 +73,16 @@ public static class LanAdminPasswordReset
             password=credentials.RootElement.GetProperty("password").GetString()!;
         }
         else password=PortalIdentityPolicy.NewTemporaryPassword();
+        if(hashOnly)
+        {
+            // Diagnostic only: PasswordHasher does not rehash, update lockout or
+            // attempt a sign-in. Never print either the hash or decoded password.
+            Stage="read-only-password-match";
+            var match=user.PasswordHash!=null&&manager.PasswordHasher.VerifyHashedPassword(user,user.PasswordHash,password)!=PasswordVerificationResult.Failed;
+            Console.WriteLine(match?"MATCH":"MISMATCH");
+            if(!match)Environment.ExitCode=2;
+            return;
+        }
         if(!verifyExisting){
         Stage="identity-reset";
         // Open the ACL-checked file before committing; secrets never enter CLI arguments or logs.
@@ -82,7 +93,10 @@ public static class LanAdminPasswordReset
             user.MustChangePassword=true;Ok(await manager.UpdateAsync(user));
             db.AuditLogs.Add(new AuditLog{Actor=sid.Value,Action=expectedUserName=="lan-ba-admin"?"LanAdminPasswordReset":"LanBaPasswordReset",Detail=JsonSerializer.Serialize(new{user.Id,user.UserName,database=LanDemoDeployment.Database,mustChangePassword=true,ownerRequested=true,noSecretRecorded=true})});
             await db.SaveChangesAsync();if(before!=await PreservedDigest())throw new InvalidOperationException("Other accounts or permissions changed; rollback.");
-            await JsonSerializer.SerializeAsync(output,new{userName=user.UserName,password,database=LanDemoDeployment.Database,loginUrl=config["Public:BaseUrl"]!.TrimEnd('/')+"/admin/login",mustChangePassword=true,createdUtc=DateTimeOffset.UtcNow},new JsonSerializerOptions{WriteIndented=true});
+            // This ACL-protected JSON is an operator handoff, never embedded in
+            // HTML. Keep generated ASCII punctuation literal so copying the value
+            // does not turn one password character into six JSON escape characters.
+            await JsonSerializer.SerializeAsync(output,new{userName=user.UserName,password,database=LanDemoDeployment.Database,loginUrl=config["Public:BaseUrl"]!.TrimEnd('/')+"/admin/login",mustChangePassword=true,createdUtc=DateTimeOffset.UtcNow},new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping});
             await output.FlushAsync();output.Flush(true);await transaction.CommitAsync();
         }
         }
@@ -105,6 +119,6 @@ public static class LanAdminPasswordReset
         var page=parser.ParseDocument(await dashboard.Content.ReadAsStringAsync());var csrf=page.QuerySelector("form[action='/admin/account/logout'] input[name=__RequestVerificationToken]")?.GetAttribute("value");
         if(csrf!=null){using var logout=await http.PostAsync("/admin/account/logout",new FormUrlEncodedContent(new Dictionary<string,string>{{"__RequestVerificationToken",csrf}}));}
         if(before!=await PreservedDigest())throw new InvalidOperationException("Other accounts/permissions changed during smoke.");
-        Console.WriteLine("RESET PASS: "+expectedUserName+" / LandPortal_LanDemo; Identity reset, protected credential file, login/password gate smoke PASS; first change required for new reset; other accounts/roles preserved.");
+        Console.WriteLine((verifyExisting?"VERIFY EXISTING PASS: ":"RESET PASS: ")+expectedUserName+" / LandPortal_LanDemo; protected credential, login/password gate smoke PASS; "+(verifyExisting?"no reset performed; ":"Identity reset committed; first change required; ")+"other accounts/roles preserved.");
     }
 }

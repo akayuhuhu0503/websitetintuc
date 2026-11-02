@@ -1,0 +1,7 @@
+@model IReadOnlyList<ContentCard>
+<ol class="notice-list">
+@foreach(var item in Model)
+{
+    <li><span class="notice-icon"><partial name="_PortalIcon" model='"notice"' /></span><div><p class="item-meta">@item.DisplayDate</p><h3><a href="@item.Url">@item.Title</a></h3></div><span class="notice-arrow" aria-hidden="true">›</span></li>
+}
+</ol>

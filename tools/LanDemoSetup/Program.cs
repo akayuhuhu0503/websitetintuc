@@ -19,6 +19,10 @@ if(!args.Contains("disable"))LanDemoDeployment.Validate(c,"Development");
 else if(c["Deployment:Profile"]!="LAN_DEMO"||c["Sql:ExpectedDatabase"]!=LanDemoDeployment.Database||new SqlConnectionStringBuilder(DatabaseSettings.Connection(c)).DataSource!=@".\SQLEXPRESS")throw new InvalidOperationException("Exact isolated demo target required even after demo expiry.");
 var opts=DatabaseSettings.Options(c,forMigration:true);
 await using var dest=new PortalDbContext(opts);
+if(args.FirstOrDefault()=="grant-lan-reviewer-interactions"){
+    if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
+    try{await LanReviewerPermissions.RunAsync(c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN reviewer grant stopped at "+LanReviewerPermissions.Stage+": "+error.GetType().Name+"; no secret logged.");Environment.ExitCode=1;}return;
+}
 if(args.FirstOrDefault()=="reset-lan-admin-password"){
     if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
     try{await LanAdminPasswordReset.RunAsync(c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN password operation stopped at "+LanAdminPasswordReset.Stage+": "+error.GetType().Name+"; no secret logged.");Environment.ExitCode=1;}return;

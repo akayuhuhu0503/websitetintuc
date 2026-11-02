@@ -1,0 +1,12 @@
+@model LandPortal.Web.Services.SiteHomeBlockResult
+@if(Model.Block.Type=="Featured"&&Model.Items.Count>0)
+{
+    var lead=Model.Items[0];
+    <div class="lead-grid"><partial name="_LeadStory" model="lead" />
+    @if(Model.Items.Count>1){<div class="secondary-stories">@foreach(var item in Model.Items.Skip(1)){<partial name="_Card" model="item" />}</div>}
+    </div>
+}
+else if(Model.Block.Type=="Announcements"){<partial name="_NoticeList" model="Model.Items" />}
+else if(Model.Block.Type is "LegalDocuments" or "DraftDocuments")
+{<div class="document-card-grid">@foreach(var item in Model.Items){<partial name="_HomeDocumentCard" model="item" />}</div>}
+else{<div class="configured-story-grid">@foreach(var item in Model.Items){<partial name="_Card" model="item" />}</div>}

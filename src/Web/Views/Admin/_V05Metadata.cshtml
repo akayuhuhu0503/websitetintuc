@@ -1,17 +1,18 @@
 @model EditorModel
 @using LandPortal.Domain
 @if(Model.Kind==ContentKind.Article){
-<fieldset disabled="@(!Model.CanSave)"><legend>Công khai thông tin (FR-17)</legend>
-<p>Bài công khai thông tin luôn qua hai bước duyệt, không nhận bình luận. Tên nhóm theo đặc tả chính thức; việc kích hoạt danh mục và áp dụng menu do quản trị có quyền thực hiện.</p>
+<fieldset disabled="@(!Model.CanSave)"><legend>Công khai thông tin</legend>
+<p>Chọn nhóm nếu đây là bài công khai thông tin. Bài tin thông thường không cần điền các trường bên dưới. Bài công khai thông tin phải được gửi duyệt.</p>
 <label asp-for="Metadata.DisclosureGroupId">Nhóm thông tin</label><select asp-for="Metadata.DisclosureGroupId"><option value="">Bài tin thông thường</option>@foreach(var group in LandPortal.Infrastructure.V05ContentPolicy.Groups){<option value="@group.Key">@group.Value</option>}</select>
-<label asp-for="Metadata.Province">Tỉnh/thành phố theo nguồn chính thức</label><input asp-for="Metadata.Province" maxlength="200"/>
-<label asp-for="Metadata.ProvinceCode">Mã tỉnh theo danh mục được đơn vị xác nhận</label><input asp-for="Metadata.ProvinceCode" maxlength="20"/>
-<label asp-for="Metadata.DisclosureYear">Năm thông tin</label><input asp-for="Metadata.DisclosureYear" type="number" min="1900" max="2200"/>
-<label asp-for="Metadata.PublicationSource">Nguồn phát hành chính thức</label><input asp-for="Metadata.PublicationSource" maxlength="1000"/>
-<label asp-for="Metadata.LegalBasisReference">Căn cứ pháp lý/phát hành</label><textarea asp-for="Metadata.LegalBasisReference" maxlength="2000"></textarea>
-<label asp-for="Metadata.PublicationReviewEvidence">Xác nhận thẩm quyền và đã rà soát thông tin cá nhân (nội bộ)</label><textarea asp-for="Metadata.PublicationReviewEvidence" maxlength="2000"></textarea>
-<p>Tài liệu PDF/Excel XLSX đi qua kho cách ly và bộ quét an toàn; dùng liên kết Tải / quét tài liệu sau khi lưu nháp. Tệp chưa quét chặn phát hành FR-17 kể cả ngoại lệ local. Không sao chép dữ liệu cá nhân chưa được phép công khai.</p>
-</fieldset>}
+<div id="disclosure-fields" hidden="@(Model.Metadata.DisclosureGroupId==null)">
+<label asp-for="Metadata.Province">Tỉnh/thành phố theo nguồn chính thức *</label><input asp-for="Metadata.Province" maxlength="200"/>
+<label asp-for="Metadata.ProvinceCode">Mã tỉnh theo danh mục được đơn vị xác nhận *</label><input asp-for="Metadata.ProvinceCode" maxlength="20"/>
+<label asp-for="Metadata.DisclosureYear">Năm thông tin *</label><input asp-for="Metadata.DisclosureYear" type="number" min="1900" max="2200"/>
+<label asp-for="Metadata.PublicationSource">Nguồn phát hành chính thức *</label><input asp-for="Metadata.PublicationSource" maxlength="1000"/>
+<label asp-for="Metadata.LegalBasisReference">Căn cứ pháp lý/phát hành *</label><textarea asp-for="Metadata.LegalBasisReference" maxlength="2000"></textarea>
+<label asp-for="Metadata.PublicationReviewEvidence">Xác nhận thẩm quyền và đã rà soát thông tin cá nhân (nội bộ) *</label><textarea asp-for="Metadata.PublicationReviewEvidence" maxlength="2000"></textarea>
+<p>Tài liệu phải được quét an toàn trước khi phát hành. Chỉ công khai thông tin cá nhân khi đã được phép.</p>
+</div></fieldset>}
 @if(Model.Metadata.WeeklyYear!=null){
 <fieldset disabled="@(!Model.CanSave)"><legend>Lịch công tác tuần (ISO, ngày theo Việt Nam)</legend>
 <label asp-for="Metadata.WeeklyYear">Năm ISO</label><input asp-for="Metadata.WeeklyYear" type="number" min="2000" max="2200"/>
@@ -19,7 +20,7 @@
 <input asp-for="Metadata.WeeklyOriginalAssetId" type="hidden" />
 @if(Model.Metadata.WeeklyOriginalAssetId != null){<p>Word gốc gắn với phiên bản sau khi lưu. <a href="/admin/documents/file/@Model.Metadata.WeeklyOriginalAssetId">Tải riêng tư để rà soát</a></p><label asp-for="Metadata.WeeklyOriginalReviewEvidence">Xác nhận đã rà soát thông tin ẩn và nhận xét và được phép công khai Word gốc (nội bộ)</label><textarea asp-for="Metadata.WeeklyOriginalReviewEvidence" maxlength="2000"></textarea>}
 <label asp-for="Metadata.WeeklyChangeNote">Ghi chú thay đổi</label><input asp-for="Metadata.WeeklyChangeNote" maxlength="1000"/>
-<p>Điền từng dòng lịch; dòng để trống sẽ bỏ qua. Nội dung bảng thay cho phần thân bài. DOCX đã Clean có thể đọc vào bản xem trước, sửa dòng rồi lưu nháp; mẫu kỹ thuật và mẫu lãnh đạo Trung tâm 5 cột đều cần đối chiếu bản gốc, chưa thay thế ba tuần nghiệp vụ thật. Bản cũ giữ trong lịch sử; chỉ các bản đã xuất bản được xem công khai khi lịch vẫn đang phát hành.</p>
+<p>Điền từng dòng lịch và đối chiếu tài liệu gốc. Dòng để trống được bỏ qua. Lịch chỉ hiển thị công khai sau khi xuất bản; các phiên bản cũ được giữ trong lịch sử.</p>
 @for(var i=0;i<Model.ScheduleRows.Count;i++){
 <details open="@(i<2||Model.ScheduleRows[i].Date!=null)"><summary>Dòng @(i+1)</summary>
 <label asp-for="ScheduleRows[i].Date">Ngày</label><input asp-for="ScheduleRows[i].Date" type="date"/>

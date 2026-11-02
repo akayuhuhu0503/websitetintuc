@@ -17,7 +17,7 @@ public sealed class WeeklyScheduleRow
 public static class V05ContentPolicy
 {
     public static readonly IReadOnlyDictionary<string,string> Groups=new Dictionary<string,string>{["giay-chung-nhan-sai-hong-huy"]="Giấy chứng nhận sai hỏng, hủy",["nguoi-nuoc-ngoai-dinh-cu-o-viet-nam"]="Người nước ngoài định cư ở Việt Nam",["to-chuc-vi-pham-phap-luat-dat-dai"]="Tổ chức vi phạm pháp luật đất đai"};
-    public static void Validate(ContentMetadata m,ContentKind kind)
+    public static void Validate(ContentMetadata m,ContentKind kind,bool allowIncomplete = false)
     {
         if (m.WeeklyOriginalReviewEvidence?.Length > 2000 || m.WeeklyOriginalAssetId != null && m.WeeklyYear == null) throw new InvalidOperationException("Tham chiếu Word hoặc xác nhận rà soát không hợp lệ.");
         if(m.DisclosureGroupId=="")m.DisclosureGroupId=null;
@@ -30,9 +30,9 @@ public static class V05ContentPolicy
         if(m.WeeklyYear!=null||m.WeeklyWeek!=null||m.WeeklyRowsJson!=null||m.WeeklyChangeNote!=null)
         {
             if(kind!=ContentKind.StaticPage||m.WeeklyYear is not(>=2000 and <=2200)||m.WeeklyWeek is not(>=1 and <=53)||m.WeeklyWeek>ISOWeek.GetWeeksInYear(m.WeeklyYear.Value)||m.WeeklyChangeNote?.Length>1000||m.WeeklyRowsJson?.Length>30000)throw new InvalidOperationException("Nhập đúng năm/tuần ISO và bảng lịch trong mẫu trang tĩnh.");
-            var rows=Rows(m);if(rows.Count is <1 or >100)throw new InvalidOperationException("Lịch cần từ1 đến100 dòng.");
+            var rows=Rows(m);if(rows.Count>100||!allowIncomplete&&rows.Count<1)throw new InvalidOperationException("Lịch cần từ1 đến100 dòng trước khi gửi duyệt hoặc đăng.");
             foreach(var r in rows)
-                if(r.Date==null||ISOWeek.GetYear(r.Date.Value.ToDateTime(TimeOnly.MinValue))!=m.WeeklyYear||ISOWeek.GetWeekOfYear(r.Date.Value.ToDateTime(TimeOnly.MinValue))!=m.WeeklyWeek||r.Period is not("Sáng" or "Chiều" or "Cả ngày" or "Chưa xác định")||string.IsNullOrWhiteSpace(r.Content)||new[]{r.Time,r.Content,r.Chair,r.Attendees,r.Location,r.Note}.Any(x=>x==null||x.Length>2000||x.Any(c=>char.IsControl(c)&&c is not('\n' or '\r' or '\t'))))throw new InvalidOperationException("Dòng lịch sai tuần, buổi hoặc vượt giới hạn; lịch công khai chưa thay đổi.");
+                if(!allowIncomplete&&(r.Date==null||string.IsNullOrWhiteSpace(r.Content)||string.IsNullOrWhiteSpace(r.Period))||r.Date!=null&&(ISOWeek.GetYear(r.Date.Value.ToDateTime(TimeOnly.MinValue))!=m.WeeklyYear||ISOWeek.GetWeekOfYear(r.Date.Value.ToDateTime(TimeOnly.MinValue))!=m.WeeklyWeek)||r.Period is not("" or "Sáng" or "Chiều" or "Cả ngày" or "Chưa xác định")||new[]{r.Time,r.Content,r.Chair,r.Attendees,r.Location,r.Note}.Any(x=>x==null||x.Length>2000||x.Any(c=>char.IsControl(c)&&c is not('\n' or '\r' or '\t'))))throw new InvalidOperationException("Dòng lịch sai tuần, buổi hoặc vượt giới hạn; lịch công khai chưa thay đổi.");
         }
     }
     public static List<WeeklyScheduleRow> Rows(ContentMetadata m)

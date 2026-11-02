@@ -1,8 +1,18 @@
 @model ListingModel
-@{ ViewData["Title"] = Model.Title; }
-<nav class="breadcrumbs" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><span>@Model.Title</span></nav>
-<div class="page-header"><p class="eyebrow">CỔNG THÔNG TIN QUẢN LÝ ĐẤT ĐAI</p><h1>@Model.Title</h1>@if (Model.Description is not null) { <p>@Model.Description</p> }</div>
-<form class="listing-filter" method="get"><label for="list-q">Từ khóa</label><input id="list-q" type="search" name="q" value="@Model.Query" placeholder="Tìm trong danh sách này" maxlength="200" /><button class="button" type="submit">Tìm kiếm</button></form>
-<p class="result-count">@Model.Total nội dung công khai @if (!string.IsNullOrWhiteSpace(Model.Query)) { <span>cho “@Model.Query”</span> }</p>
-@if (Model.Items.Count == 0) { <div class="empty-state"><h2>Chưa tìm thấy nội dung</h2><p>Chuyên mục được giữ đầy đủ. Tập mẫu hiện tại có thể chưa bao gồm nội dung của mục này.</p><a href="/tin-tuc">Xem các tin tức đã nhập →</a></div> } else { <div class="listing-grid">@foreach (var item in Model.Items) { <partial name="_Card" model="item" /> }</div> }
-@if (Model.PageCount > 1) { <nav class="pagination" aria-label="Phân trang">@if (Model.Page > 1) { <a href="?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page - 1)">← Trước</a> }<span>Trang @Model.Page / @Model.PageCount</span>@if (Model.Page < Model.PageCount) { <a href="?q=@Uri.EscapeDataString(Model.Query ?? "")&page=@(Model.Page + 1)">Tiếp →</a> }</nav> }
+@inject LandPortal.Web.Services.PublicSiteService Sites
+@{ViewData["Title"]=Model.Title;var site=await Sites.GetAsync();var showLead=Model.Page==1&&string.IsNullOrWhiteSpace(Model.Query)&&Model.Items.FirstOrDefault()?.Kind=="Tin tức";}
+<partial name="_PublicBreadcrumb" model="Model.Title" />
+<header class="page-header page-header-search"><div><p class="eyebrow">THÔNG TIN ĐẤT ĐAI</p><h1>@Model.Title</h1>@if(Model.Description is not null){<p>@Model.Description</p>}</div>
+<form class="listing-filter" method="get" role="search"><label class="sr-only" for="list-q">Tìm trong @Model.Title</label><input id="list-q" type="search" name="q" value="@Model.Query" placeholder="Tìm kiếm trong chuyên mục…" maxlength="200" /><button type="submit" class="button" aria-label="Tìm trong chuyên mục"><partial name="_PortalIcon" model='"search"' /></button></form></header>
+<p class="result-count">@Model.Total nội dung công khai @if(!string.IsNullOrWhiteSpace(Model.Query)){<span>cho “@Model.Query”</span>}</p>
+<div class="listing-layout"><section class="listing-results" aria-label="Danh sách nội dung">
+@if(Model.Items.Count==0){<div class="empty-state"><partial name="_PortalIcon" model='"document"' /><h2>Chưa tìm thấy nội dung</h2><p>Thử từ khóa khác hoặc quay lại chuyên mục. Nội dung chỉ hiển thị sau khi được duyệt công khai.</p><a href="/tin-tuc">Xem tin tức →</a></div>}
+else{
+    @if(showLead){<div class="listing-lead"><partial name="_LeadStory" model="Model.Items[0]" /></div>}
+    <div class="listing-grid">@foreach(var item in Model.Items.Skip(showLead?1:0)){<partial name="_Card" model="item" />}</div>
+}
+<partial name="_PublicPager" model="new int[]{Model.Page,Model.PageCount}" />
+</section><aside class="listing-sidebar" aria-label="Điều hướng chuyên mục">
+@if(site is not null){<section class="sidebar-panel"><h2>Chuyên mục thông tin</h2><nav aria-label="Các chuyên mục"><a href="/tin-tuc" aria-current="@(Context.Request.Path=="/tin-tuc"?"page":null)">Tất cả tin tức <span aria-hidden="true">›</span></a>@foreach(var category in site.Revision.Categories.Where(x=>x.ShowInNavigation).OrderBy(x=>x.SortOrder)){<a href="/chuyen-muc/@category.Slug" aria-current="@(Model.CategorySlug==category.Slug?"page":null)">@category.DisplayName <span aria-hidden="true">›</span></a>}</nav></section>}
+<section class="sidebar-panel sidebar-help"><partial name="_PortalIcon" model='"search"' /><h2>Tra cứu thông tin</h2><p>Tìm tin tức, văn bản và hỏi đáp đã công khai trên cổng thông tin.</p><a href="/tim-kiem" class="button secondary">Tìm kiếm nâng cao →</a></section>
+</aside></div>

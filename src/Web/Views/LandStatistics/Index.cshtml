@@ -1,6 +1,7 @@
 @model LandPortal.Web.Controllers.LandStatisticsPage
 @using LandPortal.Application
 @{ViewData["Title"]="Thống kê diện tích đất";var term=TextNormalizer.Search(Model.Query??"");var filtered=Model.Rows.Where(x=>term==""||TextNormalizer.Search(x.Province).Contains(term)||x.Code==Model.Query);var rows=Model.Sort switch{"total"=>filtered.OrderByDescending(x=>x.Total),"agricultural"=>filtered.OrderByDescending(x=>x.Agricultural),"nonagricultural"=>filtered.OrderByDescending(x=>x.NonAgricultural),"unused"=>filtered.OrderByDescending(x=>x.Unused),_=>filtered.OrderBy(x=>x.Code)};}
+<partial name="_PublicBreadcrumb" model='"Thống kê diện tích đất"' />
 <h1>Thống kê diện tích đất</h1>
 @if(Model.Version==null){<p class="empty-note">Chưa có số liệu thống kê chính thức được công bố.</p>}
 else{

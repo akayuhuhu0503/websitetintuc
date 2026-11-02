@@ -34,12 +34,31 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
     }
     function requireSession(){sessionPaused=true;window.clearTimeout(timer);if(reauth&&!reauth.open){reauth.showModal();void loadReauthChallenge();}}
     const canSave = form.dataset.canSave === 'true';
+    const disclosure = form.querySelector<HTMLSelectElement>('[name="Metadata.DisclosureGroupId"]');
+    function showDisclosureFields(){
+        const panel=document.querySelector<HTMLElement>('#disclosure-fields');
+        if(!panel)return;
+        panel.hidden=!disclosure?.value;
+        panel.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>('input,textarea').forEach(e=>e.disabled=!canSave||panel.hidden);
+        const direct=form.querySelector<HTMLButtonElement>('[data-save-publish]');
+        if(direct){direct.hidden=!!disclosure?.value;direct.disabled=!canSave||!!disclosure?.value;}
+    }
+    disclosure?.addEventListener('change',showDisclosureFields);showDisclosureFields();
     let dirty = false, bodyDirty = false, userBodyInteraction = false, generation = 0, saving = false, conflicted = false, navigating = false;
     let timer: number | undefined;
     let activeSave: Promise<SavedDraft | null> | null = null;
     let uncertainSave: { payload: FormData; intent: string; generation: number; wasNew: boolean } | null = null;
     let initialBody = source.value;
-    const uuid = () => crypto.randomUUID();
+    // LAN HTTP is not a secure context: randomUUID may be unavailable, while
+    // getRandomValues remains supported. Keep cryptographic RFC 4122 v4 IDs.
+    const uuid = (): string => {
+        if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    };
     const privateUrl = (id: string) => '/admin/media/' + id + '/preview' + (field('Id').value ? '?contentId=' + encodeURIComponent(field('Id').value) : '');
     const mediaGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     function rewrite(html: string, toPrivate: boolean): string {
@@ -96,8 +115,23 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
     async function errorMessage(response: Response): Promise<string> {
         const type = response.headers.get('content-type') || '';
         if (type.includes('application/json')) {
-            const payload = await response.json() as { message?: string; error?: string; errors?: string[] };
-            return payload.message || payload.error || payload.errors?.join(' ') || 'Không lưu được; máy chủ chưa xác nhận thay đổi.';
+            const payload = await response.json() as { message?: string; error?: string; errors?: string[]; fieldErrors?: Record<string,string>; savedDraft?: SavedDraft };
+            // Save and workflow transition are separate guarded commands. Retain the
+            // committed draft identity/version if only the transition was refused.
+            if(payload.savedDraft) update(payload.savedDraft);
+            form.querySelectorAll('[data-server-error]').forEach(e=>e.remove());
+            form.querySelectorAll('[aria-invalid=true]').forEach(e=>e.removeAttribute('aria-invalid'));
+            let first:HTMLElement|null=null;
+            for(const [name,message] of Object.entries(payload.fieldErrors||{})){
+                const control=name==='BodyHtml'?form.querySelector<HTMLElement>('.jodit-wysiwyg'):name==='CoverAssetId'?document.querySelector<HTMLElement>('[data-open-media=cover]'):form.elements.namedItem(name) as HTMLElement|null;
+                if(!control)continue;
+                control.setAttribute('aria-invalid','true');
+                const error=document.createElement('p');error.dataset.serverError='true';error.className='field-validation-error';error.textContent=message;
+                control.after(error);first ||= control;
+            }
+            const target=first||document.querySelector<HTMLElement>('#editor-feedback');
+            target?.focus();target?.scrollIntoView({block:'center',behavior:'auto'});
+            return [...new Set([payload.message||payload.error,...(payload.errors||[])].filter(Boolean))].join(' ') || 'Không lưu được; máy chủ chưa xác nhận thay đổi.';
         }
         if (response.status === 403) return 'Bạn không còn quyền thực hiện thao tác này. Nội dung đang nhập vẫn được giữ.';
         if (response.status === 409) return 'Bài đã thay đổi hoặc chuyển trạng thái ở phiên khác. Nội dung đang nhập vẫn được giữ; tải lại và đối chiếu trước khi tiếp tục.';
@@ -116,7 +150,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         const capturedGeneration = request.generation;
         const wasNew = request.wasNew;
         intent = request.intent;
-        saving = true; notify('Đang lưu vào SQL Server…');
+        saving = true; notify('Đang lưu bản nháp…');
         activeSave = (async () => {
             try {
                 const response = await fetch('/admin/save?format=json', { method: 'POST', body: request.payload, headers: { 'X-CSRF-TOKEN': csrf,'X-Editor-Request':'true' }, credentials: 'same-origin' });
@@ -125,6 +159,8 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
                 const result = await response.json() as SavedDraft;
                 uncertainSave = null;
                 update(result);
+                form.querySelectorAll('[data-server-error]').forEach(e=>e.remove());
+                form.querySelectorAll('[aria-invalid=true]').forEach(e=>e.removeAttribute('aria-invalid'));
                 if (capturedGeneration === generation) { dirty = false; if (bodyDirty) initialBody = rewrite(editor.value, false); }
                 notify('Đã lưu lúc ' + new Date(result.savedUtc).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + (dirty ? '. Còn thay đổi mới đang chờ lưu.' : '.'));
                 if (dirty && result.state !== 'Draft' && result.state !== 'Rejected') { conflicted = true; notify('Thao tác trước đã được xác nhận, nhưng còn thay đổi mới chưa lưu. Nội dung vẫn ở đây; giữ lại nội dung và đối chiếu bài trước khi mở bản sửa mới.', true); }

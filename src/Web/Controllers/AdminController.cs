@@ -21,7 +21,12 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException();
     private Task<ContentActor> Actor() => permissions.GetAsync(UserId);
     [AllowAnonymous, HttpGet("admin/login")]
-    public async Task<IActionResult> Login(string? returnUrl) => User.Identity?.IsAuthenticated == true ? Redirect("/admin") : await LoginView(new LoginModel { ReturnUrl = Url.IsLocalUrl(returnUrl) ? returnUrl : "/admin" });
+    public async Task<IActionResult> Login(string? returnUrl, bool formExpired = false)
+    {
+        if (User.Identity?.IsAuthenticated == true) return Redirect("/admin");
+        if (formExpired) ModelState.AddModelError("", "Phiên của biểu mẫu đăng nhập đã thay đổi hoặc hết hạn. Vui lòng đăng nhập lại trên biểu mẫu mới này.");
+        return await LoginView(new LoginModel { ReturnUrl = Url.IsLocalUrl(returnUrl) ? returnUrl : "/admin" });
+    }
     [AllowAnonymous, HttpPost("admin/login"), EnableRateLimiting("login")]
     public async Task<IActionResult> Login(LoginModel model)
     {
@@ -80,7 +85,9 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
     {
         if (q?.Length > 200 || owner?.Length > 450) return BadRequest();
         var actor = await Actor();
+        var pendingCount = actor.Has(Permissions.Review) ? await PendingReviewQuery.CountAsync(db, permissions, actor) : (int?)null;
         var contents = ReadScope(actor);
+        if(status == nameof(WorkflowState.PendingReview)) contents = PendingReviewQuery.Filter(contents, db);
         if (!string.IsNullOrWhiteSpace(kind)) { if (!Enum.TryParse<ContentKind>(kind, out var k) || !Enum.IsDefined(k)) return BadRequest(); contents = contents.Where(x => x.Kind == k); }
         var rows = from c in contents
                    join revision in db.Revisions.AsNoTracking() on c.CurrentRevisionId equals (Guid?)revision.Id into revisions
@@ -101,7 +108,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         var items = ids.Where(byId.ContainsKey).Select(id=>byId[id]).ToList();
         var categories = await Categories(actor);
         var owners = await (from u in db.Users.AsNoTracking() where contents.Any(c => c.OwnerUserId == u.Id) orderby u.UserName select new AdminOwner(u.Id, u.UserName ?? u.Id)).ToListAsync();
-        return View(new AdminListModel { Kind = kind, Query = q, Status = status, CategoryId = categoryId, Owner = owner, Page = page, Total = total, Categories = categories, Owners = owners, CanCreate = actor.Has(Permissions.Create), Items = items.Select(x => new AdminRow(x.Id, x.Title, StateLabel(x.State), categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm"), x.IsPublic && !x.IsTrashed, x.IsTrashed, owners.FirstOrDefault(o => o.Id == x.OwnerId)?.Name ?? "Dữ liệu nguồn")).ToList() });
+        return View(new AdminListModel { PendingReviewCount = pendingCount, Kind = kind, Query = q, Status = status, CategoryId = categoryId, Owner = owner, Page = page, Total = total, Categories = categories, Owners = owners, CanCreate = actor.Has(Permissions.Create), Items = items.Select(x => new AdminRow(x.Id, x.Title, StateLabel(x.State), categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm"), x.IsPublic && !x.IsTrashed, x.IsTrashed, owners.FirstOrDefault(o => o.Id == x.OwnerId)?.Name ?? "Dữ liệu nguồn")).ToList() });
     }
     private IQueryable<Content> ReadScope(ContentActor actor)
     {
@@ -175,25 +182,30 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         if((metadata.EffectiveDate is not null || metadata.EffectivenessStatus is "ConfirmedEffective" or "ConfirmedExpired" or "ConfirmedPartial") && string.IsNullOrWhiteSpace(metadata.EffectivenessEvidence)) ModelState.AddModelError("Metadata.EffectivenessEvidence","Nhập căn cứ xác nhận hoặc để hiệu lực chưa xác định.");
         if (!ModelState.IsValid)
         {
-            if (json) return BadRequest(new { message = "Thông tin bài viết chưa hợp lệ.", errors = ModelState.Values.SelectMany(v => v.Errors).Select(x => x.ErrorMessage).ToArray() });
+            if (json) return BadRequest(new { message = "Thông tin bài viết chưa hợp lệ.", errors = ModelState.Values.SelectMany(v => v.Errors).Select(x => x.ErrorMessage).ToArray(), fieldErrors = ModelState.Where(x=>x.Value!.Errors.Count>0).ToDictionary(x=>x.Key,x=>string.Join(" ",x.Value!.Errors.Select(e=>e.ErrorMessage))) });
             return View("Edit", await Populate(model, actor, content));
         }
+        WorkflowResult? savedDraft = null;
         try
         {
             var input = Input(model); input.Metadata.MetadataOrigin = "Editorial";
             var result = await workflow.SaveAsync(model.Id, input, actor, version, model.RequestId, autosave);
+            savedDraft = result;
+            model.Id = result.ContentId; model.RowVersion = Convert.ToBase64String(result.RowVersion); model.CurrentRevisionId = result.CurrentRevisionId;
+            ModelState.Remove(nameof(model.Id)); ModelState.Remove(nameof(model.RowVersion)); ModelState.Remove(nameof(model.CurrentRevisionId));
             if (intent == "Submit") result = await workflow.SubmitAsync(result.ContentId, result.CurrentRevisionId, actor, result.RowVersion, FollowupCommand(model.RequestId, "Submit"));
             if (intent == "Publish") result = await workflow.PublishDirectAsync(result.ContentId, result.CurrentRevisionId ?? throw new InvalidOperationException("Chưa có phiên bản để xuất bản."), actor, result.RowVersion, FollowupCommand(model.RequestId, "PublishDirect"));
             if (json) return Json(Result(result));
             TempData["Success"] = intent switch { "Submit" => "Đã lưu và gửi đúng phiên bản đi duyệt; bản đang công khai được giữ nguyên.", "Publish" => "Đã xuất bản phiên bản vừa lưu theo quyền đăng trực tiếp.", _ => "Đã lưu bản nháp. Phiên bản đang công khai được giữ nguyên." };
             return Redirect($"/admin/edit/{result.ContentId}");
         }
+        catch (EditorialValidationException ex) { foreach(var error in ex.Errors) ModelState.AddModelError(error.Key,error.Value); return await SaveError(400, ex.Message, ex.Errors); }
         catch (DbUpdateConcurrencyException) { return await SaveError(409, "Bài viết đã thay đổi hoặc đã chuyển trạng thái ở phiên khác. Nội dung bạn nhập vẫn được giữ; tải lại và đối chiếu trước khi lưu tiếp."); }
-        catch (UnauthorizedAccessException) { return Error(403, "Quyền thực hiện thao tác đã bị từ chối. Nội dung chưa được lưu.", json); }
+        catch (UnauthorizedAccessException) { return await SaveError(403, savedDraft is null ? "Quyền thực hiện thao tác đã bị từ chối. Nội dung chưa được lưu." : "Bản nháp đã lưu; bạn không còn quyền thực hiện bước tiếp theo."); }
         catch (InvalidOperationException ex) { return await SaveError(400, ex.Message); }
-        async Task<IActionResult> SaveError(int status, string message)
+        async Task<IActionResult> SaveError(int status, string message, IReadOnlyDictionary<string,string>? fields = null)
         {
-            if (json) return Error(status, message, true);
+            if (json) return StatusCode(status,new { message, fieldErrors = fields, savedDraft = savedDraft is null ? null : Result(savedDraft) });
             Response.StatusCode = status; ModelState.AddModelError("", message); return View("Edit", await Populate(model, actor, content));
         }
     }
@@ -339,7 +351,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
     }
     private DraftInput Input(EditorModel model)
     {
-        if(model.Metadata.WeeklyYear!=null){model.Metadata.WeeklyRowsJson=System.Text.Json.JsonSerializer.Serialize(model.ScheduleRows.Where(x=>!string.IsNullOrWhiteSpace(x.Content)||x.Date!=null).ToList());}
+        if(model.Metadata.WeeklyYear!=null){model.Metadata.WeeklyRowsJson=System.Text.Json.JsonSerializer.Serialize(model.ScheduleRows.Where(x=>x.Date!=null||new[]{x.Period,x.Time,x.Content,x.Chair,x.Attendees,x.Location,x.Note}.Any(v=>!string.IsNullOrWhiteSpace(v))).ToList());}
         var body = htmlPolicy.Clean(model.BodyHtml ?? "");
         var assets = new Dictionary<Guid, AssetSelection>();
         var dom = new HtmlParser().ParseDocument(body); var order = 0;

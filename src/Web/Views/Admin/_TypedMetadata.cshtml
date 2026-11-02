@@ -27,7 +27,7 @@
             <div class="form-field"><label asp-for="Metadata.ConsultationStartDate">Ngày bắt đầu lấy ý kiến</label><input asp-for="Metadata.ConsultationStartDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
             <div class="form-field"><label asp-for="Metadata.ConsultationEndDate">Ngày kết thúc lấy ý kiến</label><input asp-for="Metadata.ConsultationEndDate" type="date" asp-format="{0:yyyy-MM-dd}" /></div>
             <div class="form-field"><label asp-for="Metadata.ConsultationDateEvidence">Bằng chứng khoảng lấy ý kiến</label><textarea asp-for="Metadata.ConsultationDateEvidence" rows="2" maxlength="2000"></textarea></div>
-            <p class="form-help">Ngày kết thúc được hiểu đến hết ngày Việt Nam (UTC+7); đây là quy ước ứng dụng. Tiếp nhận góp ý có kiểm duyệt thuộc 2C.</p>
+            <p class="form-help">Tiếp nhận góp ý đến hết ngày kết thúc theo giờ Việt Nam. Mọi góp ý đều cần kiểm duyệt.</p>
         }
     }
     <p class="form-help">Giữ trống trường chưa xác nhận. Thông tin của bản sửa chỉ công khai sau xuất bản đúng phiên bản.</p>

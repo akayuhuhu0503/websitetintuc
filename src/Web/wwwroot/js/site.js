@@ -36,6 +36,13 @@
         links?.classList.toggle('is-open', !expanded);
     });
     const menus = Array.from(document.querySelectorAll('.nav-dropdown'));
+    links?.querySelectorAll('a[href]').forEach(link => {
+        const url = new URL(link.href, location.href);
+        if (url.origin === location.origin && url.pathname.replace(/\/$/, '') === location.pathname.replace(/\/$/, '')) {
+            link.setAttribute('aria-current', 'page');
+            link.closest('.nav-dropdown')?.classList.add('is-active');
+        }
+    });
     menus.forEach(menu => menu.addEventListener('toggle', () => {
         if (menu.open)
             menus.forEach(other => { if (other !== menu)

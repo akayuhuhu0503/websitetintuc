@@ -1,0 +1,5 @@
+@model ContentCard
+<article class="lead-story">
+@if(Model.ThumbnailUrl is not null){<a class="lead-image" href="@Model.Url" tabindex="-1" aria-hidden="true"><img src="@Model.ThumbnailUrl" alt="" fetchpriority="high" /></a>}
+<div class="lead-copy"><p class="item-meta">@Model.DisplayDate <span>@Model.CategoryName</span></p><h3><a href="@Model.Url">@Model.Title</a></h3>@if(!string.IsNullOrWhiteSpace(Model.Summary)){<p class="lead-summary">@Model.Summary</p>}<a class="button button-compact" href="@Model.Url">Xem chi tiết <partial name="_PortalIcon" model='"arrow"' /></a></div>
+</article>

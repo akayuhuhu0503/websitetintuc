@@ -40,12 +40,37 @@
         void loadReauthChallenge();
     } }
     const canSave = form.dataset.canSave === 'true';
+    const disclosure = form.querySelector('[name="Metadata.DisclosureGroupId"]');
+    function showDisclosureFields() {
+        const panel = document.querySelector('#disclosure-fields');
+        if (!panel)
+            return;
+        panel.hidden = !disclosure?.value;
+        panel.querySelectorAll('input,textarea').forEach(e => e.disabled = !canSave || panel.hidden);
+        const direct = form.querySelector('[data-save-publish]');
+        if (direct) {
+            direct.hidden = !!disclosure?.value;
+            direct.disabled = !canSave || !!disclosure?.value;
+        }
+    }
+    disclosure?.addEventListener('change', showDisclosureFields);
+    showDisclosureFields();
     let dirty = false, bodyDirty = false, userBodyInteraction = false, generation = 0, saving = false, conflicted = false, navigating = false;
     let timer;
     let activeSave = null;
     let uncertainSave = null;
     let initialBody = source.value;
-    const uuid = () => crypto.randomUUID();
+    // LAN HTTP is not a secure context: randomUUID may be unavailable, while
+    // getRandomValues remains supported. Keep cryptographic RFC 4122 v4 IDs.
+    const uuid = () => {
+        if (typeof crypto.randomUUID === 'function')
+            return crypto.randomUUID();
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    };
     const privateUrl = (id) => '/admin/media/' + id + '/preview' + (field('Id').value ? '?contentId=' + encodeURIComponent(field('Id').value) : '');
     const mediaGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     function rewrite(html, toPrivate) {
@@ -119,7 +144,29 @@
         const type = response.headers.get('content-type') || '';
         if (type.includes('application/json')) {
             const payload = await response.json();
-            return payload.message || payload.error || payload.errors?.join(' ') || 'Không lưu được; máy chủ chưa xác nhận thay đổi.';
+            // Save and workflow transition are separate guarded commands. Retain the
+            // committed draft identity/version if only the transition was refused.
+            if (payload.savedDraft)
+                update(payload.savedDraft);
+            form.querySelectorAll('[data-server-error]').forEach(e => e.remove());
+            form.querySelectorAll('[aria-invalid=true]').forEach(e => e.removeAttribute('aria-invalid'));
+            let first = null;
+            for (const [name, message] of Object.entries(payload.fieldErrors || {})) {
+                const control = name === 'BodyHtml' ? form.querySelector('.jodit-wysiwyg') : name === 'CoverAssetId' ? document.querySelector('[data-open-media=cover]') : form.elements.namedItem(name);
+                if (!control)
+                    continue;
+                control.setAttribute('aria-invalid', 'true');
+                const error = document.createElement('p');
+                error.dataset.serverError = 'true';
+                error.className = 'field-validation-error';
+                error.textContent = message;
+                control.after(error);
+                first || (first = control);
+            }
+            const target = first || document.querySelector('#editor-feedback');
+            target?.focus();
+            target?.scrollIntoView({ block: 'center', behavior: 'auto' });
+            return [...new Set([payload.message || payload.error, ...(payload.errors || [])].filter(Boolean))].join(' ') || 'Không lưu được; máy chủ chưa xác nhận thay đổi.';
         }
         if (response.status === 403)
             return 'Bạn không còn quyền thực hiện thao tác này. Nội dung đang nhập vẫn được giữ.';
@@ -151,7 +198,7 @@
         const wasNew = request.wasNew;
         intent = request.intent;
         saving = true;
-        notify('Đang lưu vào SQL Server…');
+        notify('Đang lưu bản nháp…');
         activeSave = (async () => {
             try {
                 const response = await fetch('/admin/save?format=json', { method: 'POST', body: request.payload, headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' }, credentials: 'same-origin' });
@@ -171,6 +218,8 @@
                 const result = await response.json();
                 uncertainSave = null;
                 update(result);
+                form.querySelectorAll('[data-server-error]').forEach(e => e.remove());
+                form.querySelectorAll('[aria-invalid=true]').forEach(e => e.removeAttribute('aria-invalid'));
                 if (capturedGeneration === generation) {
                     dirty = false;
                     if (bodyDirty)

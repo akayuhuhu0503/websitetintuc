@@ -1,3 +1,5 @@
 @model IReadOnlyList<LandPortal.Domain.DisclosureGroup>
 @{ViewData["Title"]="Công khai thông tin";}
-<h1>Công khai thông tin</h1><p>Thông tin chỉ xuất hiện sau khi cơ quan có thẩm quyền duyệt phát hành.</p><ul>@foreach(var group in Model){<li><a href="/cong-khai-thong-tin/@group.Id">@group.Name</a></li>}</ul>
+<partial name="_PublicBreadcrumb" model='"Công khai thông tin"' />
+<header class="page-header"><p class="eyebrow">THÔNG TIN CÔNG KHAI</p><h1>Công khai thông tin</h1><p>Thông tin chỉ xuất hiện sau khi cơ quan có thẩm quyền duyệt phát hành.</p></header>
+<div class="public-directory">@foreach(var group in Model){<a href="/cong-khai-thong-tin/@group.Id"><span class="quick-icon"><partial name="_PortalIcon" model='"document"' /></span><h2>@group.Name</h2><span aria-hidden="true">→</span></a>}</div>

@@ -9,7 +9,7 @@
 <partial name="_DocumentMetadata" model="Model.Metadata" />
 @{ViewData["WeeklyContentId"]=Model.Content.Id;}
 <partial name="_V05PublicMetadata" model="Model.Metadata" />
-@if(Model.IsDraftDocument) { <p class="scope-note">Tiếp nhận ý kiến: @Model.ConsultationState. Góp ý gắn với phiên bản dự thảo đang công khai.</p> }
+@if(Model.IsDraftDocument) { <p class="scope-note">@(Model.ConsultationState == "Đã đóng" ? "Đã hết thời gian lấy ý kiến" : "Tiếp nhận ý kiến: " + Model.ConsultationState). Góp ý gắn với phiên bản dự thảo đang công khai.</p> }
 @if (Model.CoverUrl is not null) { <figure><img class="article-cover" src="@Model.CoverUrl" alt="@(Model.CoverCaption??"Ảnh đại diện bài viết")" />@if(!string.IsNullOrWhiteSpace(Model.CoverCaption)){<figcaption>@Model.CoverCaption</figcaption>}</figure> }
 @if(Model.InlinePdfId is Guid pdf){<section class="document-viewer" aria-label="Xem văn bản PDF"><h2>Xem tài liệu PDF</h2><iframe src="/media/@pdf" title="Xem PDF: @Model.Content.Title" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:70vh;min-height:360px;border:1px solid #d4dfe5"></iframe><p><a href="/media/@pdf" target="_blank" rel="noopener">Mở PDF trong tab mới</a> · <a href="/media/@pdf?download=true&amp;contentId=@Model.Content.Id">Tải PDF về máy</a></p></section>}
 @if(Model.Content.Kind is "Văn bản pháp luật" or "Văn bản dự thảo"){<p class="article-meta">Lượt xem: @Model.DocumentViews · Lượt yêu cầu tải: @Model.DocumentDownloads</p>}
