@@ -282,7 +282,7 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
     private async Task<object> CompareData(ContentRevision revision) => new
     {
         title = revision.Title, summary = revision.Summary, author = revision.Author, source = revision.SourceCredit,
-        metadata = revision.Metadata, bodyText = htmlPolicy.PlainText(revision.BodyHtml), cover = revision.CoverAssetId?.ToString() ?? "",
+        consultationEmail = revision.Metadata.ConsultationEmail, metadata = revision.Metadata, bodyText = htmlPolicy.PlainText(revision.BodyHtml), cover = revision.CoverAssetId?.ToString() ?? "",
         categories = string.Join(", ", await db.RevisionCategories.Where(x => x.RevisionId == revision.Id).OrderBy(x => x.Category.SortOrder).Select(x => x.Category.Name).ToListAsync()),
         attachments = string.Join("; ", await db.ContentAssets.Where(x => x.RevisionId == revision.Id).OrderBy(x => x.SortOrder).Select(x => x.MediaAsset.OriginalName + " [" + x.Usage + "] " + x.Caption).ToListAsync())
     };

@@ -8,7 +8,17 @@ $c=Get-Content $state.config -Raw -Encoding UTF8|ConvertFrom-Json
 if($c.Deployment.Profile -cne 'LAN_DEMO' -or $c.Sql.ExpectedDatabase -cne 'LandPortal_LanDemo' -or [DateTimeOffset]$c.LanDemo.ExpiresUtc -le [DateTimeOffset]::UtcNow){throw 'Invalid/expired isolated LAN demo configuration'}
 $uri=[Uri]$c.Public.BaseUrl
 if(-not(Get-NetIPAddress -AddressFamily IPv4 -IPAddress $uri.Host -ErrorAction SilentlyContinue)){throw 'Configured LAN IPv4 is no longer assigned; review config before starting'}
-if(Get-NetTCPConnection -LocalAddress $uri.Host -LocalPort $uri.Port -State Listen -ErrorAction SilentlyContinue){Write-Output ('A process already listens at '+$uri.AbsoluteUri+'; no duplicate instance started.');return}
+# Inspect the owning process as well: some CIM responses omit the State property.
+# Do not overwrite the host record or launch a duplicate when HTTP is already served.
+$owners=@(Get-NetTCPConnection -LocalPort $uri.Port -ErrorAction SilentlyContinue|Where-Object {$_.LocalAddress -eq $uri.Host -or $_.LocalAddress -in @('0.0.0.0','::')}|Select-Object -ExpandProperty OwningProcess -Unique)
+if($owners.Count){
+ if($owners.Count -ne 1){throw 'Ambiguous existing LAN socket owner; no process started'}
+ $existing=Get-CimInstance Win32_Process -Filter ('ProcessId='+$owners[0])
+ if(-not $existing -or -not ([string]$existing.CommandLine).Contains($state.web)){throw 'LAN port belongs to another build/process; no process started'}
+ $health=Invoke-WebRequest ($uri.AbsoluteUri+'health') -UseBasicParsing -TimeoutSec 5
+ if($health.StatusCode -ne 200){throw 'Existing LAN process is not healthy; reconcile before restarting'}
+ Write-Output ('Existing approved LAN build is healthy at '+$uri.AbsoluteUri+'; no duplicate instance started.');return
+}
 $env:LANDPORTAL_CONFIG=$state.config;$env:LANDPORTAL_HOME=$state.home
 # External isolated config must win over inherited developer settings. No persistent environment changes.
 foreach($key in @('ConnectionStrings__Portal','Sql__ExpectedDatabase','Runtime__RolePassword','Storage__MediaRoot','Storage__SnapshotRoot','Storage__TempRoot','Storage__KeysRoot','Public__BaseUrl','Public__CanonicalHost','Deployment__Profile','Mail__Transport','Scanner__Provider','Media__AllowUnscannedDevelopmentUploads','AdminSession__IdleMinutes','Captcha__TestScope')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}

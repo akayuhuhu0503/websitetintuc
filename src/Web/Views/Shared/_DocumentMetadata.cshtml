@@ -1,6 +1,7 @@
 @model LandPortal.Domain.ContentMetadata
-@if (!string.IsNullOrWhiteSpace(Model.SearchFields()) || Model.ConsultationStartDate is not null || Model.ConsultationStartUtc is not null || Model.PublicationDate is not null) {
+@if (!string.IsNullOrWhiteSpace(Model.SearchFields()) || Model.ConsultationStartDate is not null || Model.ConsultationStartUtc is not null || Model.PublicationDate is not null || Model.ConsultationEmail is not null) {
 <dl class="document-metadata">
+    @if (!string.IsNullOrWhiteSpace(Model.ConsultationEmail)) { <dt>Email nhận góp ý</dt><dd>@Model.ConsultationEmail</dd> }
     @if(Model.Number.Length != 0) { <dt>Số ký hiệu</dt><dd>@Model.Number</dd> }
     @if(Model.DocumentType.Length != 0) { <dt>Loại văn bản</dt><dd>@Model.DocumentType</dd> }
     @if(Model.IssuingBody.Length != 0) { <dt>Cơ quan ban hành</dt><dd>@Model.IssuingBody</dd> }

@@ -3106,6 +3106,9 @@ namespace Infrastructure.Migrations
                                 .HasMaxLength(2000)
                                 .HasColumnType("nvarchar(2000)");
 
+                            b1.Property<string>("ConsultationEmail")
+                                .HasColumnType("nvarchar(max)");
+
                             b1.Property<DateOnly?>("ConsultationEndDate")
                                 .HasColumnType("date");
 
@@ -3281,6 +3284,9 @@ namespace Infrastructure.Migrations
                                 .IsRequired()
                                 .HasMaxLength(2000)
                                 .HasColumnType("nvarchar(2000)");
+
+                            b1.Property<string>("ConsultationEmail")
+                                .HasColumnType("nvarchar(max)");
 
                             b1.Property<DateOnly?>("ConsultationEndDate")
                                 .HasColumnType("date");

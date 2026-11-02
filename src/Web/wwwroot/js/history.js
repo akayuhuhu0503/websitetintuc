@@ -10,11 +10,16 @@
         if (!window.confirm('Khôi phục phiên bản này thành bản nháp mới? Phiên bản công khai và lịch sử vẫn được giữ.'))
             return;
         button.disabled = true;
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
         const data = new FormData();
         data.set('Action', 'RestoreRevision');
         data.set('RowVersion', version);
         data.set('RevisionId', button.dataset.restore);
-        data.set('RequestId', crypto.randomUUID());
+        data.set('RequestId', requestId);
         try {
             const response = await fetch('/admin/workflow/' + form.dataset.contentId, { method: 'POST', body: data, headers: { 'X-CSRF-TOKEN': csrf } });
             const result = await response.json();
@@ -42,7 +47,7 @@
             const result = await response.json();
             const host = document.querySelector('#comparison-content');
             host.replaceChildren();
-            const names = { title: 'Tiêu đề', summary: 'Mô tả', author: 'Tác giả', source: 'Nguồn', categories: 'Chuyên mục', cover: 'Ảnh đại diện', bodyText: 'Nội dung văn bản', attachments: 'Tài liệu / tài nguyên' };
+            const names = { consultationEmail: 'Email nhận góp ý', title: 'Tiêu đề', summary: 'Mô tả', author: 'Tác giả', source: 'Nguồn', categories: 'Chuyên mục', cover: 'Ảnh đại diện', bodyText: 'Nội dung văn bản', attachments: 'Tài liệu / tài nguyên' };
             for (const [key, label] of Object.entries(names)) {
                 const before = result.before?.[key] || '', after = result.after[key] || '';
                 if (result.before && before === after)

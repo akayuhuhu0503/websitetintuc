@@ -38,6 +38,9 @@ public sealed class ContentMetadata
     public DateOnly? ConsultationEndDate { get; set; }
     public DateTimeOffset? ConsultationStartUtc { get; set; }
     public DateTimeOffset? ConsultationEndUtc { get; set; }
+    [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Email nhận góp ý không đúng định dạng.")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConsultationEmail { get; set; }
     public string ConsultationDateEvidence { get; set; } = "";
     public string MappingStatus { get; set; } = "Unmapped";
     public string MetadataOrigin { get; set; } = "Editorial";

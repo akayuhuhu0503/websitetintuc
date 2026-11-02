@@ -453,7 +453,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         // Preserve the 2A fingerprint for ordinary articles with no specialized fields.
         var m = draft.Metadata;
         var hasFields = m.PublicationDate is not null || m.Unit.Length != 0 || m.SearchFields().Trim().Length != 0 || m.IssuedDate is not null || m.EffectiveDate is not null || m.EffectiveUntilDate is not null || m.EffectivenessStatus is not null || m.ConsultationStartDate is not null || m.ConsultationEndDate is not null || m.ConsultationStartUtc is not null || m.ConsultationEndUtc is not null || m.ConsultationDateEvidence.Length != 0;
-        hasFields = hasFields || m.EffectivenessEvidence.Length != 0 || m.MappingStatus != "Unmapped" || m.DisclosureGroupId!=null || m.WeeklyYear!=null || m.Featured is true;
+        hasFields = hasFields || m.EffectivenessEvidence.Length != 0 || m.MappingStatus != "Unmapped" || m.DisclosureGroupId!=null || m.WeeklyYear!=null || m.Featured is true || m.ConsultationEmail != null;
         return TextNormalizer.Hash(hasFields ? common + "\n" + JsonSerializer.Serialize(m) : common);
     }
     private static ContentMetadata ValidateMetadata(ContentMetadata value, ContentKind kind)
@@ -463,6 +463,9 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         m.Tags=string.IsNullOrWhiteSpace(m.Tags)?null:string.Join(", ",m.Tags.Split([',',';'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase));
         if(m.Tags!=null&&(m.Tags.Length>500||m.Tags.Split(',').Length>20||m.Tags.Split(',').Any(x=>x.Trim().Length>64)))throw new InvalidOperationException("Tối đa 20 từ khóa, mỗi từ khóa tối đa 64 ký tự và tổng sau chuẩn hóa tối đa 500 ký tự.");
         if(m.Featured==false)m.Featured=null;
+        m.ConsultationEmail=string.IsNullOrWhiteSpace(m.ConsultationEmail)?null:m.ConsultationEmail.Trim();
+        if(m.ConsultationEmail!=null && (kind!=ContentKind.DraftDocument || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(m.ConsultationEmail)))
+            throw new EditorialValidationException(new Dictionary<string,string>{{"Metadata.ConsultationEmail","Nhập email nhận góp ý đúng định dạng trong mẫu dự thảo."}});
         if(kind is not(ContentKind.Article or ContentKind.Announcement)&&(m.Tags!=null||m.Featured!=null))throw new InvalidOperationException("Từ khóa và tin nổi bật chỉ dùng cho tin bài hoặc thông báo.");
         m.Number ??= ""; m.DocumentType ??= ""; m.IssuingBody ??= ""; m.Signer ??= ""; m.Field ??= ""; m.Unit ??= ""; m.ConsultationDateEvidence ??= ""; m.EffectivenessEvidence ??= ""; m.MappingStatus ??= "Unmapped";
         if (m.Number.Length > 200 || m.DocumentType.Length > 300 || m.IssuingBody.Length > 500 || m.Signer.Length > 300 || m.Field.Length > 300 || m.Unit.Length > 500 || m.ConsultationDateEvidence.Length > 2000 || m.EffectivenessEvidence.Length > 2000) throw new InvalidOperationException("Metadata văn bản vượt giới hạn.");
