@@ -1,3 +1,10 @@
+## Closure FR-06/FR-10 — 02/11/2026
+
+- TECHNICAL E2E PASS: final29/29 tập trung trên SQL mới LandPortal_ClosureTest_dc855ce55e54 (17 migration/70 bảng); HTTP Identity/CAPTCHA/Writer/Reviewer/Publisher thật, revision email/featured và public isolation. Hai harness trước dừng do fixture thiếu email và chọn sai revision compare, giữ riêng; không cộng kết quả. Ba database fixture giữ lại, không reset/drop. Không thay SQL Dev/Test/LAN/shared, không dùng credential BA. Web thử loopback đã dừng; ảnh fixture native Defender Clean đúng hash.
+- FR-06 CODE COMPLETE/SQL kỹ thuật PASS, LAN BLOCKED migration20261102042625_DraftConsultationEmail/backup guard. FR-10 deployed LAN, TECHNICAL E2E PASS nhưng BA ACCEPTANCE PENDING. PID41476/buildfr0610-20261102/hạn09Nov10:55:08VN/SMTPDisabled giữ nguyên; launcher không chạy trùng.
+- UI10route HTTP200/header/footer/không link#giả, mẫu mobile390px không tràn; cần BA xác nhận trực quan ảnh mẫu. Sửa thông báo nội bộ trang văn bản chỉ đạo trong source/Publish; chưa redeploy schema-dependent binary lên LAN. Build cuối0warning/error; một Publish396file0mismatch bằng fixture config, không đồng nghĩa TTDL đã cấp hạ tầng.
+- Packet FR06 offline mới .local/publish/fr06-closure-final-20261102 SHA13594b2be96f46b7bd517b5160572800ab63ee4d93ce26ce64b4edf7df8d9a8e: exact16→17 sau14migrationcũ; Plan+3negativeguardPASS, serverInspect/ApplyNOTRUN. Giữ old207packet; yêu cầu Inspect receipt fresh12h và backup sauInspect trước Apply. Lệnh và trách nhiệm cấu hình trong RELEASE_HANDOFF/START_HERE. Không fullregression/backup/import/SMTP thật/Production.
+
 ## Bàn giao cuối 02/11/2026
 
 - Release Publish một lần PASS: Web, 5 chế độ Worker, MigrationCli/UatDataHandoff/ops; 396 file manifest đối chiếu 0 mismatch. Cấu hình fixture kỹ thuật, chưa phải TTDL; không SQL/IIS/service/backup/ZIP. Output .local/publish/TTDL-IIS, IIS dùng web/. START_HERE.md và RELEASE_HANDOFF.md là hướng dẫn tiếp nhận.

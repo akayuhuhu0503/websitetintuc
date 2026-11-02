@@ -2,7 +2,7 @@
 param(
  [Parameter(Mandatory=$true)][string]$PacketDirectory,
  [ValidateSet('Plan','Inspect','Apply')][string]$Mode='Plan',
- [string]$ManifestSha256,[string]$ConfirmTarget,[string]$ReportFile,[string]$BackupFile,
+ [string]$ManifestSha256,[string]$ConfirmTarget,[string]$ReportFile,[string]$BackupFile,[string]$PrefixInspectionReport,
  [System.Management.Automation.PSCredential]$DbaCredential,
  [switch]$TemporaryCertificateTrust
 )
@@ -58,8 +58,19 @@ if($ManifestSha256 -and $ManifestSha256 -cne $actualSha){throw 'Manifest SHA mis
 if($Mode -ne 'Plan' -and $ManifestSha256 -notmatch '^[a-f0-9]{64}$'){throw 'Exact reviewed manifest SHA required before any SQL connection'}
 $manifest=[Text.Encoding]::UTF8.GetString($manifestBytes)|ConvertFrom-Json
 $backup=$BackupFile
-if($manifest.kind -cne 'LandPortal.Sql207.ResumePrefix.v1' -or $manifest.server -cne 'WIN-S1IBJB84OOO' -or $manifest.database -cne 'website_tin_tuc' -or $manifest.endpoint -cne '45.120.229.43,1433' -or $manifest.fromMigration -cne '20261012083717_CmsRevisionWorkflow' -or $manifest.toMigration -cne '20261027025057_AuditRecoveryLookup' -or $manifest.remainingMigrationCount -ne 14){throw 'Manifest scope is not this exact reviewed target and remaining migration range'}
+$is207=$manifest.kind -ceq 'LandPortal.Sql207.ResumePrefix.v1' -and $manifest.fromMigration -ceq '20261012083717_CmsRevisionWorkflow' -and $manifest.toMigration -ceq '20261027025057_AuditRecoveryLookup' -and $manifest.remainingMigrationCount -eq 14
+$isFr06=$manifest.kind -ceq 'LandPortal.Fr06.Additive.v1' -and $manifest.fromMigration -ceq '20261027025057_AuditRecoveryLookup' -and $manifest.toMigration -ceq '20261102042625_DraftConsultationEmail' -and $manifest.remainingMigrationCount -eq 1
+if((-not $is207 -and -not $isFr06) -or $manifest.server -cne 'WIN-S1IBJB84OOO' -or $manifest.database -cne 'website_tin_tuc' -or $manifest.endpoint -cne '45.120.229.43,1433'){throw 'Manifest scope is not this exact reviewed target and migration range'}
 if($Mode -eq 'Apply' -and -not $backup){throw 'Fresh verified partial-state backup path required before Apply; no SQL connection attempted'}
+$inspectedUtc=$null
+if($isFr06 -and $Mode -eq 'Apply'){
+ if(-not $PrefixInspectionReport){throw 'FR06 requires a prior successful exact-packet DBA Inspect receipt before backup and Apply'}
+ $inspectionBytes=File-Bytes $PrefixInspectionReport
+ $inspection=@([Text.Encoding]::UTF8.GetString($inspectionBytes).TrimStart([char]0xFEFF) -split '\r?\n'|Where-Object {$_.Trim()}|ForEach-Object {$_|ConvertFrom-Json})
+ if($inspection.Count -lt 2 -or $inspection[0].mode -cne 'Inspect' -or $inspection[0].target -cne 'WIN-S1IBJB84OOO/website_tin_tuc' -or $inspection[0].manifestSha256 -cne $actualSha -or $inspection[-1].stage -cne 'READ_ONLY_STATE_PREFLIGHT_PASS' -or $inspection[-1].state -cne 'EXACT_PREFIX_THROUGH_20261027025057_AuditRecoveryLookup'){throw 'FR06 inspection receipt scope/result mismatch'}
+ $inspectedUtc=[DateTimeOffset]::Parse($inspection[-1].utc)
+ if($inspectedUtc -gt [DateTimeOffset]::UtcNow -or $inspectedUtc -lt [DateTimeOffset]::UtcNow.AddHours(-12)){throw 'Fresh FR06 prefix inspection required'}
+}
 if($backup -and ($backup -notmatch '^[A-Za-z]:\\' -or $backup.Length -gt 4000 -or $backup -match '[\r\n]' -or $backup -match 'pre_schema_20261028_074711')){throw 'Supply a new absolute SQL-server-side backup path; original empty-schema backup is insufficient for prefix rollback'}
 
 $content=@{}
@@ -176,6 +187,7 @@ try{
   $finish=[DateTimeOffset]::new([DateTime]::SpecifyKind([DateTime]$backupInfo.finish,[DateTimeKind]::Unspecified),[TimeSpan]::FromMinutes([int]$zone.OffsetMinutes))
   $captured=[DateTimeOffset]::Parse([string]$manifest.baselineCapturedUtc,[Globalization.CultureInfo]::InvariantCulture)
   if($finish.ToUniversalTime() -lt $captured.ToUniversalTime() -or $finish.ToUniversalTime() -gt [DateTimeOffset]::UtcNow.AddMinutes(5)){throw 'Backup predates observed committed prefix or has invalid future finish time'}
+  if($isFr06 -and $Mode -eq 'Apply' -and $finish.ToUniversalTime() -lt $inspectedUtc.ToUniversalTime()){throw 'FR06 backup must follow successful16-migration prefix inspection'}
  }finally{$r.Dispose()}}finally{$c.Dispose()}
  $stage='BACKUP_VERIFY'
  $c=Command 'RESTORE VERIFYONLY FROM DISK=@file WITH CHECKSUM;' 'backup.verify';$c.CommandTimeout=120
@@ -186,10 +198,10 @@ try{
  Assert-AuthorityAndNoOtherTransaction
  foreach($batch in $guardBatches){Execute $batch 'precheck.prefix-after-backup'}
  if($Mode -eq 'Inspect'){
-  Audit @{stage='READ_ONLY_STATE_PREFLIGHT_PASS';state='EXACT_COMMITTED_MIGRATION2_PREFIX';rightsSha256=$rightsBefore;backupVerified=$backupVerified;ownerApprovalRequired=$true;applyReady=$false;ddlExecuted=$false}
-  Write-Output ('READ_ONLY_STATE_PREFLIGHT_PASS; exact31-table/2-migration prefix verified; backupVerified='+$backupVerified+'. No DDL, role/grant change or data import. Apply still requires exact owner approval and fresh backup.')
+  Audit @{stage='READ_ONLY_STATE_PREFLIGHT_PASS';state=('EXACT_PREFIX_THROUGH_'+$manifest.fromMigration);rightsSha256=$rightsBefore;backupVerified=$backupVerified;ownerApprovalRequired=$true;applyReady=$false;ddlExecuted=$false}
+  Write-Output ('READ_ONLY_STATE_PREFLIGHT_PASS; exact prefix through '+$manifest.fromMigration+' verified; backupVerified='+$backupVerified+'. No DDL, role/grant change or data import. Apply still requires exact owner approval and fresh backup.')
  }else{
-  $stage='DDL';$ddlStarted=$true;Audit @{stage='DDL_STARTED_RECONCILE_IF_INTERRUPTED';migrationCount=14;roleCreationAllowed=$false;importAllowed=$false}
+  $stage='DDL';$ddlStarted=$true;Audit @{stage='DDL_STARTED_RECONCILE_IF_INTERRUPTED';migrationCount=$manifest.remainingMigrationCount;roleCreationAllowed=$false;importAllowed=$false}
   $batchNumber=0;foreach($batch in $schemaBatches){$batchNumber++;Execute $batch ('schema.batch.'+$batchNumber)}
   $stage='READBACK'
   $tables=@(Rows "SELECT SCHEMA_NAME(schema_id)+N'.'+name AS Name FROM sys.tables WHERE is_ms_shipped=0 ORDER BY Name;")
@@ -206,8 +218,12 @@ try{
   if((Byte-Sha ([Text.Encoding]::UTF8.GetBytes(($prefixTablesAfter|ConvertTo-Json -Compress)))) -cne $prefixTablesShaBefore){throw 'Committed prefix table IDs changed; reconcile without cleanup'}
   $bootstrapAfter=@(Rows "SELECT OBJECT_ID(N'dbo.__EFMigrationsHistory',N'U') AS HistoryId,OBJECT_ID(N'dbo.PK___EFMigrationsHistory',N'PK') AS PrimaryKeyId;")[0]
   if($bootstrapAfter.HistoryId -ne $bootstrapBefore.HistoryId -or $bootstrapAfter.PrimaryKeyId -ne $bootstrapBefore.PrimaryKeyId){throw 'Original history/PK object IDs changed; reconcile'}
+  if($isFr06){
+   $email=@(Rows "SELECT t.name AS TableName,c.name AS ColumnName,TYPE_NAME(c.system_type_id) AS TypeName,c.max_length,c.is_nullable FROM sys.columns c JOIN sys.tables t ON c.object_id=t.object_id WHERE t.schema_id=SCHEMA_ID(N'dbo') AND t.name IN(N'DraftMetadata',N'RevisionMetadata') AND c.name=N'ConsultationEmail';")
+   if($email.Count -ne 2 -or @($email|Where-Object {$_.TypeName -cne 'nvarchar' -or $_.max_length -ne -1 -or -not $_.is_nullable}).Count){throw 'FR06 column readback differs; reconcile without retry'}
+  }
   Audit @{stage='SCHEMA_RECOVERY_VERIFIED';prefixTablesPreserved=$true;tables=$tables.Count;migrations=$ids.Count;filteredIndexesChecked=$manifest.filteredIndexes.Count;applicationRightsPreserved=$true;rightsSha256=$rightsAfter;roleCreated=$false;dataImported=$false;historyTablePreserved=$true}
-  Write-Output 'SCHEMA_RECOVERY_VERIFIED: 70 tables/16 migrations; filtered indexes verified; original history/PK and application rights retained; no role creation or data import.'
+  Write-Output ('SCHEMA_RECOVERY_VERIFIED: '+$tables.Count+' tables/'+$ids.Count+' migrations; filtered indexes verified; original history/PK and application rights retained; no role creation or data import.')
  }
 }catch{
  $failure=$_.Exception;$sqlFailure=$null

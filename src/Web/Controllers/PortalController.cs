@@ -23,7 +23,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
     [HttpGet("quy-hoach-su-dung-dat")]
     public Task<IActionResult> LandUsePlanning(string? q, int page = 1) => List("Quy hoạch sử dụng đất", query.Published().Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == 77) || x.CategoryId == 77), q, page);
     [HttpGet("van-ban-chi-dao-dieu-hanh")]
-    public IActionResult DirectiveDocuments() => View("Status", new StatusModel("Văn bản chỉ đạo điều hành", "Hạng mục được xác minh tại nguồn và giữ độc lập với Văn bản quy phạm pháp luật. Chưa có adapter hoặc dữ liệu loại này trong bản chạy Giai đoạn 1.", "https://qldd.mae.gov.vn/van-ban-chi-dao-dieu-hanh.htm", "Đối chiếu hạng mục nguồn"));
+    public IActionResult DirectiveDocuments() => View("Status", new StatusModel("Văn bản chỉ đạo điều hành", "Chưa có văn bản được công bố trong mục này. Bạn có thể tra cứu tại cổng thông tin nguồn.", "https://qldd.mae.gov.vn/van-ban-chi-dao-dieu-hanh.htm", "Tra cứu tại cổng thông tin nguồn"));
     [HttpGet("chuyen-muc/{slug}")]
     public async Task<IActionResult> Category(string slug, string? q, int page = 1)
     {
