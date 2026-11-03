@@ -17,8 +17,14 @@ function Test-UatSqlCertificateTrustApproval($Settings,$Builder,[string]$Environ
   -not $Builder['Persist Security Info'] -and -not [string]::IsNullOrWhiteSpace([string]$Builder['Password']) -and $Builder['Encrypt']
 }
 function Assert-UatTarget($Settings,[string]$Environment='Staging') {
- Assert-UatDatabaseName ([string]$Settings.Sql.ExpectedDatabase)
  if($Settings.Deployment.Profile -cne 'UAT' -or [string]$Settings.Deployment.TargetApproved -cne 'true' -or ([string]$Settings.Deployment.TargetApprovalReference).Length -lt 5 -or [string]$Settings.Deployment.TargetApprovalReference -match '[\r\n]'){throw 'Explicit allocated UAT target and operator approval reference required'}
+ Assert-UatSqlConfiguration $Settings $Environment
+}
+# Packaging validates SQL syntax and the scoped TLS exception without pretending
+# that a deployment has been approved. Neither function opens a connection.
+function Assert-UatSqlConfiguration($Settings,[string]$Environment='Staging') {
+ Assert-UatDatabaseName ([string]$Settings.Sql.ExpectedDatabase)
+ if($Settings.Deployment.Profile -cne 'UAT'){throw 'Only UAT packaging/runtime is supported'}
  try{
   # Windows PowerShell's legacy provider cannot parse the modern SqlClient TLS
   # hostname key. Runtime preserves/validates it using Microsoft.Data.SqlClient.
@@ -89,4 +95,21 @@ function Assert-UatRuntimeConfiguration($Settings,[string]$DataHome,[string]$Con
      ([string]$Settings.Scanner.DefenderServiceIdentity).Length -lt 4 -or
      [string]$Settings.Scanner.DefenderServiceIdentity -match 'REPLACE|[\r\n]'){throw 'Approved Defender privacy policy, binary pin and service identity required'}
  }else{throw 'Only approved on-prem Clamd or Microsoft Defender is supported for UAT'}
+ Assert-UatOptionalServices $Settings
+}
+
+function Assert-UatOptionalServices($Settings) {
+ if($Settings.Mail.Transport -cnotin @('Disabled','Smtp')){throw 'Only Disabled or approved Smtp transport supported'}
+ if($Settings.Mail.Transport -ceq 'Smtp'){
+  $port=0
+  try{$null=New-Object Net.Mail.MailAddress ([string]$Settings.Mail.From)}catch{throw 'Valid SMTP From required'}
+  if(-not [int]::TryParse([string]$Settings.Mail.Port,[ref]$port) -or $port -lt 1 -or $port -gt 65535 -or $Settings.Mail.Tls -cne 'StartTls' -or [string]$Settings.Mail.DeliveryEnabled -cnotin @('true','false') -or ([string]$Settings.Mail.PolicyReference).Length -lt 5 -or [Uri]::CheckHostName($Settings.Mail.Host) -eq 'Unknown'){throw 'Approved SMTP host/port/TLS/delivery policy required'}
+  if([string]::IsNullOrEmpty($Settings.Mail.UserName) -ne [string]::IsNullOrEmpty($Settings.Mail.Password)){throw 'SMTP credentials must be paired; values withheld'}
+ }
+ if([string]$Settings.Video.Enabled -cnotin @('true','false')){throw 'Video Enabled must be true/false'}
+ if([string]$Settings.Video.Enabled -ceq 'true'){
+  foreach($field in @('FfmpegPath','FfprobePath')){[void](Get-UatSafePath ([string]$Settings.Video.$field))}
+  foreach($field in @('FfmpegSha256','FfprobeSha256')){if([string]$Settings.Video.$field -cnotmatch '^[a-fA-F0-9]{64}$'){throw 'Approved video binary pins required'}}
+  if([string]$Settings.Video.ProcessorApproved -cne 'true' -or ([string]$Settings.Video.LicenseReference).Length -lt 5){throw 'Video processor/license approval required before activation'}
+ }
 }

@@ -1,27 +1,39 @@
-# Bàn giao IIS — TTDL
+# Một file .env, một lệnh Publish
 
-**03/11/2026 — ngoại lệ TLS UAT được owner duyệt:** `Encrypt=True;TrustServerCertificate=True` chỉ cho45.120.229.43,1433 / WIN-S1IBJB84OOO / website_tin_tuc / website_tin_tuc_app. Điền `Deployment__SqlTlsExceptionApproved=true` và `Deployment__SqlTlsExceptionReference` đúng phê duyệt trong private `.env`; Production/sai target/thiếu reference vẫn bị chặn. Quy trình một file `.env`/một lệnh giữ nguyên; [bàn giao một trang](TTDL-UAT-ONE-PAGE.md) liệt kê12 inputTTDL còn thiếu. Gói cũ chưa có policy mới cần build từ source mới khi đủ input, không Publish bằng fixture.
+**Developer:** chuẩn bị `scripts/ttdl.env.example` bằng hai giá trị private hiện hành: connection string có app password và `Runtime__RolePassword`. Physical SQL và ngoại lệ TLS UAT đã xác nhận có sẵn trong mẫu. Không tạo secret mới, không chỉnh `.env` Dev. Giao file hoàn chỉnh riêng; người vận hành không phải sửa các biến kỹ thuật.
 
-1. Clone `https://github.com/akayuhuhu0503/websitetintuc.git`, hoặc `git pull --ff-only`. Đối chiếu commit bàn giao; thay đổi chưa push chưa có trên GitHub.
-2. Copy `.env` riêng do Developer bàn giao vào gốc source. Mẫu để điền: `scripts/ttdl.env.example`. Không dùng `.env` Development.
-3. Tại gốc source, chạy **một lệnh**:
+**Người build:** đặt file thành `.env` ở gốc clone, chạy:
+
+```powershell
+powershell -NoProfile -File scripts/build-for-iis.ps1
+```
+
+Output `.local/publish/TTDL-IIS/`: Web, một Worker với 5 chế độ, Tools, Ops, START.md và manifest SHA-256. Cấu hình được tự chuyển sang JSON tại đường dẫn `PRIVATE CONFIG` ngoài source/webroot; ACL người build + SYSTEM. Không kết nối SQL hoặc khởi động ứng dụng. Không cần hostname/storage/scanner/approval để Publish. Gói chưa gắn đích có cờ chặn khởi động.
+
+Nếu build trên máy khác, chuyển cả gói code và **chuyển riêng JSON private** tới máy IIS qua kênh an toàn. Không gửi `.env`/JSON lên Git hoặc đặt trong `web/`. Giữ gói bất biến để kiểm tra manifest. Chỉ thư mục `web/` làm IIS Physical Path.
+
+## Một lần chuẩn bị trên IIS đích — CNTT
+
+1. Cài Hosting Bundle ASP.NET Core 10 và IIS. Tạo site/pool riêng, **site và pool đều Stopped**, No Managed Code, Load User Profile=true. Chọn tài khoản dịch vụ riêng ít quyền đã được cấp; dùng cùng identity cho Web và 5 Worker. Không dùng Admin/sa. Không cần tạo tài khoản trong script.
+2. Đặt physical path vào `PACKAGE\web`, cấu hình binding HTTPS với hostname/chứng chỉ thật; không khởi động. Nếu nhiều HTTPS binding, thêm `-HostName` khi chạy lệnh bên dưới.
+3. TTDL xác nhận triển khai và chính sách Defender/privacy bằng hồ sơ thật. Dùng `ops/iis-approval.example.json` làm dữ liệu tham chiếu, điền tên máy/site thực và các reference hợp lệ; bản PENDING không phải phê duyệt. Không đưa hồ sơ private lên Git. Không cần sửa SQL/schema/role.
+4. Trong PowerShell quản trị trên máy IIS, chạy lệnh sau; mặc định chỉ đọc discovery. Thêm `-Apply` khi đã kiểm tra đúng site, đường dẫn và phê duyệt:
 
    ```powershell
-   powershell -NoProfile -File scripts/build-for-iis.ps1
+   & '<PACKAGE>\ops\configure-iis-uat.ps1' -PublishRoot '<PACKAGE>' -SiteName '<TÊN SITE IIS THẬT>' -PrivateConfig '<FILE JSON PRIVATE ĐÃ CHUYỂN>' -ApprovalFile '<HỒ SƠ DUYỆT TTDL.json>' -Apply
    ```
 
-4. Output: `.local/publish/TTDL-IIS/`. **Chỉ `web/` là IIS Physical Path**, không phải toàn bộ gói hoặc `web/wwwroot/`.
-5. Giữ `worker/`, `tools/`, `ops/` ngoài webroot. `web.config` đã trỏ đúng private home theo `.env`; không sửa đường dẫn bằng tay.
-   - Mặc định **Transfer**: JSON được tạo riêng, ACL chỉ người build + SYSTEM, tại đường dẫn `PRIVATE CONFIG` in cuối lệnh; không nằm trong gói publish. Chuyển riêng `uat.json` qua kênh an toàn tới `LANDPORTAL_HOME/uat.json` trên IIS, tạo kho và cấp quyền cho danh tính Web/Worker được duyệt. Không copy vào `web/`. ACL nguồn không thay thế ACL đích.
-   - Build ngay trên IIS: thêm `-PrivateMode Local` vào cùng lệnh. CNTT tạo/cấp ACL private home trước; script tạo JSON tại đó, không ghi đè config cũ. Cấp quyền đọc JSON cho Web/Worker và quyền kho theo runbook; script không tự cấp quyền dịch vụ.
-6. Chỉ bật IIS/Worker khi SQL/schema/runtime role, HTTPS và scanner đã được duyệt/kiểm chứng. Worker dùng chung JSON, chọn `Scheduler`, `Documents`, `InquiryScan`, `Video`, `Mail`:
+   Lệnh lấy host/port từ IIS, suy ra URL, lấy service account từ pool, phát hiện Defender thật/chữ ký Microsoft/SHA/health/privacy. Storage mặc định theo **CommonApplicationData của máy đích** và ID site, bốn thư mục con riêng `media/snapshots/temp/keys`; có thể chỉ định `-DataHome` theo ổ lưu trữ được cấp. Không hardcode ổ của Developer. Chỉ tạo home mới/ACL đúng identity, không đè cấu hình hoặc storage có sẵn. Thiếu policy/phê duyệt, HTTPS hay Defender hợp lệ thì chặn Activation. Không thay chính sách AV.
+
+   JSON đích là `DATA_HOME\uat.json`. Web.config được gắn file này; private `activation.json` ghi manifest gốc và SHA overlay web.config. Manifest gốc không bị sửa. Không mở SQL, bật IIS/Worker hoặc SMTP. Nếu lệnh bị gián đoạn, giữ trạng thái để đối soát, không xóa home hay chạy lại mù.
+5. **Bằng đúng service account**, kiểm tra read-only trước khi khởi động:
 
    ```powershell
-   powershell -NoProfile -File <PACKAGE>/ops/uat-runtime.ps1 -DataHome <PRIVATE_HOME> -Config <PRIVATE_HOME>/uat.json -PublishRoot <PACKAGE> -Mode Scheduler
+   & '<PACKAGE>\ops\probe-uat-defender.ps1' -Settings '<DATA_HOME>\uat.json'
+   & '<PACKAGE>\ops\uat-runtime.ps1' -DataHome '<DATA_HOME>' -Config '<DATA_HOME>\uat.json' -PublishRoot '<PACKAGE>' -Mode Preflight -Online -Report '<DATA_HOME>\preflight-<RUN-ID>.json'
    ```
 
-**Điều kiện/lỗi:** Windows PowerShell5.1, SDK đúng `global.json`, Node/npm và mạng/cache restore. `Required field` nêu khóa thiếu, không in giá trị. Chỉ hỗ trợ UAT/Staging theo guard hiện hành, không tự mở Production/TLS bypass. Video/SMTP tắt có thể publish nhưng chưa nghiệm thu vận hành tương ứng. Build khác máy chỉ kiểm tra cấu hình offline; phải kiểm chứng binary/pin/ACL thật trên IIS.
+   SQL dùng app login và kích hoạt LandPortalRuntime, kiểm tra physical server/db/schema trước truy vấn nghiệp vụ. Preflight không phải nghiệm thu scanner E2E/HTTPS/UAT. CNTT phải kiểm tra ACL và scanner Clean/EICAR/ScanFailed trên máy đích theo runbook trước xử lý upload. Chưa có máy thật thì giữ BLOCKED/NOT RUN.
+6. Sau khi các kiểm tra/duyệt đích đạt, CNTT khởi động site và cấu hình tác vụ theo `ops/export-uat-worker-tasks.ps1`. Cả 5 chế độ **Scheduler/Documents/InquiryScan/Video/Mail** cùng dùng `DATA_HOME\uat.json`; script chỉ xuất XML, không tự cài tác vụ. Video cần FFmpeg/FFprobe và giấy phép/pin được duyệt riêng mới bật xử lý. SMTP Disabled/Mail chưa bật đến khi được duyệt và đối soát outbox.
 
-Output đã có: mặc định dừng. `-Replace` chỉ thay bản chưa sealed/chưa dùng, giữ bản cũ ở `TTDL-IIS.previous`. Có previous hoặc JSON đích thì dừng, không tự xóa. Không đặt IIS trực tiếp vào output build nếu còn định thay gói.
-
-**PUBLISH PASS không phải IIS DEPLOY PASS.** Không mở SQL/chạy app/worker/migration/import/backup/tạo tài khoản/bật SMTP/cài IIS/service/firewall/DNS khi build. Database `website_tin_tuc` đã70bảng/17migration, role và SQLruntime probePASS; không chạy lại Apply. IISPreflight cònBLOCKED do12inputTTDL. CHƯA PRODUCTION READY.
+**Ranh giới:** PUBLISH PASS ≠ IIS/UAT PASS. Production không kế thừa ngoại lệ TrustServerCertificate. Không migration/import/bootstrap/backup/DNS trong quy trình đóng gói. SQL70/17 và role đã có, không Apply lại. Đã có output thì mặc định dừng; `-Replace` chỉ bảo toàn bản trước của gói chưa dùng/chưa sealed, không xóa previous. `-EnvFile` cho phép Developer kiểm tra file private ngoài source mà không sửa `.env` Dev; mặc định vẫn một lệnh trên.

@@ -1,3 +1,9 @@
+## Đóng gói IIS một .env — 03/11/2026
+
+- **PASS LOCAL:** Publish bằng private env tối giản đã điền sẵn, không SQL/hostname/scanner authority; 1 build/publish Web+5-mode Worker+Tools+Ops, 398 file SHA đúng/0 secret leak. Ops EKU correction được ghi riêng và rehash; 0 rebuild DLL. Hai secret cũ MATCH/ACL private PASS/.env Dev không đổi/SMTP Disabled. START_HERE rút gọn.
+- **27 focused offline PASS** cuối; Production TLS, sai đích, sa, thiếu authority và bật video thiếu duyệt đều bị chặn. `configure-iis-uat` tự suy ra 9 giá trị kỹ thuật trên máy IIS, không biến discovery thành phê duyệt; target approval/scanner/privacy vẫn yêu cầu hồ sơ thật. Gói chưa bind có startup denial, Web/5 Worker cùng private JSON.
+- **BLOCKED / NOT RUN:** actual IIS/HTTPS/service ACL/scanner E2E và online IIS Preflight TTDL chưa có hạ tầng/authority. Runtime entrypoint với JSON mới đã từ chối trước SQL, không báo Preflight PASS. Không schema/role/import/backup/LAN change/full regression/Production. Evidence `.local/evidence/iis-simplify-20261103-offline-confirmed/result.json`, `...offline-final/publish-verification.json`. CHƯA PRODUCTION READY; không còn coi 12 biến chưa cấp là blocker của Publish.
+
 ## Ngoại lệ TLS UAT — 03/11/2026 11:13VN
 
 - **PASS** explicitowner-approved Encrypt=True/TrustServerCertificate=True với2exceptionfields trênexactUAT/Staging/endpoint/physical/db/login; defaultstrict/ProductionDENIED. SharedWebWorkerroleinterceptor verifyactualtarget/schema/rolebeforebusinessoperations. Private.env/JSONmatched,2secretgiữ nguyên,0Apply/migration/backup/import/rolechange.

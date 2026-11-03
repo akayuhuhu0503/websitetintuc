@@ -62,7 +62,7 @@
     "ApprovedSignerThumbprints": ""
   },
   "Video": {
-    "Enabled": "true",
+    "Enabled": "false",
     "ProcessorApproved": "false",
     "FfmpegPath": "",
     "FfprobePath": "",

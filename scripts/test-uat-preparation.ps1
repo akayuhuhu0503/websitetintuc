@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$ReportRoot)
+param([Parameter(Mandatory=$true)][string]$ReportRoot,[switch]$IisPublishOnly)
 $ErrorActionPreference='Stop'
 $report=[IO.Path]::GetFullPath($ReportRoot)
 if(Test-Path -LiteralPath $report){throw 'New isolated test report required'}
@@ -7,6 +7,53 @@ if(Test-Path -LiteralPath $report){throw 'New isolated test report required'}
 $checks=@()
 function Check([string]$Name,[bool]$Ok){if(-not $Ok){throw ('Check failed: '+$Name)};$script:checks+=@{name=$Name;pass=$true}}
 function Denied([string]$Name,[scriptblock]$Action){$denied=$false;try{& $Action}catch{$denied=$true};Check $Name $denied}
+if($IisPublishOnly){
+ . (Join-Path $PSScriptRoot 'uat-common.ps1')
+ . (Join-Path $PSScriptRoot 'iis-env.ps1')
+ . (Join-Path $PSScriptRoot 'configure-iis-uat.ps1')
+ $envFile=Join-Path $report 'technical-only.env'
+ $base=@('ConnectionStrings__Portal=Server=45.120.229.43,1433;Database=website_tin_tuc;User ID=website_tin_tuc_app;Password=<technical-only-not-a-real-secret>;Encrypt=True;TrustServerCertificate=True',
+  ('Runtime__RolePassword='+('X'*48)),'Deployment__ExpectedSqlServerIdentity=WIN-S1IBJB84OOO','Deployment__SqlTlsExceptionApproved=true','Deployment__SqlTlsExceptionReference=UNIT-TEST-ONLY-NOT-AUTHORITY')
+ function SaveInput([string[]]$Lines){[IO.File]::WriteAllLines($envFile,$Lines,[Text.UTF8Encoding]::new($false))}
+ SaveInput $base
+ $inputSettings=Read-IisEnvironment $envFile -ForPublish;$c=$inputSettings.Settings
+ Check 'Minimal env accepted without hostname storage scanner approval' (-not $c.Public.BaseUrl -and -not $c.Storage.MediaRoot -and -not $c.Scanner.PolicyReference -and -not $inputSettings.Metadata.LANDPORTAL_HOME)
+ Check 'SQL identifiers inferred from connection, UAT defaults safe' ($c.Deployment.ExpectedSqlServer -ceq '45.120.229.43,1433' -and $c.Deployment.ExpectedSqlLogin -ceq 'website_tin_tuc_app' -and $c.Sql.ExpectedDatabase -ceq 'website_tin_tuc' -and $c.Deployment.TargetApproved -ceq 'false' -and $c.Video.Enabled -ceq 'false')
+ $targetDataHome=Join-Path $report 'private';$publish=Join-Path $report 'code'
+ & (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $envFile -DataHome $targetDataHome -PublishRoot $publish -ForPublish -DeferTarget -ValidateOnly
+ Check 'Deferred validation opens no SQL and creates no config' (-not(Test-Path -LiteralPath $targetDataHome))
+ Denied 'Runtime still rejects unallocated target' {Assert-UatRuntimeConfiguration $c $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish}
+ Denied 'Legacy immediate conversion still requires runtime gates' {& (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $envFile -DataHome $targetDataHome -PublishRoot $publish -ForPublish -ValidateOnly}
+ SaveInput ($base+@('DOTNET_ENVIRONMENT=Production'));Denied 'Production environment denied' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput ($base+@('Deployment__Profile=Production'));Denied 'Production profile denied' {Read-IisEnvironment $envFile -ForPublish}
+ Denied 'Production cannot use TLS exception at SQL guard' {Assert-UatSqlConfiguration $c 'Production'}
+ SaveInput ($base+@('Sql__ExpectedDatabase=DifferentDb'));Denied 'Different SQL target denied' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput @($base|Where-Object {$_ -notlike 'Deployment__SqlTlsExceptionApproved=*'});Denied 'Missing TLS approval denied' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput @($base|ForEach-Object {$_.Replace('User ID=website_tin_tuc_app','User ID=sa')});Denied 'sa runtime forbidden' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput ($base+@('Media__AllowUnscannedDevelopmentUploads=true'));Denied 'Unscanned bypass forbidden' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput ($base+@('Mail__Transport=Smtp'));Denied 'SMTP cannot be enabled by packaging' {Read-IisEnvironment $envFile -ForPublish}
+ SaveInput $base
+ $target=[pscustomobject]@{HostName='uat.example.invalid';Port=8443;MachineName='UNIT-TEST';SiteName='UNIT-TEST';ServiceAccount='UNITTEST\portal';DefenderSha256=('B'*64)}
+ $derived=Resolve-IisUatSettings $c $target $targetDataHome $null
+ Check 'Actual target binding maps once to host and URL' ($derived.Public.BaseUrl -ceq 'https://uat.example.invalid:8443/' -and $derived.Deployment.ExpectedHost -ceq $target.HostName)
+ Check 'Storage and service pin derived without secret changes' ($derived.Storage.KeysRoot -ceq (Join-Path $targetDataHome 'keys') -and $derived.Runtime.RolePassword -ceq $c.Runtime.RolePassword -and $derived.ConnectionStrings.Portal -ceq $c.ConnectionStrings.Portal -and $derived.Scanner.DefenderBinarySha256 -ceq $target.DefenderSha256)
+ Check 'Discovery does not manufacture authority' ($derived.Deployment.TargetApproved -ceq 'false' -and -not $derived.Scanner.PolicyReference -and -not $derived.Scanner.DefenderPrivacyPolicyReference)
+ Denied 'Discovery alone cannot pass runtime' {Assert-UatRuntimeConfiguration $derived $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish}
+ $a=[pscustomobject]@{Status='PENDING';MachineName='UNIT-TEST';SiteName='UNIT-TEST';PhysicalSqlServer='WIN-S1IBJB84OOO';Database='website_tin_tuc';DeploymentReference='UNIT-TEST-ONLY';ScannerPolicyReference='UNIT-TEST-ONLY';DefenderPrivacyPolicyReference='UNIT-TEST-ONLY'}
+ Denied 'Pending approval rejected' {Resolve-IisUatSettings $c $target $targetDataHome $a}
+ $a.Status='APPROVED';$a.MachineName='WRONG'
+ Denied 'Approval bound to different target rejected' {Resolve-IisUatSettings $c $target $targetDataHome $a}
+ $a.MachineName='UNIT-TEST';$candidate=Resolve-IisUatSettings $c $target $targetDataHome $a
+ Assert-UatRuntimeConfiguration $candidate $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish
+ Check 'Complete technical fixture reaches offline runtime validation only' ($candidate.Mail.Transport -ceq 'Disabled')
+ $candidate.Video.Enabled='true'
+ Denied 'Video approval still required at activation' {Assert-UatRuntimeConfiguration $candidate $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish}
+ foreach($name in @('build-for-iis.ps1','package-uat.ps1','iis-env.ps1','uat-common.ps1','prepare-iis-config.ps1','configure-iis-uat.ps1')){
+  $errors=$null;$tokens=$null;$null=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$errors);Check ('Parse '+$name) ($errors.Count -eq 0)
+ }
+ [IO.File]::WriteAllText((Join-Path $report 'result.json'),(@{status='PASS';checks=$checks;passed=$checks.Count;sqlConnections=0;iisChanges=0;targetAcceptance='NOT RUN';fixtures='Technical only; no actual authority'}|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
+ Write-Output ('PASS '+$checks.Count+' focused offline IIS publish/activation checks; no SQL or IIS changes');return
+}
 foreach($name in @('uat-common.ps1','uat-runtime.ps1','prepare-uat-target.ps1','install-uat-iis.ps1','export-uat-worker-tasks.ps1','test-uat-worker-tasks.ps1','test-uat-preparation.ps1')){
  $errors=$null;$tokens=$null;$null=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$errors);Check ('Parse '+$name) ($errors.Count -eq 0)
 }

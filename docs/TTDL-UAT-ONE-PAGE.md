@@ -1,50 +1,19 @@
-# Bàn giao IIS UAT — ngoại lệ TLS được duyệt 03/11/2026
+# Bàn giao UAT cho Trưởng phòng / CNTT TTDL
 
-**SQL runtime đã PASS:** `website_tin_tuc_app` kết nối đúng `WIN-S1IBJB84OOO / website_tin_tuc`, kích hoạt `LandPortalRuntime` với secret hiện có, đọc đủ70 bảng/17 migration. Probe chỉ đọc, không Apply/backup/import. **IIS Preflight chưa chạy** vì còn thiếu hạ tầng TTDL.
+**Đã hoàn thành:** schema SQL `WIN-S1IBJB84OOO/website_tin_tuc` 70 bảng/17 migration; app login `website_tin_tuc_app`, LandPortalRuntime và hai secret hiện hành. Runtime SQL probe đã PASS theo receipt trước. Không chạy lại migration/role hoặc dùng sa cho runtime.
 
-## Chính sách TLS cho lần nghiệm thu UAT
-
-Chủ dự án cho phép `Encrypt=True;TrustServerCertificate=True` riêng endpoint `45.120.229.43,1433`, database `website_tin_tuc`, app `website_tin_tuc_app`. UAT theo ngoại lệ này không cần đổi chứng chỉ SQL. Các trường phải đi cùng nhau:
-
-```ini
-DOTNET_ENVIRONMENT=Staging
-ASPNETCORE_ENVIRONMENT=Staging
-Deployment__Profile=UAT
-Deployment__SqlTlsExceptionApproved=true
-Deployment__SqlTlsExceptionReference=OWNER-UAT-SQL-TLS-20261103-WIN-S1IBJB84OOO-website_tin_tuc
-```
-
-Production/sai target/thiếu reference/tắt mã hóa đều bị chặn. Default template vẫn xác minh CA. Chứng chỉ fallback chưa được sửa; đây là bỏ kiểm tra CA/tên theo phê duyệt UAT. Kết thúc ngoại lệ thì đổi cờ vềfalse và TrustServerCertificate=False sau khi có chứng chỉ phù hợp. Vận hành chính thức được duyệt riêng.
-
-## DBA và CNTT cần cung cấp
-
-DBA giữ schema/role/login/secret đã tạo; không cấp thêm role quản trị hoặc chạy lại migration. CNTT cấp ASP.NET Core10 Hosting Bundle, danh tính AppPool/Worker và ACL thực tế.
-
-| Thông tin TTDL còn phải cấp | Biến cấu hình |
-|---|---|
-| Địa chỉ HTTPS | `Deployment__ExpectedHost`, `Public__BaseUrl` |
-| Private home và4 kho riêng | `LANDPORTAL_HOME`, `Storage__MediaRoot/SnapshotRoot/TempRoot/KeysRoot` |
-| Danh tính dịch vụ/quyền tệp; Defender được duyệt | `Scanner__DefenderServiceIdentity`, `Scanner__DefenderBinarySha256` và ACL thực tế |
-| Phê duyệt đích/scanner/quyền riêng tư | `Deployment__TargetApprovalReference`, `Scanner__PolicyReference`, `Scanner__DefenderPrivacyPolicyReference` |
-
-Tổng12 biến. Đặt `Deployment__TargetApproved=true` sau khi máy đích được duyệt. Password SQL/secret role **đã có**, không tạo lại hoặc gửi qua chat. `ttdl.env.pending` cạnh `uat.json` giữ hai secret và cùng ngoại lệ TLS; điền12 biến thật rồi chuyển riêng. Web/5Worker dùng chung `LANDPORTAL_HOME`/`LANDPORTAL_CONFIG=<PRIVATE_HOME>\uat.json` ngoài webroot. Giữ MailDisabled; video cần FFmpeg path/hash/license được duyệt khi bật.
-
-## Một file cấu hình, một lệnh Publish
-
-Pull code mới, đặt private file đầy đủ thành `.env` ở gốc source:
+**Developer bàn giao:** code GitHub, một `.env` private đã điền hai giá trị có sẵn (SQL connection và role secret), bao gồm ngoại lệ TLS UAT đúng phạm vi. Không đưa credential lên Git. Trưởng phòng chỉ copy file vào gốc source và chạy:
 
 ```powershell
 powershell -NoProfile -File scripts/build-for-iis.ps1
 ```
 
-Nhận `.local/publish/TTDL-IIS/`, IIS dùng `web/`; chuyển privateJSON tới đúngPRIVATE_HOME. Gói cũ chưa có policy mới; tạo gói từ code mới khi đủ input, không dùng fixture thay cấu hình TTDL.
+Gói tại `.local/publish/TTDL-IIS/`, IIS trỏ `web/`. JSON private được tạo tự động ngoài source/webroot, không phải tự điền 12 biến. Chuyển riêng JSON nếu máy build khác IIS. Build không mở SQL và không yêu cầu hạ tầng đã được cấp.
 
-## Developer kiểm tra sau khi nhận đủ cấu hình
+**CNTT TTDL cần cung cấp:** máy IIS/Hosting Bundle 10, site + binding HTTPS/chứng chỉ hợp lệ, dedicated service account ít quyền cho Web/5 Worker, dung lượng/ổ private và hồ sơ phê duyệt triển khai. ATTT cần chính sách Defender on-prem/privacy được duyệt. Không yêu cầu thay chứng chỉ SQL để thử UAT theo ngoại lệ hiện có; Production vẫn phải theo chính sách được duyệt riêng.
 
-Chạy trên máy TTDL bằng đúng identity vận hành. Preflight dưới đây kết nối bằng app login, kích hoạt role đã có rồi đối chiếu SQL/schema, không cấp quyền hoặc khởi động ứng dụng:
+**Tự động trên IIS:** `ops/configure-iis-uat.ps1` đọc binding và pool identity, tính URL, đề xuất storage theo ProgramData/site ID, phát hiện Defender thật + SHA/chữ ký/health/privacy. Chỉ khi có phê duyệt thật và site/pool đang dừng mới cho `-Apply` tạo private home/ACL và gắn Web config. Không tự bật site/worker/SMTP. Ba reference phê duyệt được tách trong `ops/iis-approval.example.json` (mặc định PENDING), không coi tự phát hiện là authority.
 
-```powershell
-powershell -NoProfile -File scripts/uat-runtime.ps1 -DataHome '<PRIVATE_HOME>' -Config '<PRIVATE_HOME>\uat.json' -PublishRoot '<TTDL-IIS>' -Mode Preflight -Online -Report '<PRIVATE_HOME>\reports\uat-readonly-new.json'
-```
+**Trước khởi động:** CNTT chạy probe Defender và online Preflight bằng đúng service account; kiểm tra quyền kho, SQL/role, HTTPS và scanner E2E. Cả 5 worker dùng cùng JSON. Video chỉ bật khi FFmpeg được cấp/duyệt; Mail giữ Disabled đến khi có SMTP và phê duyệt gửi thật. Cần hồ sơ/người dùng nghiệp vụ và UAT thực tế trước vận hành.
 
-Chỉ nhận `READ_ONLY_SQL_PREFLIGHT_PASS` khi có receipt thật. HTTPS/IIS, scanner và UAT nghiệp vụ vẫn cần nghiệm thu riêng. Chưa bật IIS/Worker/SMTP/Production hoặc đổi DNS trong lượt chuẩn bị này.
+Lệnh cụ thể: [hướng dẫn một file / một lệnh](iis-one-command.md). **Publish không còn bị chặn bởi biến kỹ thuật chưa cấp; Activation/Preflight vẫn bị chặn khi hạ tầng/authority chưa đủ. CHƯA PRODUCTION READY.**

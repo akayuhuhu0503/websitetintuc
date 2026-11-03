@@ -31,7 +31,7 @@ foreach($project in @('Web','Worker','MigrationCli','UatDataHandoff')){
 $ops=Join-Path $destination 'ops';[void][IO.Directory]::CreateDirectory($ops)
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-runtime.ps1') -Destination $ops
 foreach($name in @('uat-common.ps1','uat-target.example.json','prepare-uat-target.ps1','install-uat-iis.ps1','test-uat-preparation.ps1','probe-uat-defender.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
-foreach($name in @('uat-data.ps1','prepare-iis-config.ps1','iis-env.ps1','ttdl.env.example','shared-sql.env.example')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
+foreach($name in @('uat-data.ps1','prepare-iis-config.ps1','iis-env.ps1','configure-iis-uat.ps1','iis-approval.example.json','ttdl.env.example','shared-sql.env.example')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $ops}
 Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/shared-sql-iis.md') -Destination $ops
 Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/uat-data-handoff.md') -Destination ($ops+'/uat-data-runbook.md')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-operator-steps.md') -Destination $ops
@@ -44,7 +44,7 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uat-operator-steps.md') -Destin
 # secret, FFmpeg binary or actual environment settings enter the artifact.
 $xml=@'
 <?xml version="1.0" encoding="utf-8"?>
-<configuration><location path="." inheritInChildApplications="false"><system.webServer><handlers><add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" /></handlers><aspNetCore processPath="dotnet" arguments=".\Web.dll" stdoutLogEnabled="false" hostingModel="inprocess"><environmentVariables><environmentVariable name="DOTNET_ENVIRONMENT" value="Staging" /><environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Staging" /><environmentVariable name="LANDPORTAL_HOME" value="D:\LandPortal-Uat-Private" /><environmentVariable name="LANDPORTAL_CONFIG" value="D:\LandPortal-Uat-Private\uat.json" /></environmentVariables></aspNetCore><security><requestFiltering><requestLimits maxAllowedContentLength="20971520" /></requestFiltering></security></system.webServer></location></configuration>
+<configuration><location path="." inheritInChildApplications="false"><system.webServer><handlers><add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" /></handlers><aspNetCore processPath="dotnet" arguments=".\Web.dll" stdoutLogEnabled="false" hostingModel="inprocess"><environmentVariables><environmentVariable name="DOTNET_ENVIRONMENT" value="Staging" /><environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Staging" /><environmentVariable name="Deployment__Profile" value="UAT" /><environmentVariable name="Deployment__TargetApproved" value="false" /><environmentVariable name="LANDPORTAL_HOME" value="" /><environmentVariable name="LANDPORTAL_CONFIG" value="" /></environmentVariables></aspNetCore><security><requestFiltering><requestLimits maxAllowedContentLength="20971520" /></requestFiltering></security></system.webServer></location></configuration>
 '@
 [IO.File]::WriteAllText(($destination+'/web/web.config'),$xml,[Text.UTF8Encoding]::new($false))
 if(-not $SkipSchemaGeneration){

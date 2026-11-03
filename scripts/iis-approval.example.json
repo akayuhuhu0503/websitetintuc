@@ -1,0 +1,10 @@
+{
+  "Status": "PENDING",
+  "MachineName": "",
+  "SiteName": "",
+  "PhysicalSqlServer": "WIN-S1IBJB84OOO",
+  "Database": "website_tin_tuc",
+  "DeploymentReference": "",
+  "ScannerPolicyReference": "",
+  "DefenderPrivacyPolicyReference": ""
+}

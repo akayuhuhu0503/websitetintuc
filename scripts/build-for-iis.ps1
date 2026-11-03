@@ -37,10 +37,13 @@ $EnvFile=Get-UatSafePath $EnvFile
 if(-not(Test-Path -LiteralPath $EnvFile -PathType Leaf)){throw 'Missing root .env; copy the approved TTDL private configuration first'}
 $envSha=(Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash
 $inputSettings=Read-IisEnvironment $EnvFile -ForPublish
-$targetHome=Get-UatSafePath ([string]$inputSettings.Metadata.LANDPORTAL_HOME)
-Assert-UatRuntimeConfiguration $inputSettings.Settings $targetHome ([IO.Path]::Combine($targetHome,'uat.json')) $output
-if($targetHome.StartsWith($repo+'\',[StringComparison]::OrdinalIgnoreCase) -or $targetHome -ieq $repo){throw 'LANDPORTAL_HOME must be outside the source repository'}
+$targetHome=''
+if($inputSettings.Metadata.LANDPORTAL_HOME){
+ $targetHome=Get-UatSafePath ([string]$inputSettings.Metadata.LANDPORTAL_HOME)
+ if($targetHome.StartsWith($repo+'\',[StringComparison]::OrdinalIgnoreCase) -or $targetHome -ieq $repo){throw 'LANDPORTAL_HOME must be outside the source repository'}
+}
 if($PrivateMode -eq 'Local'){
+ if(-not $targetHome){throw 'Local mode requires allocated LANDPORTAL_HOME; default Transfer mode does not'}
  $privateHome=$targetHome
  if(-not(Test-Path -LiteralPath $privateHome -PathType Container)){throw 'LANDPORTAL_HOME: create the approved private directory/ACL before Local mode'}
  if(Test-Path -LiteralPath (Join-Path $privateHome 'uat.json')){throw 'Existing private uat.json refused; no overwrite'}
@@ -49,7 +52,7 @@ if($PrivateMode -eq 'Local'){
  [void](Get-UatSafePath $privateHome)
  Assert-UatSeparatePaths $privateHome (Join-Path $privateHome 'uat.json') $output
 }
-& (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $EnvFile -DataHome $privateHome -TargetDataHome $targetHome -PublishRoot $output -ForPublish -ValidateOnly
+& (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $EnvFile -DataHome $privateHome -PublishRoot $output -ForPublish -DeferTarget -ValidateOnly
 $dotnet=Join-Path $repo '.local/dotnet/dotnet.exe'
 if(-not(Test-Path -LiteralPath $dotnet)){$dotnet=(Get-Command dotnet -ErrorAction Stop).Source}
 $node=(Get-Command node -ErrorAction Stop).Source;$npm=(Get-Command npm.cmd -ErrorAction Stop).Source
@@ -83,10 +86,10 @@ try{
   foreach($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User,(New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'))){$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')))}
   [void][IO.Directory]::CreateDirectory($privateHome,$acl)
  }
- & (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $EnvFile -DataHome $privateHome -TargetDataHome $targetHome -PublishRoot $staging -ForPublish
+ & (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $EnvFile -DataHome $privateHome -PublishRoot $staging -ForPublish -DeferTarget
  Copy-Item -LiteralPath (Join-Path $privateHome 'iis.web.config') -Destination $config
  # No private JSON or private-input digest is copied into the public package.
- $required=@('web/Web.dll','web/Web.runtimeconfig.json','web/web.config','web/wwwroot/css/site.css','web/wwwroot/vendor/jodit/jodit.min.js','worker/Worker.dll','worker/Worker.runtimeconfig.json','tools/MigrationCli.dll','tools/uat-data/UatDataHandoff.dll','ops/uat-runtime.ps1','ops/uat-data.ps1','ops/prepare-iis-config.ps1','ops/uat-config.example.json','START.md')
+ $required=@('web/Web.dll','web/Web.runtimeconfig.json','web/web.config','web/wwwroot/css/site.css','web/wwwroot/vendor/jodit/jodit.min.js','worker/Worker.dll','worker/Worker.runtimeconfig.json','tools/MigrationCli.dll','tools/uat-data/UatDataHandoff.dll','ops/uat-runtime.ps1','ops/uat-data.ps1','ops/prepare-iis-config.ps1','ops/configure-iis-uat.ps1','ops/iis-approval.example.json','ops/uat-config.example.json','START.md')
  foreach($relative in $required){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing publish output: '+$relative)}}
  $secrets=@([string]$inputSettings.Settings.Runtime.RolePassword,[string]$inputSettings.Settings.Mail.Password)
  $sqlValues=New-Object System.Data.Common.DbConnectionStringBuilder
@@ -113,6 +116,6 @@ try{
  Write-Output ('PUBLISH PASS: '+$output)
  Write-Output ('Copy to IIS: '+(Join-Path $output 'web'))
  Write-Output ('PRIVATE CONFIG (not in publish): '+(Join-Path $privateHome 'uat.json'))
- Write-Output ('IIS target private config: '+([IO.Path]::Combine($targetHome,'uat.json')))
+ Write-Output 'Target paths/HTTPS/Defender are discovered by ops/configure-iis-uat.ps1 on IIS; activation remains gated. No SQL was contacted.'
  Write-Output 'Web + Worker (5 modes) + tools + ops ready. SQL/IIS/deployment NOT RUN. Read START.md.'
 }finally{Pop-Location}

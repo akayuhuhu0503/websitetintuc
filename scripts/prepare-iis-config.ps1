@@ -5,7 +5,8 @@ param(
  [Parameter(Mandatory=$true)][string]$PublishRoot,
  [string]$TargetDataHome,
  [switch]$ValidateOnly,
- [switch]$ForPublish
+ [switch]$ForPublish,
+ [switch]$DeferTarget
 )
 # Offline converter only. Does not load an application, execute .env, contact SQL,
 # change IIS/services or copy secrets into the published directory.
@@ -24,12 +25,17 @@ $inputSettings=Read-IisEnvironment $source -ForPublish:$ForPublish
 $settings=$inputSettings.Settings
 $runtimeHome=if($TargetDataHome){Get-UatSafePath $TargetDataHome}else{$homePath}
 # All validation below is in memory. No SqlConnection.Open or application startup.
-Assert-UatRuntimeConfiguration $settings $runtimeHome ([IO.Path]::Combine($runtimeHome,'uat.json')) $code
+if($DeferTarget){
+ if(-not $ForPublish){throw 'Deferred target is only supported for offline publishing'}
+ Assert-IisPublishConfiguration $settings
+ $settings.Deployment.TargetApproved='false';$settings.Deployment.TargetApprovalReference=''
+}else{Assert-UatRuntimeConfiguration $settings $runtimeHome ([IO.Path]::Combine($runtimeHome,'uat.json')) $code}
 if($ValidateOnly){Write-Output 'CONFIG VALIDATION PASS (offline; no SQL connection)';return}
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
-foreach($v in $web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable){
- if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',[string]$runtimeHome)}
- if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',[string]([IO.Path]::Combine($runtimeHome,'uat.json')))}
+foreach($v in @($web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable)){
+ if(-not $DeferTarget -and $v.name -ceq 'Deployment__TargetApproved'){[void]$v.ParentNode.RemoveChild($v);continue}
+ if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',$(if($DeferTarget){''}else{[string]$runtimeHome}))}
+ if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',$(if($DeferTarget){''}else{[string]([IO.Path]::Combine($runtimeHome,'uat.json'))}))}
 }
 # Secure files at creation time: operator + SYSTEM only. Operator grants read to
 # the approved Web/Worker identities later; this script changes no existing ACL.
