@@ -14,6 +14,31 @@ public static class UatDeployment
         !database.Contains("REPLACE", StringComparison.OrdinalIgnoreCase);
 
     public static bool Enabled(IConfiguration c) => c["Deployment:Profile"] == "UAT";
+    public static bool TemporaryCertificateTrustApproved(IConfiguration c, SqlConnectionStringBuilder sql, string environment) =>
+        Enabled(c) && environment == "Staging" && c["DOTNET_ENVIRONMENT"] == "Staging" && c["ASPNETCORE_ENVIRONMENT"] == "Staging" &&
+        c["Deployment:SqlTlsExceptionApproved"] == "true" &&
+        c["Deployment:SqlTlsExceptionReference"] is { Length: > 4 } reference && !string.IsNullOrWhiteSpace(reference) && !reference.Any(char.IsControl) &&
+        c["Deployment:ExpectedSqlServer"] == "45.120.229.43,1433" && sql.DataSource == "45.120.229.43,1433" &&
+        c["Deployment:ExpectedSqlServerIdentity"] == "WIN-S1IBJB84OOO" &&
+        c["Sql:ExpectedDatabase"] == "website_tin_tuc" && sql.InitialCatalog == "website_tin_tuc" &&
+        c["Deployment:ExpectedSqlLogin"] == "website_tin_tuc_app" && sql.UserID == "website_tin_tuc_app" &&
+        AuthenticationMatches(c, sql) && sql.Encrypt == SqlConnectionEncryptOption.Mandatory;
+
+    public static void ValidateSqlTransport(IConfiguration c, SqlConnectionStringBuilder sql, string environment)
+    {
+        if (Enabled(c) && sql.Encrypt == SqlConnectionEncryptOption.Optional)
+            throw new InvalidOperationException("Encrypted SQL transport is mandatory for UAT.");
+        if (!sql.TrustServerCertificate) return;
+        if (string.Equals(environment,"Production",StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(c["DOTNET_ENVIRONMENT"],"Production",StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(c["ASPNETCORE_ENVIRONMENT"],"Production",StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(c["Deployment:Profile"],"Production",StringComparison.OrdinalIgnoreCase) ||
+            ((string.Equals(environment,"Staging",StringComparison.OrdinalIgnoreCase) || Enabled(c) || c["Deployment:SqlTlsExceptionApproved"] == "true") && !TemporaryCertificateTrustApproved(c, sql, environment)))
+            throw new InvalidOperationException("Temporary SQL certificate trust requires the approved exact UAT target and Staging environment; Production is forbidden.");
+    }
+    public static bool TemporaryRuntimeIdentityMatches(string server,string database,string login,string role,int tables,int migrations,string latest) =>
+        server=="WIN-S1IBJB84OOO"&&database=="website_tin_tuc"&&login=="website_tin_tuc_app"&&role=="LandPortalRuntime"&&
+        tables==70&&migrations==17&&latest=="20261102042625_DraftConsultationEmail";
     public static bool AuthenticationMatches(IConfiguration c, SqlConnectionStringBuilder sql)
     {
         var mode=c["Deployment:SqlAuthentication"]??"Windows";
@@ -48,8 +73,9 @@ public static class UatDeployment
             !IsTargetDatabase(c["Sql:ExpectedDatabase"]) || sql.InitialCatalog != c["Sql:ExpectedDatabase"] ||
             !AuthenticationMatches(c,sql) || sql.DataSource != c["Deployment:ExpectedSqlServer"] ||
             string.IsNullOrWhiteSpace(c["Deployment:ExpectedSqlServer"]) || sql.DataSource.Contains("REPLACE", StringComparison.OrdinalIgnoreCase) ||
-            sql.Encrypt == SqlConnectionEncryptOption.Optional || sql.TrustServerCertificate)
+            sql.Encrypt == SqlConnectionEncryptOption.Optional)
             throw new InvalidOperationException("UAT requires allocated database, target approval, exact server/login authentication and validated encrypted SQL transport.");
+        ValidateSqlTransport(c, sql, environment);
         _=PhysicalServer(c);
         if (!Uri.TryCreate(c["Public:BaseUrl"], UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
             uri.AbsolutePath != "/" || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||

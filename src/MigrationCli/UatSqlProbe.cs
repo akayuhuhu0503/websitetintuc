@@ -17,9 +17,11 @@ public static class UatSqlProbe
         var app=Path.GetFullPath(AppContext.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
         if(home.StartsWith(app,StringComparison.OrdinalIgnoreCase)||app.StartsWith(home,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Probe config/report must be outside application code.");
         SourceInventory.NoReparse(path);SourceInventory.NoReparse(report);
-        var config=new ConfigurationBuilder().AddJsonFile(path,false,false).Build();
+        var config=new ConfigurationBuilder().AddJsonFile(path,false,false).AddInMemoryCollection(new Dictionary<string,string?>{
+            ["DOTNET_ENVIRONMENT"]=Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT"),
+            ["ASPNETCORE_ENVIRONMENT"]=Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}).Build();
         var sql=new SqlConnectionStringBuilder(DatabaseSettings.Connection(config));
-        if(config["Deployment:Profile"]!="UAT"||config["Deployment:TargetApproved"]!="true"||config["Deployment:TargetApprovalReference"] is not {Length:>4}||!UatDeployment.IsTargetDatabase(sql.InitialCatalog)||sql.DataSource!=config["Deployment:ExpectedSqlServer"]||!UatDeployment.AuthenticationMatches(config,sql)||sql.Encrypt==SqlConnectionEncryptOption.Optional||sql.TrustServerCertificate)throw new InvalidOperationException("Read-only target/authentication/TLS guard failed; no connection attempted.");
+        if(config["Deployment:Profile"]!="UAT"||config["Deployment:TargetApproved"]!="true"||config["Deployment:TargetApprovalReference"] is not {Length:>4}||!UatDeployment.IsTargetDatabase(sql.InitialCatalog)||sql.DataSource!=config["Deployment:ExpectedSqlServer"]||!UatDeployment.AuthenticationMatches(config,sql)||sql.Encrypt==SqlConnectionEncryptOption.Optional)throw new InvalidOperationException("Read-only target/authentication/TLS guard failed; no connection attempted.");
         sql.Pooling=false;sql.ConnectTimeout=10;
         await using var connection=new SqlConnection(sql.ConnectionString);
         try

@@ -11,6 +11,7 @@ try
 {
     var command = args.FirstOrDefault() ?? "help";
     if(command=="uat-sql-probe")return await UatSqlProbe.ExecuteAsync(args);
+    if(command=="uat-sql-runtime-probe")return await UatSqlRuntimeProbe.ExecuteAsync(args);
     var workspace = PortalConfiguration.FindWorkspace();
     if(command=="schema-script")
     {

@@ -1,5 +1,19 @@
 # SQL dùng chung → IIS TTDL (SRS v1.2)
 
+## Hiện hành — owner cho phép ngoại lệ certificate trust trên IIS UAT
+
+03/11/2026: `Encrypt=True;TrustServerCertificate=True` được phép riêng UAT với `DOTNET_ENVIRONMENT=ASPNETCORE_ENVIRONMENT=Staging`, `Deployment__Profile=UAT`, `Deployment__SqlTlsExceptionApproved=true` và reference `OWNER-UAT-SQL-TLS-20261103-WIN-S1IBJB84OOO-website_tin_tuc`. Bindexact45.120.229.43,1433 / WIN-S1IBJB84OOO / website_tin_tuc / website_tin_tuc_app. Production,nhầm target/login/thiếu ref hoặc unencrypted đều bịchặn. Defaulttemplatefalse; không tự dùngsa. Không cần đổi chứng chỉ để chạyUAT theo ngoại lệ này; Production được duyệt riêng.
+
+Đã cậpnhật private `ttdl.env.pending` và `uat.json` tại runtime-security-20261103T025642Z-d4d3bd33,ACLADMIN+SYSTEM; SQLcredential/rolesecret giữ nguyên. Finalprobe **PASS appconnection→roleactivation/MATCH→actualtarget/70tables/17exacthistory/2FR06columns/effectiveDENY**,0writes; receiptuat-sql-runtime-guarded-20261103T040618Z-1e216aa9.json. SharedRuntimeRoleInterceptor củaWeb/5Worker cũngverifyactualidentity/schema trước applicationoperations khi dùngngoạilệ. Role/schema/19quyền đã tạo giữ nguyên, không Apply/backup/migration/import.
+
+SQL-onlyprobe không thayfullIISpreflight. Khi còn thiếu12input nhưng cần kiểm traSQL, dùngCLI **mới** với privateJSONhiệncó và reportfilemới tronghomeđãcó:
+```powershell
+$env:DOTNET_ENVIRONMENT='Staging'
+$env:ASPNETCORE_ENVIRONMENT='Staging'
+dotnet '<NEW_MIGRATIONCLI_DLL>' uat-sql-runtime-probe --home '<PRIVATE_HOME>' --config '<PRIVATE_HOME>\uat.json' --report '<PRIVATE_HOME>\sql-runtime-new.json'
+```
+Commandkhôngđọc.envDev/khôngghiSQL/khôngprovision. ActualIISPreflightvẫnBLOCKED,TargetApprovedfalse/12inputchưacấp. Điềnthật12biến như[onepage](TTDL-UAT-ONE-PAGE.md), sau đó1lệnhbuild-for-iis từsource mới vàPreflighttheorunbook. Publisher/JSONconverter giữ2exceptionfields vàWeb/5Worker dùngcùngprivateconfig. GóiPublishcũchưacópolicymới, không coi làupdatedIISbundle; khôngPublishfixturelượt này. Cácđiềukiệnthaycert/strictTLSbên dưới là lịch sử trướcphêduyệtngoạilệ, không cònchặnUATscopeđãduyệt.
+
 **TLS03/11 đã có bằng chứng publiccertificate:** CN=SSL_Self_Signed_Fallback,noSAN,WindowsUntrustedRoot+nameMismatchIP45.120.229.43,certcònhạn. Xem [hướng dẫn một trang DBA/CNTT/IIS](TTDL-UAT-ONE-PAGE.md). Diagnostic mới inspect-sql-tls.ps1 chỉPRELOGIN/TLS vàrejectinvalidcert, khôngLOGIN/SQL/truststorechange. Fileprivate ttdl.env.pending đã có cùngcredentials/rolesecret hiện có, thiếuinputhạ tầng; runtimeactivation/PreflightBLOCKED. KhôngApply/schema/role lại.
 
 ## Kết quả hiện hành 03/11/2026 10:02VN

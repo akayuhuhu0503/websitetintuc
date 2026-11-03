@@ -1,6 +1,6 @@
 # Bàn giao website Cục Quản lý đất đai — TTDL
 
-**Điều kiện SQL/IIS hiện tại:** xem [hướng dẫn một trang cho Trưởng phòng, DBA và CNTT](docs/TTDL-UAT-ONE-PAGE.md). Schema70/17 và role đã hoàn tất; TLS đang vướng chứng chỉ fallback không tin cậy/không khớp tên. Hoàn tất certificate và inputTTDL trước runtimePreflight, không chạy lại Apply hoặc dùng cấu hình fixture để triển khai.
+**Điều kiện SQL/IIS hiện tại:** xem [hướng dẫn một trang cho Trưởng phòng, DBA và CNTT](docs/TTDL-UAT-ONE-PAGE.md). Schema70/17, role và SQLruntime đãPASS qua ngoại lệ TrustServerCertificate=True được duyệt riêng cho đúngUAT/Staging/SQLtarget. Cần12inputTTDL trước IISPreflight; không yêu cầu đổi certificate để chạyUAT theo ngoại lệ này. Không Apply lại hoặc dùng fixture để triển khai; gói cũ chưa có policy mới phải build từ source mới khi đủ `.env`.
 
 1. Clone `https://github.com/akayuhuhu0503/websitetintuc.git` hoặc `git pull --ff-only`. Đọc trạng thái trong [RELEASE_HANDOFF.md](RELEASE_HANDOFF.md).
 2. Cài .NET SDK đúng `global.json`, Node.js/npm; IIS đích cần ASP.NET Core 10 Hosting Bundle, HTTPS và SQL Server 2022. Restore package cần mạng hoặc cache sẵn, không cần kết nối SQL.

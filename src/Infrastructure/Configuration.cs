@@ -62,6 +62,9 @@ public static class DatabaseSettings
         if (string.IsNullOrWhiteSpace(expected) || !string.Equals(sql.InitialCatalog, expected, StringComparison.Ordinal))
             throw new InvalidOperationException("CSDL kết nối không khớp Sql__ExpectedDatabase. Đã chặn thao tác.");
         if (sql.InitialCatalog is "master" or "model" or "msdb" or "tempdb") throw new InvalidOperationException("Không được dùng CSDL hệ thống làm dữ liệu dự án.");
+        UatDeployment.ValidateSqlTransport(config, sql,
+            config["DOTNET_ENVIRONMENT"] ?? config["ASPNETCORE_ENVIRONMENT"] ??
+            Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production");
         return raw;
     }
     public static DbContextOptions<PortalDbContext> Options(IConfiguration config, bool forMigration = false)

@@ -1,5 +1,7 @@
 # Bàn giao IIS — TTDL
 
+**03/11/2026 — ngoại lệ TLS UAT được owner duyệt:** `Encrypt=True;TrustServerCertificate=True` chỉ cho45.120.229.43,1433 / WIN-S1IBJB84OOO / website_tin_tuc / website_tin_tuc_app. Điền `Deployment__SqlTlsExceptionApproved=true` và `Deployment__SqlTlsExceptionReference` đúng phê duyệt trong private `.env`; Production/sai target/thiếu reference vẫn bị chặn. Quy trình một file `.env`/một lệnh giữ nguyên; [bàn giao một trang](TTDL-UAT-ONE-PAGE.md) liệt kê12 inputTTDL còn thiếu. Gói cũ chưa có policy mới cần build từ source mới khi đủ input, không Publish bằng fixture.
+
 1. Clone `https://github.com/akayuhuhu0503/websitetintuc.git`, hoặc `git pull --ff-only`. Đối chiếu commit bàn giao; thay đổi chưa push chưa có trên GitHub.
 2. Copy `.env` riêng do Developer bàn giao vào gốc source. Mẫu để điền: `scripts/ttdl.env.example`. Không dùng `.env` Development.
 3. Tại gốc source, chạy **một lệnh**:
@@ -22,4 +24,4 @@
 
 Output đã có: mặc định dừng. `-Replace` chỉ thay bản chưa sealed/chưa dùng, giữ bản cũ ở `TTDL-IIS.previous`. Có previous hoặc JSON đích thì dừng, không tự xóa. Không đặt IIS trực tiếp vào output build nếu còn định thay gói.
 
-**PUBLISH PASS không phải IIS DEPLOY PASS.** Không mở SQL/chạy app/worker/migration/import/backup/tạo tài khoản/bật SMTP/cài IIS/service/firewall/DNS khi build. Database `website_tin_tuc` mới xác nhận31bảng/2migration; backup mới đang tạm hoãn, guard recovery giữ nguyên. CHƯA PRODUCTION READY.
+**PUBLISH PASS không phải IIS DEPLOY PASS.** Không mở SQL/chạy app/worker/migration/import/backup/tạo tài khoản/bật SMTP/cài IIS/service/firewall/DNS khi build. Database `website_tin_tuc` đã70bảng/17migration, role và SQLruntime probePASS; không chạy lại Apply. IISPreflight cònBLOCKED do12inputTTDL. CHƯA PRODUCTION READY.

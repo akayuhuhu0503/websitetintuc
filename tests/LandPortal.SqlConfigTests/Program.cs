@@ -58,6 +58,54 @@ if(args.Contains("--migration-207-only"))
     return;
 }
 
+if(args.Contains("--uat-tls-only"))
+{
+    var tlsHome=Path.Combine(Path.GetTempPath(),"landportal-uat-tls-offline-fixture");
+    const string tlsConnection="Server=45.120.229.43,1433;Database=website_tin_tuc;User ID=website_tin_tuc_app;Password=technical-fixture-only;Encrypt=True;TrustServerCertificate=True;Persist Security Info=False";
+    var values=new Dictionary<string,string?>{
+        ["Deployment:Profile"]="UAT",["Deployment:TargetApproved"]="true",["Deployment:TargetApprovalReference"]="TECHNICAL FIXTURE",
+        ["Deployment:SqlTlsExceptionApproved"]="true",["Deployment:SqlTlsExceptionReference"]="OFFLINE POLICY FIXTURE",
+        ["Deployment:ExpectedSqlServer"]="45.120.229.43,1433",["Deployment:ExpectedSqlServerIdentity"]="WIN-S1IBJB84OOO",
+        ["Deployment:SqlAuthentication"]="SqlPassword",["Deployment:ExpectedSqlLogin"]="website_tin_tuc_app",
+        ["Deployment:ExpectedHost"]="portal.invalid",["Public:BaseUrl"]="https://portal.invalid",
+        ["DOTNET_ENVIRONMENT"]="Staging",["ASPNETCORE_ENVIRONMENT"]="Staging",["WorkspaceRoot"]=tlsHome,
+        ["Sql:ExpectedDatabase"]="website_tin_tuc",["ConnectionStrings:Portal"]=tlsConnection,
+        ["Runtime:RolePassword"]=new string('x',32),["Scanner:Provider"]="Clamd",["Scanner:ClamdPort"]="3310",["Scanner:PolicyReference"]="TECHNICAL FIXTURE"
+    };
+    foreach(var key in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})values["Storage:"+key]=Path.Combine(tlsHome,key);
+    IConfiguration TlsConfig(params (string Key,string? Value)[] changes)=>new ConfigurationBuilder().AddInMemoryCollection(values).AddInMemoryCollection(changes.ToDictionary(x=>x.Key,x=>x.Value)).Build();
+    var count=0;
+    void TlsCheck(bool pass,string name){if(!pass)throw new Exception("FAIL "+name);count++;Console.WriteLine("PASS "+name);}
+    bool TlsDenied(Action action){try{action();return false;}catch(InvalidOperationException){return true;}}
+    TlsCheck(UatDeployment.Validate(TlsConfig(),"Staging"),"Explicit exact-target UAT certificate exception accepted");
+    TlsCheck(UatDeployment.TemporaryRuntimeIdentityMatches("WIN-S1IBJB84OOO","website_tin_tuc","website_tin_tuc_app","LandPortalRuntime",70,17,"20261102042625_DraftConsultationEmail"),"Actual SQL runtime identity contract accepted");
+    for(var field=0;field<7;field++)TlsCheck(!UatDeployment.TemporaryRuntimeIdentityMatches(field==0?"OTHER":"WIN-S1IBJB84OOO",field==1?"OTHER":"website_tin_tuc",field==2?"sa":"website_tin_tuc_app",field==3?"dbo":"LandPortalRuntime",field==4?71:70,field==5?18:17,field==6?"OTHER":"20261102042625_DraftConsultationEmail"),"Actual runtime identity field "+field+" mismatch denied");
+    var denyCases=new (string Key,string? Value)[]{
+        ("Deployment:SqlTlsExceptionApproved","false"),("Deployment:SqlTlsExceptionReference",null),
+        ("Deployment:SqlTlsExceptionReference","invalid\nref"),("Deployment:ExpectedSqlServer","other.invalid,1433"),
+        ("Deployment:SqlTlsExceptionReference","     "),
+        ("Deployment:ExpectedSqlServerIdentity","OTHER-SQL"),("Deployment:ExpectedSqlLogin","sa"),
+        ("Deployment:SqlAuthentication","Windows"),("DOTNET_ENVIRONMENT","Production"),("ASPNETCORE_ENVIRONMENT","Production"),
+        ("ConnectionStrings:Portal",tlsConnection.Replace("Encrypt=True","Encrypt=False")),
+        ("ConnectionStrings:Portal",tlsConnection.Replace("website_tin_tuc;","other_db;")),
+        ("ConnectionStrings:Portal",tlsConnection.Replace("45.120.229.43","45.120.229.44"))
+    };
+    foreach(var item in denyCases)TlsCheck(TlsDenied(()=>UatDeployment.Validate(TlsConfig(item),"Staging")),"Exception denied for "+item.Key+" variation");
+    TlsCheck(TlsDenied(()=>UatDeployment.Validate(TlsConfig(),"Production")),"Production runtime argument refused");
+    TlsCheck(TlsDenied(()=>DatabaseSettings.Connection(TlsConfig(("Deployment:Profile","Production"),("DOTNET_ENVIRONMENT","Production"),("ASPNETCORE_ENVIRONMENT","Production")))),"Production cannot reuse exception with another profile");
+    TlsCheck(TlsDenied(()=>DatabaseSettings.Connection(TlsConfig(("Deployment:Profile",""),("Deployment:SqlTlsExceptionApproved","false"),("DOTNET_ENVIRONMENT","production"),("ASPNETCORE_ENVIRONMENT","production")))),"Case-insensitive Production cannot reuse legacy certificate trust");
+    TlsCheck(TlsDenied(()=>DatabaseSettings.Connection(TlsConfig(("Deployment:Profile","Production"),("Deployment:SqlTlsExceptionApproved","false"),("DOTNET_ENVIRONMENT","Development"),("ASPNETCORE_ENVIRONMENT","Development")))),"Production profile cannot borrow Development transport settings");
+    TlsCheck(TlsDenied(()=>DatabaseSettings.Connection(TlsConfig(("Deployment:Profile",""),("Deployment:SqlTlsExceptionApproved","false")))),"Unidentified Staging profile cannot opt into certificate trust");
+    TlsCheck(UatDeployment.Validate(TlsConfig(("ConnectionStrings:Portal",tlsConnection.Replace("TrustServerCertificate=True","TrustServerCertificate=False")),("Deployment:SqlTlsExceptionApproved","false")),"Staging"),"CA validation remains default without exception");
+    var incomplete=TlsConfig(("Deployment:TargetApproved","false"),("Public:BaseUrl",null));
+    TlsCheck(TlsDenied(()=>UatDeployment.Validate(incomplete,"Staging")),"SQL exception does not bypass IIS target and HTTPS requirements");
+    await using(var offlineTls=new PortalDbContext(DatabaseSettings.Options(incomplete)))
+        TlsCheck(offlineTls.Database.GetDbConnection().State==System.Data.ConnectionState.Closed&&!new SqlConnectionStringBuilder(offlineTls.Database.GetConnectionString()).Pooling,"Independent SQL settings preserve runtime role/nonpooled session; no connection opened");
+    var localConfig=TlsConfig(("Deployment:Profile",""),("Deployment:SqlTlsExceptionApproved","false"),("DOTNET_ENVIRONMENT","Development"),("ASPNETCORE_ENVIRONMENT","Development"),("Sql:ExpectedDatabase","LandPortal_Dev"),("ConnectionStrings:Portal",@"Server=.\SQLEXPRESS;Database=LandPortal_Dev;Integrated Security=True;Encrypt=True;TrustServerCertificate=True"));
+    TlsCheck(new SqlConnectionStringBuilder(DatabaseSettings.Connection(localConfig)).IntegratedSecurity,"Existing local Development SQL policy preserved");
+    Console.WriteLine(count+" focused UAT TLS offline checks PASS; 0 SQL connections; full regression NOT RUN.");return;
+}
+
 // Offline technical fixtures only. No connection is opened; no real credentials.
 var home=Path.Combine(Path.GetTempPath(),"landportal-sql-policy-fixture");
 var baseValues=new Dictionary<string,string?>{

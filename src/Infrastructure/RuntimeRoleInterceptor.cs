@@ -20,13 +20,39 @@ IF OBJECT_ID(N'dbo.InquiryCalendarExceptions',N'U') IS NOT NULL DENY UPDATE,DELE
 IF OBJECT_ID(N'dbo.InquiryExtensions',N'U') IS NOT NULL DENY UPDATE,DELETE ON OBJECT::dbo.InquiryExtensions TO [LandPortalRuntime];
 IF OBJECT_ID(N'dbo.OutboxReconciliations',N'U') IS NOT NULL DENY UPDATE,DELETE ON OBJECT::dbo.OutboxReconciliations TO [LandPortalRuntime];
 """;
-    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData) { using var command = Command(connection); command.ExecuteNonQuery(); }
+    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+    {
+        using var command = Command(connection); command.ExecuteNonQuery();
+        using var guard=UatTargetGuard(connection);
+        if(guard is not null){using var reader=guard.ExecuteReader();VerifyUatIdentity(reader);}
+    }
     public override async Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
     {
         using var command = Command(connection);var watch=System.Diagnostics.Stopwatch.StartNew();
         MigrationDiagnostics.Record("DIRECT_SQL_START",new{purpose="runtime-role-activation",fingerprint=MigrationDiagnostics.Fingerprint(command.CommandText),timeoutSeconds=command.CommandTimeout,transaction="NONE",pooling=false,connection=MigrationDiagnostics.ConnectionInfo(connection)});
-        try{await command.ExecuteNonQueryAsync(cancellationToken);MigrationDiagnostics.Record("DIRECT_SQL_PASS",new{purpose="runtime-role-activation",elapsedMs=watch.Elapsed.TotalMilliseconds});}
+        try{
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            using var guard=UatTargetGuard(connection);
+            if(guard is not null){await using var reader=await guard.ExecuteReaderAsync(cancellationToken);VerifyUatIdentity(reader);}
+            MigrationDiagnostics.Record("DIRECT_SQL_PASS",new{purpose="runtime-role-activation",elapsedMs=watch.Elapsed.TotalMilliseconds});
+        }
         catch(Exception ex){MigrationDiagnostics.Record("DIRECT_SQL_FAIL",new{purpose="runtime-role-activation",elapsedMs=watch.Elapsed.TotalMilliseconds,error=ex.GetType().Name,sqlNumber=(ex as SqlException)?.Number});throw;}
+    }
+    private DbCommand? UatTargetGuard(DbConnection connection)
+    {
+        if(!UatDeployment.Enabled(config)||!new SqlConnectionStringBuilder(DatabaseSettings.Connection(config)).TrustServerCertificate)return null;
+        var guard=connection.CreateCommand();
+        guard.CommandText="""
+SELECT CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),DB_NAME(),ORIGINAL_LOGIN(),USER_NAME(),
+ (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0),
+ (SELECT COUNT(*) FROM dbo.__EFMigrationsHistory),(SELECT MAX(MigrationId) FROM dbo.__EFMigrationsHistory);
+""";
+        return guard;
+    }
+    private static void VerifyUatIdentity(DbDataReader reader)
+    {
+        if(!reader.Read()||!UatDeployment.TemporaryRuntimeIdentityMatches(reader.GetString(0),reader.GetString(1),reader.GetString(2),reader.GetString(3),reader.GetInt32(4),reader.GetInt32(5),reader.IsDBNull(6)?"":reader.GetString(6)))
+            throw new InvalidOperationException("Approved UAT SQL runtime identity/schema/role mismatch; connection refused before application operations.");
     }
     private DbCommand Command(DbConnection connection)
     {

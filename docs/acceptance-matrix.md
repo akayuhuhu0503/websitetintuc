@@ -1,3 +1,9 @@
+## Ngoại lệ TLS UAT — 03/11/2026 11:13VN
+
+- **PASS** explicitowner-approved Encrypt=True/TrustServerCertificate=True với2exceptionfields trênexactUAT/Staging/endpoint/physical/db/login; defaultstrict/ProductionDENIED. SharedWebWorkerroleinterceptor verifyactualtarget/schema/rolebeforebusinessoperations. Private.env/JSONmatched,2secretgiữ nguyên,0Apply/migration/backup/import/rolechange.
+- **FinalSQLconnection/activationPASS thật:** website_tin_tuc_app→LandPortalRuntime,secretMATCH,actualWIN-S1IBJB84OOO/website_tin_tuc/70tables/17exacthistory/2FR06columns/effectiveDENY đúng. Receiptprivateuat-sql-runtime-final-20261103T041302Z-72004628.json,0writes. BuildfinalPASS;31C#offline và14PSoffline riêng,khôngfullsuite/khônggộpSQLprobe.
+- **IISPreflightBLOCKED/NOTRUN**,12inputTTDLchưacấp; one.env/onePublishcommandgiữ nguyên. GóiPublishcũchưacópolicy mới, phải tạo từsource mới khiđủinput; khôngPublishfixture/khôngbậtSMTP/Worker/Production. Chứngchỉfallbackchưađược sửa; ngoại lệUATgỡblockerSQL hiện tại, chưaCAvalidation/ProductionReady. CácTLSBLOCKEDcũbêndưới là lịch sử.
+
 ## SQL TLS / IIS readiness — 03/11/2026
 
 - **TLS BLOCKED, nguyên nhân xác minh:** publiccertCN=SSL_Self_Signed_Fallback/noSAN/chain1leaf,UntrustedRoot+NameMismatch vớiIP45.120.229.43; certchưahếthạn. Diagnostic PRELOGIN/TLS duy nhất khôngLOGIN/SQL/trustbypass; compile/probe evidencePASS không đồng nghĩaTLSconnectionPASS. Chưa kiểm tra CAtrust củaIISchưađượccấp,revocationNOTRUN.

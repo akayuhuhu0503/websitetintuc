@@ -4,6 +4,8 @@
     "OperatingOwner": "Trung tâm Dữ liệu và Thông tin đất đai (TTDL)",
     "TargetApproved": "false",
     "TargetApprovalReference": "",
+    "SqlTlsExceptionApproved": "false",
+    "SqlTlsExceptionReference": "",
     "ExpectedSqlServer": "REPLACE_WITH_APPROVED_SQL_INSTANCE",
     "SqlAuthentication": "Windows",
     "ExpectedSqlLogin": "",

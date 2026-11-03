@@ -2,7 +2,21 @@
 function Assert-UatDatabaseName([string]$Database) {
  if($Database.Length -gt 128 -or $Database -notmatch '^[A-Za-z][A-Za-z0-9_]*$' -or $Database -imatch 'restore|prod|replace' -or $Database -iin @('master','model','msdb','tempdb','LandPortal_Dev','LandPortal_Test')){throw 'Allocated non-system UAT database required; Dev/Test/restore/Production forbidden'}
 }
-function Assert-UatTarget($Settings) {
+function Test-UatSqlCertificateTrustApproval($Settings,$Builder,[string]$Environment='Staging') {
+ $names=$Settings.Deployment.PSObject.Properties.Name
+ $reference=if($names -contains 'SqlTlsExceptionReference'){[string]$Settings.Deployment.SqlTlsExceptionReference}else{''}
+ $hasControl=$false;foreach($character in $reference.ToCharArray()){if([char]::IsControl($character)){$hasControl=$true;break}}
+ return $Environment -ceq 'Staging' -and $Settings.Deployment.Profile -ceq 'UAT' -and
+  ($names -contains 'SqlTlsExceptionApproved') -and $Settings.Deployment.SqlTlsExceptionApproved -ceq 'true' -and
+  $reference.Length -gt 4 -and -not [string]::IsNullOrWhiteSpace($reference) -and -not $hasControl -and
+  $Settings.Deployment.ExpectedSqlServer -ceq '45.120.229.43,1433' -and $Builder['Data Source'] -ceq '45.120.229.43,1433' -and
+  $Settings.Deployment.ExpectedSqlServerIdentity -ceq 'WIN-S1IBJB84OOO' -and
+  $Settings.Sql.ExpectedDatabase -ceq 'website_tin_tuc' -and $Builder['Initial Catalog'] -ceq 'website_tin_tuc' -and
+  $Settings.Deployment.SqlAuthentication -ceq 'SqlPassword' -and $Settings.Deployment.ExpectedSqlLogin -ceq 'website_tin_tuc_app' -and
+  $Builder['User ID'] -ceq 'website_tin_tuc_app' -and -not $Builder['Integrated Security'] -and
+  -not $Builder['Persist Security Info'] -and -not [string]::IsNullOrWhiteSpace([string]$Builder['Password']) -and $Builder['Encrypt']
+}
+function Assert-UatTarget($Settings,[string]$Environment='Staging') {
  Assert-UatDatabaseName ([string]$Settings.Sql.ExpectedDatabase)
  if($Settings.Deployment.Profile -cne 'UAT' -or [string]$Settings.Deployment.TargetApproved -cne 'true' -or ([string]$Settings.Deployment.TargetApprovalReference).Length -lt 5 -or [string]$Settings.Deployment.TargetApprovalReference -match '[\r\n]'){throw 'Explicit allocated UAT target and operator approval reference required'}
  try{
@@ -20,7 +34,7 @@ function Assert-UatTarget($Settings) {
   $login=if($Settings.Deployment.PSObject.Properties.Name -contains 'ExpectedSqlLogin'){[string]$Settings.Deployment.ExpectedSqlLogin}else{''}
   $auth=-not $builder['Integrated Security'] -and [string]$builder.Authentication -cin @('NotSpecified','SqlPassword') -and $login.Length -gt 0 -and $login -ine 'sa' -and $login -notmatch 'REPLACE|[\r\n]' -and $builder['User ID'] -ceq $login -and -not [string]::IsNullOrWhiteSpace($builder['Password']) -and -not $builder['Persist Security Info']
  }
- if($builder['Initial Catalog'] -cne $Settings.Sql.ExpectedDatabase -or $builder['Data Source'] -cne $Settings.Deployment.ExpectedSqlServer -or -not $auth -or -not $builder['Encrypt'] -or $builder['TrustServerCertificate'] -or [string]::IsNullOrWhiteSpace($builder['Data Source']) -or $builder['Data Source'] -imatch 'REPLACE'){throw 'UAT SQL target/authentication/TLS mismatch'}
+ if($Environment -cne 'Staging' -or $builder['Initial Catalog'] -cne $Settings.Sql.ExpectedDatabase -or $builder['Data Source'] -cne $Settings.Deployment.ExpectedSqlServer -or -not $auth -or -not $builder['Encrypt'] -or ($builder['TrustServerCertificate'] -and -not (Test-UatSqlCertificateTrustApproval $Settings $builder $Environment)) -or [string]::IsNullOrWhiteSpace($builder['Data Source']) -or $builder['Data Source'] -imatch 'REPLACE'){throw 'UAT SQL target/authentication/TLS mismatch'}
 }
 function Get-UatSafePath([string]$Path) {
  if($Path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+\\)' -or $Path.IndexOfAny([char[]]"`r`n`"<>|?*") -ge 0){throw 'Absolute safe path required'}
