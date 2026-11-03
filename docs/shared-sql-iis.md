@@ -1,5 +1,7 @@
 # SQL dùng chung → IIS TTDL (SRS v1.2)
 
+**TLS03/11 đã có bằng chứng publiccertificate:** CN=SSL_Self_Signed_Fallback,noSAN,WindowsUntrustedRoot+nameMismatchIP45.120.229.43,certcònhạn. Xem [hướng dẫn một trang DBA/CNTT/IIS](TTDL-UAT-ONE-PAGE.md). Diagnostic mới inspect-sql-tls.ps1 chỉPRELOGIN/TLS vàrejectinvalidcert, khôngLOGIN/SQL/truststorechange. Fileprivate ttdl.env.pending đã có cùngcredentials/rolesecret hiện có, thiếuinputhạ tầng; runtimeactivation/PreflightBLOCKED. KhôngApply/schema/role lại.
+
 ## Kết quả hiện hành 03/11/2026 10:02VN
 
 **LandPortalRuntime đã APPLIED/VERIFIED, không chạy lại các lệnh Apply role/schema bên dưới.** SQL nguyênhasha34ad381...8dd96, exact19GRANT/DENY và role typeAPPLICATION_ROLE readback PASS. App login vẫn SIDkhớp/directCONNECT/không membership database-role, rights trước/sau không đổi;70bảng/17migration/2cộtFR06 PASS. Backup cũ70/16đãverify lại, không tạo mới. Receipt riêng `C:\Users\ADMIN\LandPortal-Private\runtime-security-20261103T025642Z-d4d3bd33\apply.jsonl` và `dba-readback.jsonl`; không migration/import/login/password reset.

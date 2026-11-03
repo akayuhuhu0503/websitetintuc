@@ -1,3 +1,8 @@
+## SQL TLS / IIS readiness — 03/11/2026
+
+- **TLS BLOCKED, nguyên nhân xác minh:** publiccertCN=SSL_Self_Signed_Fallback/noSAN/chain1leaf,UntrustedRoot+NameMismatch vớiIP45.120.229.43; certchưahếthạn. Diagnostic PRELOGIN/TLS duy nhất khôngLOGIN/SQL/trustbypass; compile/probe evidencePASS không đồng nghĩaTLSconnectionPASS. Chưa kiểm tra CAtrust củaIISchưađượccấp,revocationNOTRUN.
+- Role/schema70/17 giữ nguyênPASS của receipt trước; runtimeactivation **BLOCKED**, IISPreflight **BLOCKED/NOTRUN** vìcert vàinputTTDL. `.env` **MISSING INPUT**, private draft đã chứađúng2secret hiện có/roundtripMATCH/ACLADMIN+SYSTEM;12biếnhạ tầngcòn thiếu/targetapprovalfalse. Guide1trang docs/TTDL-UAT-ONE-PAGE.md phân rõDBA/CNTT. KhôngApply/backup/Publish/production.
+
 ## Runtime role provisioning — 03/11/2026 10:02VN
 
 - **PASS:** approvedroleLandPortalRuntime created/exact19GRANT-DENYreadback, appSID/directCONNECT/noDBrole và quyền trước/sau giữ nguyên; schema70/17/2FR06columns kiểm kê lại PASS. Backup cũHEADERONLY/VERIFYONLY PASS/0backup mới. Private receipts runtime-security-20261103T025642Z-d4d3bd33, không schema/data/login reset/import.
