@@ -17,13 +17,22 @@ function NoReparse([string]$Path){
 }
 NoReparse $PlanFile
 $plan=Get-Content -LiteralPath $PlanFile -Raw -Encoding UTF8|ConvertFrom-Json
-$pin='664de13e864e69a989e56d17e2a927b7477ca5c038030dbe19bfc62451a6e1d7'
-if($plan.manifestSha256 -cne $pin -or $plan.target -cne 'WIN-S1IBJB84OOO/website_tin_tuc' -or $plan.kind -cne 'LandPortal.Sql207.OneBackup.v1'){throw 'Wrong backup-plan scope'}
+$pin207='664de13e864e69a989e56d17e2a927b7477ca5c038030dbe19bfc62451a6e1d7'
+$pinFr06='13594b2be96f46b7bd517b5160572800ab63ee4d93ce26ce64b4edf7df8d9a8e'
+$is207=$plan.manifestSha256 -ceq $pin207 -and $plan.kind -ceq 'LandPortal.Sql207.OneBackup.v1'
+$isFr06=$plan.manifestSha256 -ceq $pinFr06 -and $plan.kind -ceq 'LandPortal.Fr06.OneBackup.v1'
+if((-not $is207 -and -not $isFr06) -or $plan.target -cne 'WIN-S1IBJB84OOO/website_tin_tuc'){throw 'Wrong backup-plan scope'}
+$pin=[string]$plan.manifestSha256
+$beforeTables=if($is207){31}else{70}
+$beforeMigrations=if($is207){2}else{16}
+$expectedState=if($is207){'EXACT_COMMITTED_MIGRATION2_PREFIX'}else{'EXACT_PREFIX_THROUGH_20261027025057_AuditRecoveryLookup'}
 if((Hash $PSCommandPath) -cne $plan.operatorSha256){throw 'Backup operator differs from reviewed plan'}
 $packet=[IO.Path]::GetFullPath([string]$plan.packetDirectory);NoReparse $packet
 if((Hash (Join-Path $packet 'manifest.json')) -cne $pin){throw 'Packet manifest changed'}
 $manifest=Get-Content -LiteralPath (Join-Path $packet 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
-if($manifest.kind -cne 'LandPortal.Sql207.ResumePrefix.v1' -or $manifest.baseline.tables -ne 31 -or $manifest.baseline.migrations -ne 2){throw 'Wrong prefix manifest'}
+if($is207){
+ if($manifest.kind -cne 'LandPortal.Sql207.ResumePrefix.v1' -or $manifest.baseline.tables -ne 31 -or $manifest.baseline.migrations -ne 2){throw 'Wrong prefix manifest'}
+}elseif($manifest.kind -cne 'LandPortal.Fr06.Additive.v1' -or $manifest.fromMigration -cne '20261027025057_AuditRecoveryLookup' -or $manifest.toMigration -cne '20261102042625_DraftConsultationEmail' -or $manifest.remainingMigrationCount -ne 1){throw 'Wrong FR06 prefix manifest'}
 foreach($f in $manifest.files){
  if($f.path -cnotin @('schema.sqlcmd','verify-prefix.sql','recover-207.ps1','START.md')){throw 'Unexpected packet file'}
  $path=Join-Path $packet $f.path;NoReparse $path
@@ -33,9 +42,13 @@ if(@($manifest.files).Count -ne 4){throw 'Packet incomplete'}
 NoReparse $plan.inspectReport
 if((Hash $plan.inspectReport) -cne $plan.inspectReportSha256){throw 'Prior Inspect receipt changed'}
 $inspection=@(Get-Content -LiteralPath $plan.inspectReport -Encoding UTF8|ForEach-Object {$_|ConvertFrom-Json})
-if($inspection.Count -ne 2 -or $inspection[0].manifestSha256 -cne $pin -or $inspection[0].target -cne $plan.target -or $inspection[0].mode -cne 'Inspect' -or $inspection[1].stage -cne 'READ_ONLY_STATE_PREFLIGHT_PASS' -or $inspection[1].state -cne 'EXACT_COMMITTED_MIGRATION2_PREFIX' -or $inspection[1].ddlExecuted){throw 'Prior Inspect did not prove exact prefix'}
-if($plan.jobId -cnotmatch '^[a-f0-9]{32}$' -or $plan.backupTag -cne ('LP207-'+$plan.jobId+'-'+$pin)){throw 'Invalid fixed backup identity'}
-$allowed='C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Backup\website_tin_tuc_prefix2_20261029_'+$plan.jobId+'.bak'
+if($inspection.Count -ne 2 -or $inspection[0].manifestSha256 -cne $pin -or $inspection[0].target -cne $plan.target -or $inspection[0].mode -cne 'Inspect' -or $inspection[1].stage -cne 'READ_ONLY_STATE_PREFLIGHT_PASS' -or $inspection[1].state -cne $expectedState -or $inspection[1].ddlExecuted){throw 'Prior Inspect did not prove exact prefix'}
+$inspectedUtc=[DateTimeOffset]::Parse([string]$inspection[1].utc)
+if($inspectedUtc -gt [DateTimeOffset]::UtcNow -or $inspectedUtc -lt [DateTimeOffset]::UtcNow.AddHours(-12)){throw 'Successful exact-prefix Inspect must be fresh within12hours'}
+$tagPrefix=if($is207){'LP207-'}else{'LPFR06-'}
+if($plan.jobId -cnotmatch '^[a-f0-9]{32}$' -or $plan.backupTag -cne ($tagPrefix+$plan.jobId+'-'+$pin)){throw 'Invalid fixed backup identity'}
+$filePrefix=if($is207){'website_tin_tuc_prefix2_20261029_'}else{'website_tin_tuc_prefix16_fr06_'}
+$allowed='C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Backup\'+$filePrefix+$plan.jobId+'.bak'
 if($plan.backupFile -cne $allowed){throw 'Backup path is not this fixed new SQL-server backup file'}
 if($Mode -eq 'Plan'){
  Write-Output ('PLAN PASS; packet unchanged; one fixed backup target='+$plan.backupFile+'; existing matching file will only be verified/reused. No SQL connection.')
@@ -60,31 +73,55 @@ function Audit([hashtable]$row){
  $row.utc=[DateTimeOffset]::UtcNow.ToString('O');$row.jobId=$plan.jobId;$row.target=$plan.target;$row.manifestSha256=$pin;$row.backupFile=$plan.backupFile
  $writer.WriteLine(($row|ConvertTo-Json -Depth 8 -Compress))
 }
-$builder=New-Object Data.SqlClient.SqlConnectionStringBuilder
-$builder.DataSource='45.120.229.43,1433';$builder.InitialCatalog='website_tin_tuc';$builder.IntegratedSecurity=$false
-$builder.Encrypt=$true;$builder.TrustServerCertificate=[bool]$TemporaryCertificateTrust;$builder.Pooling=$false;$builder.ConnectTimeout=15
-$secret=$DbaCredential.Password.Copy();$secret.MakeReadOnly()
-$credential=New-Object Data.SqlClient.SqlCredential($DbaCredential.UserName,$secret)
-$connection=New-Object Data.SqlClient.SqlConnection($builder.ConnectionString,$credential)
-$lease=$false;$stage='CONNECT';$madeBackup=$false;$header=$null
+$connection=$null;$secret=$null
+$lease=$false;$stage='CONNECTION_SETUP';$madeBackup=$false;$header=$null
 function Command([string]$sql){$c=$connection.CreateCommand();$c.CommandText=$sql;$c.CommandTimeout=120;return $c}
 function Execute([string]$sql){$c=Command $sql;try{[void]$c.ExecuteNonQuery()}finally{$c.Dispose()}}
 function Assert-Prefix {
  Execute 'IF @@TRANCOUNT<>0 OR COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),''DATABASE'',''CONTROL''),0)<>1 THROW 51000,''Fresh DBA connection with target CONTROL required.'',1;'
  Execute ([IO.File]::ReadAllText((Join-Path $packet 'verify-prefix.sql')))
+ Execute @'
+IF ORIGINAL_LOGIN()=N'website_tin_tuc_app'
+ OR (COALESCE(IS_SRVROLEMEMBER(N'sysadmin'),0)<>1
+ AND COALESCE(HAS_PERMS_BY_NAME(NULL,'SERVER','VIEW SERVER PERFORMANCE STATE'),0)<>1
+ AND COALESCE(HAS_PERMS_BY_NAME(NULL,'SERVER','VIEW SERVER STATE'),0)<>1)
+ THROW 51000,'Dedicated DBA and transaction visibility required.',1;
+IF EXISTS(SELECT 1 FROM sys.dm_tran_database_transactions d
+ JOIN sys.dm_tran_session_transactions s ON s.transaction_id=d.transaction_id
+ WHERE d.database_id=DB_ID() AND s.session_id<>@@SPID AND s.is_user_transaction=1)
+ THROW 51000,'Another target user transaction is active; stop and reconcile.',1;
+'@
 }
 try{
- Audit @{stage='STARTED';priorInspectSha256=$plan.inspectReportSha256;beforeTables=31;beforeMigrations=2}
+ Audit @{stage='STARTED';priorInspectSha256=$plan.inspectReportSha256;beforeTables=$beforeTables;beforeMigrations=$beforeMigrations}
+ # PowerShell adapts this IDictionary by keyword, not CLR property name.
+ # Use canonical SQL keywords, as the immutable recovery runner already does.
+ $builder=New-Object Data.SqlClient.SqlConnectionStringBuilder
+ $builder['Data Source']='45.120.229.43,1433';$builder['Initial Catalog']='website_tin_tuc';$builder['Integrated Security']=$false
+ $builder['Encrypt']=$true;$builder['TrustServerCertificate']=[bool]$TemporaryCertificateTrust;$builder['Pooling']=$false;$builder['Connect Timeout']=15
+ $secret=$DbaCredential.Password.Copy();$secret.MakeReadOnly()
+ $credential=New-Object Data.SqlClient.SqlCredential($DbaCredential.UserName,$secret)
+ $connection=New-Object Data.SqlClient.SqlConnection($builder.ConnectionString,$credential)
+ $stage='CONNECT'
  $connection.Open();$stage='PREFIX'
  # Exact packet guard checks physical identity, visibility, schema/history,
  # rights, no other user transaction, zero business rows. Never grant rights.
  Assert-Prefix
+ $c=Command 'SELECT DATEPART(TZOFFSET,SYSDATETIMEOFFSET());'
+ try{$serverOffset=[int]$c.ExecuteScalar()}finally{$c.Dispose()}
  Execute "DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource=N'LandPortal.Sql207.PrefixRecovery',@LockMode='Exclusive',@LockOwner='Session',@LockTimeout=0; IF @r<0 THROW 51000,'Recovery/backup already active.',1;"
  $lease=$true;Assert-Prefix
  $stage='FILE_STATUS';$c=Command 'SELECT file_exists,file_is_a_directory,parent_directory_exists FROM sys.dm_os_file_exists(@file);'
  [void]$c.Parameters.Add('@file',[Data.SqlDbType]::NVarChar,4000);$c.Parameters['@file'].Value=$plan.backupFile
  try{$reader=$c.ExecuteReader();try{if(-not $reader.Read()){throw 'File status absent'};$exists=[bool]$reader['file_exists'];if([bool]$reader['file_is_a_directory'] -or -not [bool]$reader['parent_directory_exists']){throw 'Backup parent unavailable or path is a directory'}}finally{$reader.Dispose()}}finally{$c.Dispose()}
  if(-not $exists){
+  # Fail closed when SQL cannot report sufficient free bytes on the backup drive.
+  $c=Command 'SELECT free_space_in_bytes FROM sys.dm_os_enumerate_fixed_drives WHERE fixed_drive_path=@drive;'
+  [void]$c.Parameters.Add('@drive',[Data.SqlDbType]::NVarChar,3);$c.Parameters['@drive'].Value=$plan.backupFile.Substring(0,3)
+  try{$free=$c.ExecuteScalar()}finally{$c.Dispose()}
+  $c=Command 'SELECT SUM(CONVERT(bigint,size))*8192 FROM sys.database_files;'
+  try{$databaseBytes=[long]$c.ExecuteScalar()}finally{$c.Dispose()}
+  if($null -eq $free -or $free -is [DBNull] -or [long]$free -lt ($databaseBytes+1GB)){throw 'Backup-drive space not visible or insufficient; DBA must resolve before backup'}
   $stage='BACKUP';Audit @{stage='BACKUP_START_RECONCILE_IF_INTERRUPTED';backupTag=$plan.backupTag}
   $c=Command 'BACKUP DATABASE [website_tin_tuc] TO DISK=@file WITH COPY_ONLY,CHECKSUM,NOINIT,NOFORMAT,NOSKIP,NAME=@tag,MEDIANAME=@tag;';$c.CommandTimeout=600
   [void]$c.Parameters.Add('@file',[Data.SqlDbType]::NVarChar,4000);$c.Parameters['@file'].Value=$plan.backupFile
@@ -97,6 +134,8 @@ try{
   if(-not $reader.Read()){throw 'Backup header absent'}
   if([string]$reader['BackupName'] -cne $plan.backupTag -or [string]$reader['ServerName'] -cne 'WIN-S1IBJB84OOO' -or [string]$reader['DatabaseName'] -cne 'website_tin_tuc' -or [int]$reader['BackupType'] -ne 1 -or -not [bool]$reader['IsCopyOnly'] -or -not [bool]$reader['HasBackupChecksums'] -or [bool]$reader['IsDamaged']){throw 'Existing backup is not this exact complete tagged COPY_ONLY/checksummed target set; do not overwrite/retry'}
   $header=@{backupSetGuid=[string]$reader['BackupSetGUID'];backupSize=[long]$reader['BackupSize'];compressedBackupSize=[long]$reader['CompressedBackupSize'];finish=[string]$reader['BackupFinishDate'];checkpointLsn=[string]$reader['CheckpointLSN'];backupTag=$plan.backupTag}
+  $finish=[DateTimeOffset]::new([DateTime]::SpecifyKind([DateTime]$reader['BackupFinishDate'],[DateTimeKind]::Unspecified),[TimeSpan]::FromMinutes($serverOffset))
+  if($finish.ToUniversalTime() -lt $inspectedUtc.ToUniversalTime() -or $finish -gt [DateTimeOffset]::UtcNow.AddMinutes(5)){throw 'Backup does not follow the successful current inspection; no overwrite/retry'}
   if($reader.Read()){throw 'Multiple appended backup sets refused'}
  }finally{$reader.Dispose()}}finally{$c.Dispose()}
  Assert-Prefix
@@ -109,8 +148,8 @@ try{
  $records=@(Get-Content -LiteralPath $verify -Encoding UTF8|ForEach-Object {$_|ConvertFrom-Json})
  $backupPass=@($records|Where-Object {$_.stage -eq 'BACKUP_READONLY_VERIFY_PASS'})
  $last=$records[-1]
- if($records[0].manifestSha256 -cne $pin -or $records[0].target -cne $plan.target -or $backupPass.Count -ne 1 -or $backupPass[0].backup.path -cne $plan.backupFile -or $backupPass[0].backup.backupSetGuid -cne $header.backupSetGuid -or $last.stage -cne 'READ_ONLY_STATE_PREFLIGHT_PASS' -or -not $last.backupVerified -or $last.ddlExecuted){throw 'Independent backup/prefix verification receipt mismatch'}
- Audit @{stage='BACKUP_VERIFIED';backupCreated=$madeBackup;backupReused=(-not $madeBackup);header=$header;tables=31;migrations=@('20261012055549_InitialPortal','20261012083717_CmsRevisionWorkflow');checksumVerify='PASS';headerVerify='PASS';verificationReceipt=$verify;verificationReceiptSha256=(Hash $verify);restoreTested=$false;ddlExecuted=$false}
+ if($records[0].manifestSha256 -cne $pin -or $records[0].target -cne $plan.target -or $backupPass.Count -ne 1 -or $backupPass[0].backup.path -cne $plan.backupFile -or $backupPass[0].backup.backupSetGuid -cne $header.backupSetGuid -or $last.stage -cne 'READ_ONLY_STATE_PREFLIGHT_PASS' -or $last.state -cne $expectedState -or -not $last.backupVerified -or $last.ddlExecuted){throw 'Independent backup/prefix verification receipt mismatch'}
+ Audit @{stage='BACKUP_VERIFIED';backupCreated=$madeBackup;backupReused=(-not $madeBackup);header=$header;tables=$beforeTables;migrationCount=$beforeMigrations;prefixThrough=$manifest.fromMigration;checksumVerify='PASS';headerVerify='PASS';verificationReceipt=$verify;verificationReceiptSha256=(Hash $verify);restoreTested=$false;ddlExecuted=$false}
  Write-Output ('BACKUP_VERIFIED; receipt='+$receipt+'; backup='+$plan.backupFile+'; newBackup='+$madeBackup+'. No schema/role/import executed; restore NOT RUN.')
 }catch{
  $n=$null;$ex=$_.Exception
@@ -118,6 +157,6 @@ try{
  Audit @{stage='STOP_RECONCILE_REQUIRED';failedStage=$stage;sqlNumber=$n;backupCreated=$madeBackup;backupOutcomeUncertain=($stage -eq 'BACKUP');autoRetry=$false;ddlExecuted=$false}
  throw ('Backup stopped at '+$stage+'; SQL number='+$n+'. Details omitted; read private receipt. No automatic retry, overwrite, migration or restore.')
 }finally{
- if($lease -and $connection.State -eq [Data.ConnectionState]::Open){try{Execute "EXEC sys.sp_releaseapplock @Resource=N'LandPortal.Sql207.PrefixRecovery',@LockOwner='Session';"}catch{}}
- $connection.Dispose();$secret.Dispose();$writer.Dispose()
+ if($lease -and $connection -and $connection.State -eq [Data.ConnectionState]::Open){try{Execute "EXEC sys.sp_releaseapplock @Resource=N'LandPortal.Sql207.PrefixRecovery',@LockOwner='Session';"}catch{}}
+ if($connection){$connection.Dispose()};if($secret){$secret.Dispose()};$writer.Dispose()
 }

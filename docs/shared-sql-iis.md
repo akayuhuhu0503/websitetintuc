@@ -1,5 +1,60 @@
 # SQL dùng chung → IIS TTDL (SRS v1.2)
 
+## Kết quả hiện hành 03/11/2026 10:02VN
+
+**LandPortalRuntime đã APPLIED/VERIFIED, không chạy lại các lệnh Apply role/schema bên dưới.** SQL nguyênhasha34ad381...8dd96, exact19GRANT/DENY và role typeAPPLICATION_ROLE readback PASS. App login vẫn SIDkhớp/directCONNECT/không membership database-role, rights trước/sau không đổi;70bảng/17migration/2cộtFR06 PASS. Backup cũ70/16đãverify lại, không tạo mới. Receipt riêng `C:\Users\ADMIN\LandPortal-Private\runtime-security-20261103T025642Z-d4d3bd33\apply.jsonl` và `dba-readback.jsonl`; không migration/import/login/password reset.
+
+Secret mới48ký tự/RNG256bit đã dùng để tạo role, lưu trong **`uat.json` cùngprivatefolder**, ACLADMIN+SYSTEM. Đây là private config draft để bàn giao: giữ chính Runtime.RolePassword khi CNTT điền các allocation còn thiếu, chuyển riêng qua kênh an toàn; không tạo secret khác cho Web và Worker, không thay bằng secretfixture. Hai giá trị SQLloginpassword/rolepassword khác nhau. Role đã tồn tại thì không reset/reprovision để thử.
+
+**IIS/runtime còn BLOCKED**: appprobe dùng strictTLS trong chínhJSON bị SQL-2146893019 (certificatechain) trước khi kích hoạt role. Không có activation/secretMATCHPASS và không đổi TrustServerCertificate để vượt policyruntime. DBA/TTDL cần certificate/CA và tên DNS khớp CN/SAN (nếu đổi endpoint phải duyệt lại cấu hình ExpectedSqlServer); CNTT cấp HTTPS/privatehome/4storage/identities/ACL, ATTT cấp scannerpin/policy, targetapproval config thật. SMTP Disabled. Chưa chạy runtimePreflight hoặc bật IIS/Worker.
+
+Sau khi cấu hình thật đầy đủ, Web và5Worker cùng trỏ `LANDPORTAL_HOME`/`LANDPORTAL_CONFIG=<privatehome>\uat.json`; dùng lệnh Preflight hiện có ở dưới rồi mới lên lịch triển khai riêng. Không cần build/Publish lại vì chỉ thay công cụ quản trị/scripts/docs, binaryWeb/Worker không đổi trong lượt này. Các phần phê duyệt/Plan/Apply phía dưới giữ làm lịch sử/quy trình, không tự replay.
+
+**Security03/11 đã được owner duyệt riêng:** scope LandPortalRuntime/website_tin_tuc/appwebsite_tin_tuc_app, giữ SQLrole nguyênhash a34ad381...8dd96. Không coi mục AWAITING_SECURITY_APPROVAL bên dưới là hiện hành. Secret đã tạo trongprivateJSON ngoàiGit/webroot, không dùng mật khẩu login làmrole secret. Phiên DBA đang chờ nhập lúc cập nhật; chưa có receipt ApplyPASS. Apply helper hiện có receipt riêng/guardSID/CONNECT-only/noDBserverrole/exact19rolepermissions; sourceSHA hiện hành `9b4a681da7e98cda467310a6077bcfb4fac93cd470a35c78ed01c14e23bc80f5`, thay hash helper cũ trong phần lịch sử. RuntimeTLS giữ strict, chưa đủ config thật để chạy IISPreflight.
+
+## Hiện hành 03/11/2026 — sau schema, chờ phê duyệt security
+
+Schema đã Apply/readback70bảng/17migration, hai backup có HEADERONLY/VERIFYONLY PASS, receipt `C:\Users\ADMIN\LandPortal-Private\approved-schema-20261103T015340Z-dcbdfc40`. **Không chạy lại schema/207/FR06.** Các mục SQL1934/empty/16migration bên dưới là lịch sử, không phải hướng dẫn hiện hành.
+
+Kết nối đọc mới bằng app login xác nhận đúng WIN-S1IBJB84OOO/website_tin_tuc, login/user website_tin_tuc_app/SID khớp; không db_owner/db_ddladmin/db_datawriter. App không VIEW DEFINITION/SELECT history: VisibleTables=0/VisibleRuntimeRoles=0 không chứng minh đối tượng không tồn tại. **DBA SELECT-only lúc09:39 ngày03/11 xác nhận70bảng/17migration exact names/IDs,2cộtFR06 đúng, runtimeRole ABSENT, appSID khớp/0membership bổ sung/directCONNECT.** Receipt `C:\Users\ADMIN\LandPortal-Private\post-schema-runtime-20261103T023626Z-db7d4a1a.jsonl`. Công cụ đọc: `scripts/inspect-shared-runtime.ps1 -ConnectReadOnly -ReportFile <NEW_PRIVATE_JSONL>`; không migration/backup/grant hoặc khởi động runtime. Không cần kiểm kê lại liên tục.
+
+**Security: AWAITING_SECURITY_APPROVAL.** Chưa nhận hồ sơ duyệt riêng tạo application role/cấp quyền. Packet role cũ vẫn nguyên byte; không coi phê duyệt schema là phê duyệt role. Công cụ `apply-shared-runtime-role.ps1` đã cập nhật guard exact17IDs và FR06 columns, visibility/giao dịch, backup target/COPY_ONLY/full/checksum. SQL role không đổi: CREATE APPLICATION ROLE LandPortalRuntime; GRANT SELECT/INSERT/UPDATE/DELETE trên dbo cho role; DENY ALTER, DENY UPDATE/DELETE trên AuditLogs và các bảng snapshot/audit tương tác đã liệt kê trong SQL; chỉ GRANT CONNECT cho user ứng dụng. Không add app vào db_owner/db_ddladmin/db_datawriter; runtime không dùng sa. TTDL/DBA phải review chính scope này và secret role riêng24–128ký tự (khác mật khẩu SQL login).
+
+Artifact trình duyệt:
+- Packet `.local/publish/shared-sql-website_tin_tuc`, deployment-manifest SHA `a1f06b6c631d8e2dc24d71eec556d20f3d4137c0a24a15104398c83cc5403999` chỉ được dùng để bind **role SQL**, tuyệt đối không chạy schema cũ trong packet.
+- `runtime-role.sqlcmd` SHA `a34ad38165061782dee62dc2abf073cf0c337defa6794d5d4cb6977af458dd96`.
+- Source helper đã sửa SHA `fad617ab61a56140e95c85c75e15726899fd0907b875290eddd06d80115da42b`; manual-operator-manifest cũ không mô tả helper mới này. Chưa Apply, chưa có security E2E PASS.
+- Backup gần nhất đã verify: `C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Backup\website_tin_tuc_prefix16_fr06_0f1ecc3513c746ac8e8f51fb7bf29089.bak`, BackupSetGUID0b50d60a-6823-4b4c-91eb-f3cc1706ac75. Đây là backup70/16 **trước FR06**, không phải backup70/17; DBA phải xác nhận kế hoạch khôi phục phù hợp khi duyệt security. Không tạo thêm backup trong lượt post-schema.
+
+Plan an toàn (đã chạy offline, không đọc secret/kết nối):
+```powershell
+powershell -NoProfile -File scripts/apply-shared-runtime-role.ps1 -PacketDirectory .local/publish/shared-sql-website_tin_tuc -PrivateConfig "$env:USERPROFILE\LandPortal-Private\runtime-role.private-template.json"
+```
+**Chỉ sau phê duyệt security riêng, kiểm kê DBA đạt và private config được điền đúng**, DBA chạy lệnh sau; helper hỏi credential bằng Get-Credential và xác minh lại backup, không tạo backup:
+```powershell
+powershell -NoProfile -File scripts/apply-shared-runtime-role.ps1 -PacketDirectory .local/publish/shared-sql-website_tin_tuc -PrivateConfig "$env:USERPROFILE\LandPortal-Private\runtime-role.private-template.json" -VerifiedBackupPath 'C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Backup\website_tin_tuc_prefix16_fr06_0f1ecc3513c746ac8e8f51fb7bf29089.bak' -TemporaryCertificateTrust -Apply
+```
+Role đã có thì dừng/reconcile, không reset secret hoặc cấp quyền lại. Phê duyệt không có trong tài liệu này; các lệnh Apply ở đây **chưa được thực hiện**.
+
+### Cấu hình IIS/Worker — chỉ chuẩn bị, chưa Preflight runtime
+
+Template đầy đủ: `scripts/ttdl.env.example` (file shared-sql.env.example chỉ là subset SQL). Đã điền server/database/login/physical identity được cấp; `Deployment__TargetApproved=false` và các input hạ tầng/secret vẫn chờ duyệt. Parser/defaults PASS; template thiếu LANDPORTAL_HOME bị từ chối đúng, không giả là runtime-ready. Không đổi `.env` hay private config thật. TTDL cần cung cấp:
+
+| Đơn vị | Input thật còn thiếu |
+|---|---|
+| DBA/ATTT | Phê duyệt role/quyền, Runtime__RolePassword riêng, CA/certificate SQL phù hợp tên đích; ngoại lệ TrustServerCertificate cho probe/DBA không tự mở runtimeTLS |
+| CNTT TTDL | Máy IIS, Hosting Bundle10, hostname/HTTPS, LANDPORTAL_HOME,4Storage__*Root, danh tính Web/Worker và ACL, TargetApprovalReference |
+| ATTT/CNTT | Scanner policy/privacy approval, Defender binarySHA/serviceIdentity; Video FFmpeg/ffprobe path/SHA/license/approval nếu bật |
+| Mail vận hành | Giữ Disabled/DeliveryEnabled=false; SMTP thật chỉ sau duyệt và xử lý outbox thử |
+
+Web config sinh bởi prepare-iis-config và launcher `uat-runtime.ps1` cùng lấy `LANDPORTAL_CONFIG=<LANDPORTAL_HOME>\uat.json`; năm mode Scheduler/Documents/InquiryScan/Video/Mail dùng cùng tham số `-DataHome/-Config`. Không copy secret vào webroot; ACL đọc chỉ cho identities được cấp, không tự cấp trong lượt này.
+
+Khi đã có role/quyền/config thật trên **máy TTDL**, mới chạy:
+```powershell
+powershell -NoProfile -File scripts/uat-runtime.ps1 -DataHome '<TTDL_PRIVATE_HOME>' -Config '<TTDL_PRIVATE_HOME>\uat.json' -PublishRoot '<TTDL_IIS_PACKAGE>' -Mode Preflight -Online -Report '<NEW_PRIVATE_REPORT.json>'
+```
+Hiện Preflight runtime/IIS **BLOCKED/NOT RUN**; không build/Publish mới, install/start IIS/Worker, bootstrap, import hoặc gửi email.
+
 **SQL1934 sau lần owner apply schema:** tạm dừng mọi lệnh apply/schema/role bên dưới. Xem [sql-1934-recovery.md](sql-1934-recovery.md) và chạy query DBA `scripts/inspect-shared-sql-1934.sql` trước. Nguồn generator đã bổ sung required SET options; bộ cũ/hash gốc giữ nguyên, bộ mới ở `.local/publish/shared-sql-1934-fixed/` chưa được phép chạy. Chưa có kết quả live để xác nhận rollback hay commit một phần. Trích log và backup path do owner cung cấp, không phải raw log đầy đủ hay agent verify lại.
 
 Đích được chủ dự án khai báo: **45.120.229.43,1433 / website_tin_tuc**, SQL Server 2022, SQL Login **website_tin_tuc_app**, đã mapping user/public. Không tạo lại database/login, không dùng `sa`, không cấp db_owner/sysadmin. Đã đọc credential từ file private do chủ dự án cung cấp; không đưa secret vào repo. Cấu hình gốc `TrustServerCertificate=true` bị guard chặn trước kết nối. Một bản sao strict (`false`, không sửa file gốc) đã thử kết nối và thất bại TLS **SQL -2146893019 / chuỗi chứng chỉ chưa được tin cậy**. Dừng, chưa xác minh được login/physical identity/schema, chưa chạy SELECT metadata hoặc ghi SQL. DBA cần chứng chỉ/CA hợp lệ và tên CN/SAN phù hợp; không bật bypass để tiếp tục. [Microsoft: certificate validation](https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/connect/certificate-validation-failure).

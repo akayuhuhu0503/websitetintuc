@@ -1,3 +1,32 @@
+## Runtime role provisioning — 03/11/2026 10:02VN
+
+- **PASS:** approvedroleLandPortalRuntime created/exact19GRANT-DENYreadback, appSID/directCONNECT/noDBrole và quyền trước/sau giữ nguyên; schema70/17/2FR06columns kiểm kê lại PASS. Backup cũHEADERONLY/VERIFYONLY PASS/0backup mới. Private receipts runtime-security-20261103T025642Z-d4d3bd33, không schema/data/login reset/import.
+- **PRIVATE CONFIG READY:** role secret48ký tự/RNG256bit/ACLADMIN+SYSTEM, chínhJSON được provisioning đọc và dự kiến dùng chung Web/5Worker; không tiết lộ/Git. **ACTIVATION BLOCKED:** strictTLSapp probe SQL-2146893019 certificatechain trước sp_setapprole; chưa có secretMATCH/runtime activationPASS, không hạTLS để lấyPASS. IISPreflight BLOCKED/NOTRUN, còn certificate/HTTPS/privatehome/serviceACL/scanner/targetconfigTTDL. SMTPDisabled/không deploy. Các trạng thái awaitingsecurity/waitingcredential bên dưới là lịch sử; không Apply role lại.
+
+## Runtime security approval — 03/11/2026
+
+- Chủ dự án đã phê duyệt security đúngrole/target/app/schema70/17. Private role secret48ký tự/RNG256bit/ACLADMIN+SYSTEM đã tạo, không log/Git; JSON giữ strictTLS/SMTPDisabled và chưa coi là configTTDLhoàn chỉnh. ScopeSQLquyền không đổi; helper bổ sungfreshSID/CONNECT-only/noDBrole+serverrole và19permissionreadback/rights preservation receipt. Plan/parsePASS; phiên DBA PID27884 WAITING_FOR_DBA, Apply/readback chưa có kết quả tại checkpoint này. Không migration/backup mới/import/IIS; các mục AWAITING_SECURITY_APPROVAL cũ là lịch sử.
+
+## Post-schema runtime — 03/11/2026
+
+- Fresh DBA SELECT-only: target/schema70/17/FR06columns **PASS**; appmapping/SID **PASS**, directCONNECT,0additionalDBroles. Runtime applicationrole **ABSENT / AWAITING_SECURITY_APPROVAL**, không Applysecurity. Private receipt post-schema-runtime-20261103T023626Z-db7d4a1a.jsonl. Appmetadata limited được phân biệt với DBAfullvisibility.
+- Runtime helper exact17guard và template cấu trúc/defaults kiểm tra offline **PASS**; role provisioning/activation **NOTRUN**. Template TTDL **MISSING INPUT** (role secret,HTTPS/privatepaths/identities/ACL,SQLcertificate/scanner...), không dùng fixture làm configthật. Web+5Worker chungprivateconfig theo source; chưa chạy trênTTDL. IIS/runtime Preflight **BLOCKED/NOTRUN**. SchemaPASS không tự nghiệm thuIIS/UAT/Production; không backup/migration/import/SMTP hoặc Publish mới.
+
+## Shared schema APPLIED / VERIFIED — 03/11/2026
+
+- Shared target WIN-S1IBJB84OOO/website_tin_tuc: exact31/2 → **70 bảng/16 migration** sau14 cũ → **70 bảng/17 migration** sau FR06. Hai backup COPY_ONLY/CHECKSUM/HEADERONLY/VERIFYONLY PASS, packet/hash giữ nguyên; SQL readback của từng Apply PASS. FR06 hai cột nullable nvarchar(max) được kiểm tra trước receipt thành công. Original table/history/PK IDs và application rights giữ nguyên,5filtered indexes đạt, không role/import/Identity copy; không mismatch hoặc SQL conflict trong lần hoàn tất.
+- Receipt private run `approved-schema-20261103T015340Z-dcbdfc40`, đối chiếu linkage/SHA/BackupSetGUID trước/sau PASS. Restore thực tế NOT RUN. **FR06 DATABASE SCHEMA READY trên shared SQL**, không coi là runtime/IIS/UAT/Production PASS. LAN riêng vẫn chưa Apply migration email; FR10 BA acceptance giữ trạng thái riêng. Runtime role/config/import/IIS còn cần xử lý riêng; không chạy lại packet.
+
+## Shared schema execution — 03/11/2026 (lịch sử trước khi hoàn tất)
+
+- **Inspect SQL thật PASS** exact31bảng/2migration/đúngtarget/quyền/giao dịch theo immutable207packet. Backup/DDL **NOT RUN**: lỗi PowerShell connection-builder xảy ra trước Open, đã tái hiện và sửa canonical keyword indexer; kiểm tra setup offline PASS, chưa gọi đó là backup PASS.
+- Credential phiên cũ đã giải phóng; phiên mới PID5188 đang chờ Get-Credential, receipt folder `approved-schema-20261103T015340Z-dcbdfc40` ngoài Git. Hai packet/hash giữ nguyên, mục tiêu70/17 chưa đạt; không cập nhật LAN hoặc tạo runtime role/import.
+
+## Shared schema approval — 02/11/2026
+
+- Backup/nâng schema website_tin_tuc đã được chủ dự án duyệt, thay trạng thái hoãn backup. Hai packet/hash giữ nguyên và Plan offline PASS; credential DBA nhập qua Get-Credential, không dùng website_tin_tuc_app.
+- **WAITING_FOR_DBA / SQL NOT RUN**: phiên nhập credential PID48236 còn chạy; chưa có SQL receipt mới, backup hoặc DDL. 31bảng/2migration chỉ là checkpoint DBA cũ, chưa xác minh lại. Mục tiêu70/17 và FR06 database readiness chưa đạt; LAN/BA acceptance giữ trạng thái riêng. Runner phối hợp/backup helper chỉ kiểm tra offline, chưa được nghiệm thu thực thi server. Không runtime role/import/Production.
+
 ## Closure FR-06/FR-10 — 02/11/2026
 
 - TECHNICAL E2E PASS: final29/29 tập trung trên SQL mới LandPortal_ClosureTest_dc855ce55e54 (17 migration/70 bảng); HTTP Identity/CAPTCHA/Writer/Reviewer/Publisher thật, revision email/featured và public isolation. Hai harness trước dừng do fixture thiếu email và chọn sai revision compare, giữ riêng; không cộng kết quả. Ba database fixture giữ lại, không reset/drop. Không thay SQL Dev/Test/LAN/shared, không dùng credential BA. Web thử loopback đã dừng; ảnh fixture native Defender Clean đúng hash.

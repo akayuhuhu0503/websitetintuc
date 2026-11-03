@@ -1,4 +1,14 @@
-# Trạng thái bàn giao — 02/11/2026
+# Trạng thái bàn giao — cập nhật SQL 03/11/2026
+
+**Runtime security10:02VN:** owner-approved LandPortalRuntime **APPLIED/VERIFIED**, exact19GRANT/DENY; appmapping/directCONNECT/0DBrole được giữ, SQL70/17PASS. Private secret và receipts tại `C:\Users\ADMIN\LandPortal-Private\runtime-security-20261103T025642Z-d4d3bd33`, không chuyển vàoGit/webroot. `uat.json` tại đó giữ secret đúng đã dùngprovisioning; cần điền các allocationTTDL còn thiếu rồi chuyển riêng cho Web/5Worker cùng dùng. Không Applyrole/schema lại. Backup cũverify lạiPASS/0backup mới;0migration/import/bootstrap/SMTP/IISstart.
+
+**IISPreflight vẫn BLOCKED/NOTRUN:** appprobe strictTLS bị SQL-2146893019/certificatechain trước activation; không coi roleprovisionPASS là runtimeactivationPASS. Cần SQLcertificate/CA/CN-SAN,TTDLHTTPS/privatehome/4storage/serviceidentities+ACL/Defenderpolicy và targetconfigapproval. Hướng dẫn hiện hành đầu docs/shared-sql-iis.md; các mục awaitingsecurity/waitingDBA phía dưới là lịch sử. Web/Worker binary không thay đổi, không Publish lại.
+
+**Post-schema09:39:** DBA kiểm kê chỉ đọc lại PASS70/17/2cộtFR06; appmapping/SID PASS, directCONNECT/không role database bổ sung. LandPortalRuntime chưa có, **AWAITING_SECURITY_APPROVAL**; không tự tạo hoặc cấp quyền. TemplateTTDL đã điền SQLidentity khôngbí mật nhưng còn thiếu runtime secret/HTTPS/privatepaths/identities/scanner/certificate. Web+5Worker dùng cùngprivateJSON theo source; runtime/IISPreflight **BLOCKED/NOTRUN**. Lệnh cấp role sau duyệt và danh sáchinput tại [hướng dẫn SQL/IIS hiện hành](docs/shared-sql-iis.md). Không chạy lại schema/backup/Publish trong lượt này.
+
+**Shared SQL đã nâng schema thành công lúc08:56 ngày03/11/2026:** WIN-S1IBJB84OOO/website_tin_tuc,70 bảng/17 migration. Exact packet207 và FR06 đã Apply/readback, hai backup COPY_ONLY/CHECKSUM/HEADERONLY/VERIFYONLY PASS. Không chạy lại lệnh Apply trong hướng dẫn lịch sử bên dưới. Receipt private: `C:\Users\ADMIN\LandPortal-Private\approved-schema-20261103T015340Z-dcbdfc40`. Application rights và committed prefix/history IDs giữ nguyên; không runtime role hoặc import. Hai cột email FR06 đã có đúng kiểu/nullability trên shared SQL. LAN là database khác, vẫn chưa nâng migration FR06.
+
+Bước tiếp theo: DBA phê duyệt/cấu hình LandPortalRuntime và quyền runtime tối thiểu; TTDL cung cấp cấu hình thật/HTTPS/private storage/scanner để triển khai IIS; nhập dữ liệu theo gói/phê duyệt riêng. Backup đã VERIFYONLY, **chưa restore thử**. Không xem schema PASS là Production ready.
 
 Source closure: [`d99584a0ae6b1c95362942c56a88c750bb315de0`](https://github.com/akayuhuhu0503/websitetintuc/commit/d99584a0ae6b1c95362942c56a88c750bb315de0), nhánh `main`. Commit tiếp theo chỉ ghi SHA này vào tài liệu; mã ứng dụng/publish không đổi. Dùng `git rev-parse HEAD` và kết quả push để đối chiếu HEAD cuối. Không tuyên bố PRODUCTION READY.
 
@@ -8,25 +18,38 @@ Publish cuối 02/11/2026: **PASS**, Release Web/Worker/MigrationCli/UatDataHand
 
 - CMS revision/draft/autosave/duyệt-trả bài/xuất bản/gỡ-khôi phục/hẹn giờ, quyền theo vai trò/chuyên mục, mật khẩu BA 8 ký tự đủ 4 nhóm/đổi lần đầu, CAPTCHA/lockout/idle; không MFA. Giữ các PASS LOCAL đã ghi nhận, không chạy lại toàn suite.
 - Tin/chuyên mục/tìm kiếm tiếng Việt, văn bản/dự thảo, công khai thông tin, lịch tuần có phiên bản, Word/PDF/Excel, thống kê 34 tỉnh, video nội bộ, tương tác có kiểm duyệt/phân công/ACL/outbox, menu/footer, tin liên quan/xem nhiều có source. Dữ liệu và cấu hình thực chưa đầy đủ không được thay bằng dữ liệu giả.
-- FR-06 email nhận góp ý: CODE COMPLETE offline, nullable theo revision, validate khi có nhập, preview/history/public đúng revision. **DEPLOYMENT BLOCKED** vì migration chưa Apply. TECHNICAL HTTP/SQL PASS trên database cô lập, vẫn không coi là PASS LAN.
+- FR-06 email nhận góp ý: CODE COMPLETE, nullable theo revision, validate khi có nhập, preview/history/public đúng revision. **Shared SQL schema APPLIED/VERIFIED03/11**; còn cấu hình runtime/IIS. TECHNICAL HTTP/SQL PASS trên database cô lập, vẫn không coi là PASS LAN; LAN chưa nâng migration email.
 - FR-10 featured fingerprint đã triển khai trên LAN; kiểm tra offline PASS. TECHNICAL HTTP/SQL E2E bật/tắt→gửi→trả→duyệt và bản công khai giữ nguyên **PASS trên database cô lập**; nghiệm thu LAN **CHỜ BA** dùng credential hiện hành; credential cũ Writer/Reviewer MISMATCH, không reset. Kịch bản tại đầu `docs/PROJECT_STATE.md`.
 - Giao diện dùng layout/CSS/partials chung cho public và admin; không social URL/chứng nhận NCSC giả. Rà soát source và HTTP không thay nghiệm thu giao diện đầy đủ của BA.
 - Delta cuối: sửa UUID khi khôi phục lịch sử trên HTTP LAN; launcher nhận biết đúng process đang chạy ngay khi CIM thiếu State, không mở trùng/ghi đè process record.
 
-## SQL — DBA, chưa được phép thực thi tự động
+## SQL — quy trình lịch sử đã thực hiện, không replay
 
-Source có **17 migration**. Shared SQL checkpoint do DBA cung cấp: `WIN-S1IBJB84OOO/website_tin_tuc`, 31 bảng/2 migration; chưa truy vấn lại trong lượt bàn giao.
+Source có **17 migration**. Checkpoint31 bảng/2 migration đã được Inspect lại và nâng thành70 bảng/17 migration trên `WIN-S1IBJB84OOO/website_tin_tuc` ngày03/11. Những lệnh sau giữ làm tài liệu quy trình đã sử dụng, không phải yêu cầu chạy lại.
 
 1. Khi backup được phép, dùng packet riêng `shared-sql-207-resume` SHA `664de13e864e69a989e56d17e2a927b7477ca5c038030dbe19bfc62451a6e1d7`. Fresh Inspect/prefix/history/transaction/backup phải PASS. Packet chỉ tiếp tục **14 migration cũ**, từ sau `20261012083717_CmsRevisionWorkflow` đến `20261027025057_AuditRecoveryLookup`; không mở rộng packet sang FR-06.
 2. Lệnh Inspect của packet (DBA chạy khi được phép, credential được hỏi an toàn):
    ```powershell
-   powershell -NoProfile -File scripts/recover-shared-sql-207.ps1 -PacketDirectory <PACKET> -Mode Inspect -ManifestSha256 664de13e864e69a989e56d17e2a927b7477ca5c038030dbe19bfc62451a6e1d7 -TemporaryCertificateTrust -ReportFile <NEW_PRIVATE_JSONL>
+   powershell -NoProfile -File <PACKET>/recover-207.ps1 -PacketDirectory <PACKET> -Mode Inspect -ManifestSha256 664de13e864e69a989e56d17e2a927b7477ca5c038030dbe19bfc62451a6e1d7 -TemporaryCertificateTrust -ReportFile <NEW_PRIVATE_JSONL>
    ```
    Chỉ sau phê duyệt scope và backup hợp lệ: cùng lệnh đổi `-Mode Apply`, thêm `-ConfirmTarget WIN-S1IBJB84OOO/website_tin_tuc -BackupFile <VERIFIED_SERVER_BAK>`. Không chạy thẳng schema.sqlcmd, không DROP/RESTORE/history cleanup.
 3. Sau đối soát 70 bảng/16 migration, chuẩn bị packet delta riêng `20261102042625_DraftConsultationEmail` (hai cột nullable, vẫn 70 bảng/17 migration). Cần fresh state, backup hợp lệ, exact approval mới; packet cũ không bao phủ. Có thể sinh SQL **offline** từ tools/MigrationCli `schema-script --from-migration 20261027025057_AuditRecoveryLookup --to-migration 20261102042625_DraftConsultationEmail --output <SOURCE>/.local/publish/<NEW>/fr06.sql`; đây không phải lệnh Apply.
 4. Runtime role `LandPortalRuntime` và mapping login ứng dụng là bước DBA riêng theo `docs/shared-sql-iis.md`; không dùng `sa`, không cấp db_owner cho Web/Worker. Ngoại lệ TLS đã duyệt cho công cụ shared SQL không tự nới mặc định TLS của UAT.
 
-Backup mới đang tạm hoãn; giữ guard, không chạy DDL. LAN giữ binary tương thích trước migration email, hết hạn 09/11/2026 10:55:08 VN, SMTP Disabled. Không copy Identity/dữ liệu LAN sang server.
+Ngày 02/11 chủ dự án đã thay thế quyết định hoãn backup: cho phép backup và nâng schema **chỉ website_tin_tuc** theo đúng hai packet/hash nêu trên, có DBA hợp lệ và đủ guard. Không mở rộng sang LAN, runtime role, import hoặc triển khai. LAN giữ binary tương thích trước migration email, hết hạn 09/11/2026 10:55:08 VN, SMTP Disabled. Không copy Identity/dữ liệu LAN sang server.
+
+### Thực thi phạm vi đã duyệt bằng DBA
+
+`scripts/run-approved-shared-schema.ps1` mặc định chỉ Plan offline. Lệnh dưới đây hỏi credential qua `Get-Credential`, giữ trong bộ nhớ, không lưu mật khẩu. Chỉ dùng tài khoản DBA được đơn vị quản lý cho phép; không dùng login ứng dụng. Dùng Windows PowerShell 5.1 trong phiên tương tác trên máy đã có hai packet nguyên hash:
+
+```powershell
+$receipt = Join-Path $env:USERPROFILE ('LandPortal-Private/schema-approved-' + [guid]::NewGuid().ToString('N'))
+powershell -NoProfile -File scripts/run-approved-shared-schema.ps1 -ExecuteApprovedUpgrade -ReportDirectory $receipt
+```
+
+Trình điều phối gọi **runner trong từng packet**, không dùng source runner mới thay bản khóa hash cũ. Thứ tự bắt buộc: Inspect prefix2 → backup1/HEADERONLY/VERIFYONLY → Apply14/readback70/16 → InspectFR06 → backup2/HEADERONLY/VERIFYONLY → ApplyFR06/readback70/17. Backup helper chỉ chấp nhận hai hash đã duyệt, Inspect mới trong12giờ, đúng database/transaction/đường dẫn server, còn dung lượng; backup sau Inspect, không ghi đè, không tự retry. Tên file backup đầu giữ prefix ngày cũ để tương thích allowlist nhưng GUID là mới; ngày thực tế đối chiếu từ SQL header, không suy ra từ tên file.
+
+Nếu state đã thay đổi/DDL lỗi: dừng, giữ receipt, không chạy lại lệnh Both. Chỉ sau DBA xác minh đã70/16 và cần bước FR06 thì chạy cùng lệnh với `-StartAt Fr06`; guard vẫn bắt buộc exact16. Nếu đã70/17 thì chỉ readback bằng DBA, không chạy Apply nữa. Các receipt nằm ngoài Git, ACL current operator+SYSTEM. Thiếu credential hoặc không thấy hộp thoại thì BLOCKED, chưa được coi backup/schema thành công.
 
 ## Bàn giao ngoài Git và điều kiện đưa vào vận hành
 
