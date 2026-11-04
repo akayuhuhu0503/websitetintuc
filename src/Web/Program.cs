@@ -129,6 +129,7 @@ builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<EditorialDocumentService>();
 builder.Services.AddSingleton(MediaUploadOptions.FromConfiguration(builder.Configuration, builder.Environment.EnvironmentName));
 builder.Services.AddScoped<PublicContentQuery>();
+builder.Services.AddScoped<IGiayHuyLookup, GiayHuyLookup>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SiteConfigurationService>();
 builder.Services.AddScoped<PublicSiteService>();

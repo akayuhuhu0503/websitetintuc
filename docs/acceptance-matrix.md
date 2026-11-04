@@ -1,3 +1,9 @@
+## FR-17: GCN tra cứu SQL nguồn — 04/11/2026
+
+- **PASS kỹ thuật fixture, chưa nghiệm thu SQL thật:** literal route GCN + detail,2dropdown Năm/DVHC (đổiNăm cậpnhậtDVHC), keywordkhôngdấu,7cột/paging10/tổng/backstate, mobile390px cuộnbảngkhôngtràntrang; rate30/IP/phút/timeout/connectionbounded.
+- **PASS offline fail-closed:** publication expiry/ID/hash/contentfield riêng,0public khi thiếu duyệt, sourcechanged bịloại; cấm sa/website_app/wrongDB/TLSbypass; confirmed/effective/giátrịchốt rỗng đúng sourcecode, không PII/PDF/SELECT*/NOLOCK. SQL thực tế chưa kiểm chứng metadata/plan.
+- **BLOCKED dữ liệu thật:** SELECT riêng chưa có, chưa duyệt công bố (0approved), strictTLS endpoint NameMismatch/UntrustedRoot. DBA metadata/count chưađọcđược; không coi hồ sơ đã chốt là công khai. Source/LAN/schema/quyền không ghi; LAN cũ giữkhỏe, module mới ởloopback5192 doFR06LANschema15 chưaupgrade. Không thay nghiệmthuUAT/Production; guide `giay-huy-sql-lookup.md`.
+
 ## Đóng gói IIS một .env — 03/11/2026
 
 - **PASS LOCAL:** Publish bằng private env tối giản đã điền sẵn, không SQL/hostname/scanner authority; 1 build/publish Web+5-mode Worker+Tools+Ops, 398 file SHA đúng/0 secret leak. Ops EKU correction được ghi riêng và rehash; 0 rebuild DLL. Hai secret cũ MATCH/ACL private PASS/.env Dev không đổi/SMTP Disabled. START_HERE rút gọn.

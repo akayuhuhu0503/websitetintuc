@@ -1,3 +1,10 @@
+## Tra cứu GCN trực tiếp SQL — 04/11/2026
+
+- Code/controller/query/view riêng tại `/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy`: Năm/DVHC, tìm kiếm không dấu, bảng7cột, paging10, chi tiết/back giữ bộ lọc. Lấy đúng confirmed/effective/nondeleted/document-not-removed + giá trị chốt kể cả rỗng. Không API nguồn/copyDB/migration; hai nhóm công khai khác không đổi.
+- Default-deny public: thiếu approval/TTL/allowlist thì0hồ sơ thật; ID+hash projection/field content duyệt riêng, drift bị chặn, không PII/PDF nguồn. Kết nối SELECT riêng/cột tối thiểu, đúngphysical/DB/login/TLS và cấm quyền ghi/admin. Xem `docs/giay-huy-sql-lookup.md`.
+- Build/focused kỹ thuật + browser fixture riêng5192; không dùng fixture nghiệm thu SQL thật. DBA khảo sát read-only chưa vào được SQL: PS5adapter đã sửa, lần2 bị chặnOPEN_CONNECTION; probePRELOGIN/TLS xác nhận NameMismatch+UntrustedRoot/0LOGIN7/0SQL/bypassfalse. Official source count UNKNOWN; public-approved0; SELECTlogin MISSING, chưa tạo/GRANT. Không tự mở ngoại lệTLSsource từ quyềnUATwebsite.
+- LAN5188 healthy/currentbuild giữ nguyên (schema15/FR06chưaApply); không thayDLL mới có mapping17. Bản tra cứu mới kiểm tra loopback5192, **chưa PASS LAN/sourceSQL thật**. Không thay dữ liệu/tài khoản/quyền/config/SMTP/sourcewebsite; không backup/migration/import/fullsuite. CHƯA PRODUCTION READY.
+
 ## Publish IIS tối giản — 03/11/2026
 
 - **PUBLISH PASS, chưa Deploy:** một lần build/publish thật Web/Worker/Tools/Ops bằng `scripts/build-for-iis.ps1 -EnvFile <private-ready> -Replace`, không kết nối SQL; 398 file manifest kiểm tra lại, 0 hash mismatch/secret leak. Một sửa EKU string ở Ops sau build được đồng bộ riêng, có old/new SHA trong manifest, không build lại DLL. Manifest hiện tại `4621ca07811d783675cfa3ec32802506c5287148be50df77234697b27a98387c`. RTK stderr redirection trả outer exit1 cả với control explicit exit0; log PUBLISH PASS và artifact được đối soát riêng, không coi outer status là native build failure.
