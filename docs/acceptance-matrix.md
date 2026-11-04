@@ -1,3 +1,10 @@
+## FR-17 GCN — phê duyệt View/tám cột, 04/11/2026
+
+- **CODE COMPLETE / LIVE INTEGRATION BLOCKED:** owner cho phép allconfirmed/effective/future8fields, View-only SQLlogin/TLSexceptionLAN-UAT; IDallowlist cũsuperseded. SQL20/page/filter/search, default2026/HN,8cols/ownerjoin/expand, noDetail/PDF; mapping34verified/unknownseparate. Không C#datasetpaging/copyDB.
+- **PASS focused offline:**7/7policy/parameter/catalog/DTO/SQLassembly; EFlegacy15mappingPASS và2build PASS;4PSparse+optional.envfieldsPASS. Candidate5194home/login/tintuc/health200/defaults; chưa dùng proof này thaySQL thực tế/table populated/search/paging/plan.
+- **SOURCE DBA SURVEY PASS / DDL NOT APPLIED:**6948eligible/4table schema+uniqueindex đúngWIN/sourceDB. Precheck13601 fingerprintalias collision đãfix trướcDDL. NewDBAcredential UI PID37904 pending; View/login, SELECT-onlydenials, realpaging/timing/actualplan **BLOCKED/NOT RUN**, không còn thiếuownerapproval. Không áp dụng lại scan/batch/migration nào.
+- **LAN PRESERVATION PASS:**288/290/703/570, account+role+permission digests0diff, schema15/noemail,SMTPDisabled. 5188 giữoldbuildhealthy; compatible15code/candidate sẵn sàng, chuyểnmainchỉ sauSourcegatesPASS. No backup/import/sharedWebsiteDB/sourceRepoIIS write/UAT-Production acceptance.
+
 ## FR-17: GCN tra cứu SQL nguồn — 04/11/2026
 
 - **PASS kỹ thuật fixture, chưa nghiệm thu SQL thật:** literal route GCN + detail,2dropdown Năm/DVHC (đổiNăm cậpnhậtDVHC), keywordkhôngdấu,7cột/paging10/tổng/backstate, mobile390px cuộnbảngkhôngtràntrang; rate30/IP/phút/timeout/connectionbounded.

@@ -1,69 +1,66 @@
-# Tra cứu giấy chứng nhận sai hỏng, hủy
+# Tra cứu Giấy chứng nhận hủy: SQL View riêng
 
-URL: `/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy`; chi tiết thêm `/{id:guid}`.
-Chỉ thay đổi repository website. Không API mới ở nguồn, không EF migration/import, không sao chép database.
+Yêu cầu chủ dự án ngày 04/11/2026, attachment `ffd9e929-bbee-49e5-8d86-297e4ec9eefe`, thay thế thiết kế allowlist/hash từng ID tại commit279d9c1. Phạm vi được xác nhận: mọi hồ sơ chính thức đã xác nhận/còn hiệu lực hiện tại và phát sinh sau này, chỉ tám trường hiển thị đã thống nhất. Đây là phê duyệt của chủ dự án, không tạo số văn bản pháp lý giả; thủ tục xác nhận dữ liệu/ATTT khi công khai chính thức do đơn vị vận hành thực hiện nếu được yêu cầu.
 
-## Kết nối và quyền
+## SQL và quyền
 
-Giữ nguyên `ConnectionStrings:Portal`/`Runtime:RolePassword`. Bổ sung **riêng** vào private JSON ngoài webroot, không commit giá trị thật:
+- Endpoint `45.120.229.43,1433`, physical `WIN-S1IBJB84OOO`, database nguồn duy nhất `QuanLyDuAnTrungTamDuLieuDatDai`.
+- View duy nhất `dbo.vw_GiayChungNhanHuyCongKhai`; login/user `landportal_giayhuy_reader`, chỉ GRANT SELECT View. Không quyền bảng, role SQL quản trị, DML, DDL, EXECUTE, IMPERSONATE hoặc mapping database khác. `website_tin_tuc_app` và role website giữ nguyên.
+- View lấy đúng bản DA_XAC_NHAN/hieuLuc/isDel và tài liệu không LOAI_BO theo `/KetQuaCuoiCung`; giá trị chốt ưu tiên kể cả chốt rỗng. Unique index nguồn `UX_GCNH_GTChot_Field` được kiểm tra trước DDL. Không gộp hồ sơ cùng số quyết định; không xuất CCCD/địa chỉ/OCR/audit/PDF.
+- Phép chuẩn hóa tỉnh được sinh từ catalog34 trong `GiayHuyProvince`; chỉ tên/alias chính xác, không sửa giá trị gốc. Căn cứ [Nghị quyết202/2025/QH15](https://baochinhphu.vn/nghi-quyet-cua-quoc-hoi-ve-sap-xep-don-vi-hanh-chinh-cap-tinh-102250612191145158.htm), [Nghị quyết175/2024/QH15 về Huế](https://vanban.chinhphu.vn/?classid=0&docid=211916&pageid=27160). Giá trị không ánh xạ chắc chắn vào `chua-xac-dinh`; không suy luận tên huyện/xã thành tỉnh.
 
-```json
-{
-  "ConnectionStrings": {
-    "GiayHuyReadOnly": "Server=45.120.229.43,1433;Database=QuanLyDuAnTrungTamDuLieuDatDai;User ID=<SELECT_ONLY_LOGIN>;Password=<PRIVATE>;Encrypt=True;TrustServerCertificate=False"
-  },
-  "GiayHuy": {
-    "ExpectedLogin": "<SELECT_ONLY_LOGIN>",
-    "Publication": { "ApprovalReference": "", "ExpiresUtc": "", "Records": [] }
-  }
-}
-```
-
-Đây là phần cần **merge**, không ghi đè private JSON hiện có. PortalConfiguration đọc cấu hình ngoài qua `LANDPORTAL_CONFIG` theo cơ chế triển khai hiện hành. Web và worker không dùng `sa`/tài khoản website để đọc nguồn; tính năng này chỉ đăng ký ở Web.
-
-Chưa có login SELECT riêng được xác nhận. DBA phải duyệt riêng việc provision login/user; developer chưa tạo/cấp quyền. Không cấp role quản trị, quyền ghi, EXECUTE hoặc SELECT toàn database. Danh sách cột tối thiểu để DBA lập script quyền sau phê duyệt:
-
-| Bảng dbo | Cột SELECT |
-|---|---|
-| GiayChungNhanHuy | giayChungNhanHuyID, namPhatHanh, donViHanhChinh, soQuyetDinh, soHieuGiayChungNhan, noiDungQuyetDinh, nguonDuLieuDoiSoatID, hieuLuc, isDel |
-| GiayChungNhanHuyGiaTriChot | giaTriChotID, giayChungNhanHuyID, fieldKey, giaTri, hieuLuc, isDel |
-| GiayChungNhanHuyDuLieuDoiSoat | duLieuDoiSoatID, giayChungNhanHuyID, taiLieuID, trangThaiXacNhan, thoiGianXacNhan, hieuLuc, isDel |
-| GiayChungNhanHuyTaiLieu | taiLieuID, trangThaiDoiSoat, hieuLuc, isDel |
-
-Mẫu cú pháp để DBA xem xét: `GRANT SELECT (cột_đã_duyệt) ON OBJECT::dbo.bảng_đã_duyệt TO [user_đã_provision];`. Không tự chạy mẫu này. Quyền cột trên `giaTri` không giới hạn từng fieldKey; nếu chính sách nguồn yêu cầu ngăn cả tài khoản đọc các trường khác trong bảng giá trị chốt, cần DBA duyệt một view/projection riêng trước khi bật. Website không tự tạo view hoặc sửa nguồn.
-
-Runtime kiểm tra physical server `WIN-S1IBJB84OOO`, đúng source database/login, cấm sa/site-app, sysadmin/db_owner/db_ddladmin/db_datawriter, quyền ghi/CONTROL/ALTER và SELECT toàn database; kiểm tra SELECT từng cột cần dùng. Kết nối timeout 4s, lệnh 4/6s, tổng ngân sách 12s, tối đa 2 kết nối, không retry. Endpoint giới hạn 30 request/phút/IP theo policy hiện có. SQL chỉ dùng tham số `@login`, `@approved`; không đưa keyword vào SQL động.
-
-## Quyết định công bố độc lập
-
-Chưa có phê duyệt công bố ⇒ 0 hồ sơ thật cho khách, kể cả đã cấu hình SQL. Danh sách cho phép private cần người có thẩm quyền phê duyệt rõ từng ID và các trường được công bố, có tham chiếu văn bản và hạn hiệu lực. Không dùng trạng thái DA_XAC_NHAN làm phê duyệt công khai.
-
-Mỗi entry `Records` gồm `Id`, `Sha256`, `IncludeDecisionContent` (mặc định false). Hash là SHA-256 UTF-8 của `JsonSerializer.Serialize(GiayHuyPublicRow)` theo thứ tự Id/Year/Province/DecisionNumber/CertificateSerial/DecisionContent; giá trị Year/Province đã Trim nhưng **trước** chuẩn hóa tên tỉnh, các trường còn lại giữ nguyên. Dùng `GiayHuyLookup.PublicationHash` khi lập hồ sơ trình duyệt private. Hash phải được duyệt cùng projection, không tự sinh approval từ dữ liệu vừa đọc. Nội dung quyết định có thể chứa PII nên chỉ bật riêng sau review trường này. Không có PDF/download nguồn.
-
-Hash không khớp sau thay đổi nguồn ⇒ loại hồ sơ khỏi mọi kết quả/chi tiết/bộ lọc cho đến khi duyệt lại. ID không công khai và ID không tồn tại cùng trả 404. Không ghi SQL exception message, credential, hash dữ liệu thật hoặc nội dung hồ sơ vào log.
-
-## Quy tắc truy vấn
-
-Đã đối chiếu local checkout đúng remote `akayuhuhu0503/doisoatgiayhuy`: GiayChungNhanHuyRepository, TruongConThieu, KetQuaCuoiCung, ChiTiet và service phân nhóm. Chỉ đọc g còn hiệu lực/chưa xóa; lấy đúng bản d DA_XAC_NHAN còn hiệu lực/chưa xóa và liên kết nguồn, tài liệu t còn hiệu lực/chưa xóa/không LOAI_BO. Có giá trị chốt thì dùng giá trị chốt **kể cả rỗng**, không fallback dữ liệu cũ.
-
-Năm dùng `NamPhatHanh` hiệu lực; không suy đoán lại từ ngày khi cán bộ đã chốt rỗng. Năm lọc được chỉ gồm giá trị nguyên thực tế; bản năm chưa xác định còn xem được ở Tất cả. Nguồn nội bộ có bộ lọc riêng theo YEAR(ngày quyết định); website không trộn hai khái niệm. DVHC dùng tên/alias chính xác của service nguồn, bổ sung tiền tố Tỉnh/Thành phố để trình bày, không nhập các tỉnh lịch sử sau sáp nhập. Giá trị lạ vào Chưa xác định. Khi đổi Năm thì cập nhật DVHC và về trang 1.
-
-Đọc tối đa 1000 ID được duyệt, TOP 1001 để phát hiện sai lệch/duplicate lớp chốt; không tải cả bảng nguồn. Giới hạn kích thước projection: năm10, tỉnh200, số quyết định/GCN500, nội dung16000 ký tự UTF-16; vượt giới hạn thì loại, không cắt sửa dữ liệu. Lọc/tìm kiếm/chuẩn hóa và chia trang 10 dòng chạy phía server trên tập public giới hạn này, không phân trang trong browser. Chưa benchmark SQL nguồn; nếu phạm vi duyệt lớn hơn 1000, giữ chặn và thiết kế paging/index theo plan thực trước khi mở rộng, không tự tăng giới hạn.
-
-## Khảo sát và kiểm tra
-
-`scripts/inspect-giay-huy-source.ps1 -OutputPath <tệp-private-mới.json>` nhập DBA bằng Get-Credential, chỉ đọc đích/metadata/count, không lưu credential. Hoặc DBA chạy `scripts/inspect-giay-huy-source.sql` trong SSMS đúng database. Không tạo login/GRANT hoặc thao tác ghi trong hai script này.
-
-Ngày 04/11: phiên đầu dừng ở PS5 dictionary-property adapter trước kết nối; đã sửa sang canonical SQL keywords và tái hiện offline. Phiên thứ hai bị chặn khi mở kết nối TLS. Probe PRELOGIN/TLS không credential xác nhận `RemoteCertificateNameMismatch`, `UntrustedRoot`; không LOGIN7/SQL, không bypass. Ngoại lệ TLS website UAT cũ **không** tự áp dụng cho source. Cần cấu hình trust/name hợp lệ hoặc quyết định riêng cho kết nối nguồn; chưa có số lượng chính thức được kiểm chứng qua SQL.
-
-Build/check kỹ thuật (không SQL):
+Sinh View offline từ source đã build:
 
 ```powershell
-rtk proxy .local\dotnet\dotnet.exe build tools\GiayHuyLookupCheck\GiayHuyLookupCheck.csproj -c Release --artifacts-path .local\build\giay-huy-20261104 -p:IisHandoffPublish=true -p:DebugType=None -p:DebugSymbols=false
-rtk proxy .local\dotnet\dotnet.exe .local\build\giay-huy-20261104\bin\GiayHuyLookupCheck\release\GiayHuyLookupCheck.dll --check
-rtk proxy .local\dotnet\dotnet.exe .local\build\giay-huy-20261104\bin\GiayHuyLookupCheck\release\GiayHuyLookupCheck.dll
+rtk proxy .local\dotnet\dotnet.exe tools-build-path\GiayHuyLookupCheck.dll --write-view C:\PrivateOps\giayhuy-view.sql
+Get-FileHash C:\PrivateOps\giayhuy-view.sql -Algorithm SHA256
 ```
 
-Lệnh cuối mở **loopback** `http://127.0.0.1:5192/`, ghi nhãn fixture, không truy cập database/Identity/SMTP và không phải link LAN dùng chung. Stop bằng Ctrl+C ở terminal đã khởi động. 13/13 focused checks; browser kiểm tra bảng/bộ lọc/chi tiết/404/400/trạng thái lỗi/rỗng, desktop và viewport mobile390px; không chụp ảnh/full regression.
+Không chạy SQL sinh ra riêng trong database bất kỳ. DBA dùng wrapper có guard:
 
-LAN 5188 giữ binary schema15 hiện có và dữ liệu/tài khoản. Full source Web mới có mapping FR06 schema17, nên chưa thay DLL LAN hoặc áp migration chỉ để đưa tra cứu lên LAN. Bản tra cứu mới kiểm tra trên 5192; chưa tuyên bố PASS tích hợp SQL thật/PASS LAN cho chức năng này.
+```powershell
+rtk proxy powershell.exe -NoProfile -File scripts\invoke-giay-huy-provision.ps1 -ViewPath C:\PrivateOps\giayhuy-view.sql -ViewSha256 <SHA256_DA_KIEM_TRA> -PrivateRoot C:\PrivateOps\new-empty-private-run -ApprovedLanUatSourceTls
+```
+
+PrivateRoot phải tồn tại, rỗng, ngoài repository/webroot, inheritance disabled, chỉ operator (và SYSTEM nếu cần). Credential DBA nhập qua Get-Credential, chỉ giữ trong bộ nhớ. Tool xác minh physical/source/authority/no transaction, không có đối tượng trùng, fingerprint cấu trúc, compile projection trước DDL; chỉ tạo View/login/user/grant trong transaction. Secret SQL ngẫu nhiên riêng52ký tự lưu `source-runtime.private.json`, không DBA password. Không backup/migration/import.
+
+Sau commit: đọc View/count/duplicate, kiểm tra quyền và bốn SELECT TOP(0) bảng gốc bị từ chối, không quyền DML qua metadata (không thực thi DML), không access/mapping user database khác, fingerprint bảng nguồn không đổi. Actual execution plan lưu private. `provision-receipt.json` là kết quả kỹ thuật, không thay phê duyệt nghiệp vụ. Nếu lỗi sau COMMITTED_VERIFY, reconcile; **không chạy lại CREATE/không reset login**. Existing View/login/user luôn chặn tool tạo mới.
+
+## Private config LAN/UAT
+
+Merge đúng hai section của `source-runtime.private.json` vào private JSON Web; giữ nguyên `ConnectionStrings:Portal`, role secret, storage, Identity, SMTP và các cấu hình khác. Không ghi đè toàn file bằng mảnh cấu hình nguồn.
+Chỉ merge/probe khi receipt đã ghi `VIEW_LOGIN_VERIFIED`; sự tồn tại của file private chưa chứng minh login đã commit hoặc đã kiểm chứng. Không tái sử dụng secret pending của một lần rollback.
+
+```ini
+ConnectionStrings__GiayHuyReadOnly=Server=45.120.229.43,1433;Database=QuanLyDuAnTrungTamDuLieuDatDai;User ID=landportal_giayhuy_reader;Password=<PRIVATE>;Encrypt=True;TrustServerCertificate=True
+GiayHuy__PublicationScope=OfficialConfirmedEightFields-OwnerApproved-20261104
+GiayHuy__LanUatTlsException=OwnerApproved-20261104
+```
+
+Một .env/một lệnh Publish hiện có nhận các field tùy chọn này qua template `uat-config.example.json`; không cần kết nối SQL khi build. Scanner output Publish kiểm tra cả secret kết nối nguồn. Không đưa private config vào Git hoặc webroot.
+
+Ngoại lệ TLS chỉ hợp lệ trên LAN_DEMO/Development đúng databaseLAN, hoặc UAT/Staging theo profile đã khai báo; Production từ chối TrustServerCertificate=True. Runtime luôn xác minh physical/source/login và quyền View-only; không application-role website trên nguồn. Giới hạn2connection, connect4s, lệnh10s, tổngbudget15s, no retry; rate30/IP/phút.
+
+## UI và paging
+
+URL `/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy`. Mặc định2026/ha-noi; giữ mặc định khi rỗng. Năm lấy nguồn đã chốt, không suy từ ngày. Đổi dropdown không gửi request; nút Tìm kiếm gửi form và về trang1. `applied=1` giữ tùy chọn Tất cả qua link phân trang.
+
+Đúng8cột: STT, Ngày phát hành, Số quyết định, Quyết định, Số hiệu giấy chứng nhận, Số vào sổ, Tên chủ sử dụng, Năm. Hai tên nối bằng `; `, rỗng là `—`. Nội dung encode, clamp3dòng/Xem thêm/Thu gọn tại ô. Không Chi tiết/PDF.
+
+Lọc/tìm kiếm/paging nằm trong SQL View query, OFFSET/FETCH đúng20; COUNT_BIG OVER và ORDER BY IssueDate DESC/RecordId, NULLdate cuối. Keyword parameter200ký tự, escape LIKE, Latin1_General_100_CI_AI. Không C# Skip/Take tải toàn bảng, không N+1/NOLOCK/index mới. Trang vượt cuối dùng count có giới hạn và chuyển về trang hợp lệ. Kết quả mỗi trang có total từ cùng statement; dữ liệu nguồn có thể thay đổi giữa các request, không hứa snapshot bất biến. Năm/dropdown là truy vấn độc lập.
+
+## LAN schema15
+
+Build chuẩn vẫn có đầy đủ FR06/schema17. Tùy chọn build riêng `-p:LandPortalLanSchema15=true` chỉ dành cho LandPortal_LanDemo/local Windows auth/Development; mọi runtime khác từ chối. Bản này không map ConsultationEmail, không hiện ô email và từ chối payload email khác rỗng; không giả vờ FR06 hoạt động trên schema cũ. Web startup bắt buộc history15, không tự migration.
+
+```powershell
+rtk proxy .local\dotnet\dotnet.exe build tools\GiayHuyLookupCheck\GiayHuyLookupCheck.csproj -c Release --artifacts-path .local\build\giay-huy-lan15 -p:LandPortalLanSchema15=true -p:IisHandoffPublish=true -p:DebugType=None -p:DebugSymbols=false
+rtk proxy .local\dotnet\dotnet.exe .local\build\giay-huy-lan15\bin\GiayHuyLookupCheck\release\GiayHuyLookupCheck.dll --check
+rtk proxy .local\dotnet\dotnet.exe .local\build\giay-huy-lan15\bin\GiayHuyLookupCheck\release\GiayHuyLookupCheck.dll --check-lan-model
+$env:DOTNET_ENVIRONMENT='Development' # explicit local LAN diagnostic context; Staging for UAT
+rtk proxy .local\dotnet\dotnet.exe .local\build\giay-huy-lan15\bin\GiayHuyLookupCheck\release\GiayHuyLookupCheck.dll --probe-private <source-runtime.private.json>
+```
+
+Probe chỉ in counts/timing/booleans, không record/PII/password. Kiểm tra cổng riêng trước khi chuyển pointerLAN5188; giữ nguyên config website/data/accounts/keys, SMTPDisabled; dừng đúng process bằng launcher hiện có, giữ đường dẫn binary/config cũ để rollback. Không reset/import/reseed/schema upgrade.
+
+Checkpoint: khảo sát DBA đúng nguồn có6948hồ sơ đủ điều kiện, View/login/user chưa tồn tại lúc khảo sát. Lần precheck đầu dừng trước DDL do alias fingerprint JSON trùng; đã sửa, không coi là đã tạo View. Trạng thái triển khai thực tế lấy từ private receipt và PROJECT_STATE mới nhất, không suy từ build hoặc fixture cũ. Chỉ kiểm tra tập trung; chưa phải nghiệm thu UAT/Production.

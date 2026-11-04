@@ -17,7 +17,12 @@
     "CompatibilityLevel": "160"
   },
   "ConnectionStrings": {
-    "Portal": "Server=REPLACE_WITH_APPROVED_SQL_INSTANCE;Database=REPLACE_WITH_ALLOCATED_UAT_DATABASE;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"
+    "Portal": "Server=REPLACE_WITH_APPROVED_SQL_INSTANCE;Database=REPLACE_WITH_ALLOCATED_UAT_DATABASE;Integrated Security=true;Encrypt=true;TrustServerCertificate=false",
+    "GiayHuyReadOnly": ""
+  },
+  "GiayHuy": {
+    "PublicationScope": "",
+    "LanUatTlsException": ""
   },
   "Public": {
     "BaseUrl": "https://REPLACE_WITH_UAT_HTTPS_HOST"

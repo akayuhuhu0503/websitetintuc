@@ -1,3 +1,11 @@
+## GCN: View chuyên dụng và tám cột — 04/11/2026
+
+- Chủ dự án đã duyệt SourceView/login SELECT riêng, TLS exception riêngLAN/UAT và công bố mọi hồ sơ confirmed/effective hiện tại+tương lai theo8trường; **supersedes ID/hash allowlist cũ**. Code đổi sang View-only, SQLfilter/OFFSET-FETCH20/COUNT_BIGOVER/date-desc+ID, default2026/ha-noi, submit-only,8cột/tên1;tên2/expand tạiô; bỏDetail/PDF. Mapping34 có nguồnNQ202/2025 vàNQ175/2024; unknown riêng.
+- **DBA đọc nguồn PASS:** WIN-S1IBJB84OOO/QuanLyDuAnTrungTamDuLieuDatDai,6948eligible tại khảo sát;4bảng/cột/index verified, View/login/user dự kiến chưa tồn tại. Thửprecheck provisioning đầu lỗi13601 do fingerprintFORJSON trùng tên; lỗi trướcDDL/secret generation,0Create/0businessDML. Đã sửaalias và thêmcompile-projectionguard. PhiênnhậpDBA mới PID37904 chưa trả inspection/credential tại checkpoint; **VIEW/LOGIN NOT APPLIED**, không coi thiếuapproval làblocker.
+- Code source provision tạo mới đúngView/login/user/1SELECT trongtransaction, collisionstop/không reset; kiểmquyền/4SELECTTOP0bịdeny/no-other-db/actualplan saucommit, secretprivateACL. Nhữngproof sauDDL và livequery **NOTRUN** đến khi phiênDBA mới hoàn tất. Không sa runtime/no otherDBchanges/no sourceRepoIISchanges. Guide `docs/giay-huy-sql-lookup.md`.
+- BuildWeb thường + bảnLANschema15 PASS;7/7focused offline vàEFlegacy modelPASS riêng, PS4parse/optional.envPASS; không fullregression/ảnh/fixturedata mới. Bảnlegacy chặn toànruntime ngoàiLANlocal/Development, khôngmap email/no emailpayload; normalFR06/schema17 giữ nguyên. Không migration.
+- Candidate5194: home/adminlogin/tintuc/health200, dropdown mặcđịnh đúng; sourceUnavailable vìchưacóReadOnlylogin. **5188 chưa chuyển**, vẫnoldhealthy. LANbefore/after288content/290rev/703media/570alias, UserState/RoleState/PermissionState0diff; mật khẩu/quyền/dữliệunghiệpvụ/SMTPDisabled giữ nguyên. Cần DBAcredential quaUI đang mở đểtiếp tụcSQLproof→candidate→5188; không cần duyệt lại scope. CHƯA PRODUCTION READY.
+
 ## Tra cứu GCN trực tiếp SQL — 04/11/2026
 
 - Code/controller/query/view riêng tại `/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy`: Năm/DVHC, tìm kiếm không dấu, bảng7cột, paging10, chi tiết/back giữ bộ lọc. Lấy đúng confirmed/effective/nondeleted/document-not-removed + giá trị chốt kể cả rỗng. Không API nguồn/copyDB/migration; hai nhóm công khai khác không đổi.

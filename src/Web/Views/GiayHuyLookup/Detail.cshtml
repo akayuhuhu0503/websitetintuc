@@ -1,9 +1,0 @@
-@model GiayHuyPublicRow
-@{ ViewData["Title"] = "Chi tiết giấy chứng nhận sai hỏng, hủy"; Layout = ViewData["GiayHuyLayout"] as string ?? "_Layout"; }
-@section Styles { <link rel="stylesheet" href="~/css/giay-huy-lookup.css" asp-append-version="true" /> }
-<article class="giay-huy-lookup lookup-detail">
-    <nav class="lookup-breadcrumb" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span>›</span><a asp-action="Index" asp-route-year="@ViewData["Year"]" asp-route-province="@ViewData["Province"]" asp-route-q="@ViewData["Query"]" asp-route-page="@ViewData["Page"]">Giấy chứng nhận sai hỏng, hủy</a><span>›</span><span>Chi tiết</span></nav>
-    <h1>Thông tin giấy chứng nhận sai hỏng, hủy</h1>
-    <dl><dt>Năm</dt><dd>@(Model.Year.Length > 0 ? Model.Year : "Chưa xác định")</dd><dt>DVHC</dt><dd>@Model.Province</dd><dt>Số quyết định</dt><dd>@(Model.DecisionNumber.Length > 0 ? Model.DecisionNumber : "Chưa công bố")</dd><dt>Số hiệu GCN</dt><dd>@(Model.CertificateSerial.Length > 0 ? Model.CertificateSerial : "Chưa công bố")</dd><dt>Nội dung quyết định/thông báo</dt><dd class="lookup-content">@(Model.DecisionContent.Length > 0 ? Model.DecisionContent : "Chưa công bố nội dung")</dd></dl>
-    <a class="lookup-back" asp-action="Index" asp-route-year="@ViewData["Year"]" asp-route-province="@ViewData["Province"]" asp-route-q="@ViewData["Query"]" asp-route-page="@ViewData["Page"]">← Trở về kết quả tra cứu</a>
-</article>

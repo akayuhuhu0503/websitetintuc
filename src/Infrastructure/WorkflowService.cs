@@ -464,6 +464,8 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         if(m.Tags!=null&&(m.Tags.Length>500||m.Tags.Split(',').Length>20||m.Tags.Split(',').Any(x=>x.Trim().Length>64)))throw new InvalidOperationException("Tối đa 20 từ khóa, mỗi từ khóa tối đa 64 ký tự và tổng sau chuẩn hóa tối đa 500 ký tự.");
         if(m.Featured==false)m.Featured=null;
         m.ConsultationEmail=string.IsNullOrWhiteSpace(m.ConsultationEmail)?null:m.ConsultationEmail.Trim();
+        if(PortalBuildCapabilities.LegacyLanSchema15 && m.ConsultationEmail!=null)
+            throw new EditorialValidationException(new Dictionary<string,string>{{"Metadata.ConsultationEmail","Email nhận góp ý chưa khả dụng trên bản LAN chưa nâng schema. Không lưu giá trị này."}});
         if(m.ConsultationEmail!=null && (kind!=ContentKind.DraftDocument || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(m.ConsultationEmail)))
             throw new EditorialValidationException(new Dictionary<string,string>{{"Metadata.ConsultationEmail","Nhập email nhận góp ý đúng định dạng trong mẫu dự thảo."}});
         if(kind is not(ContentKind.Article or ContentKind.Announcement)&&(m.Tags!=null||m.Featured!=null))throw new InvalidOperationException("Từ khóa và tin nổi bật chỉ dùng cho tin bài hoặc thông báo.");

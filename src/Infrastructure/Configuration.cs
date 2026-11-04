@@ -58,6 +58,10 @@ public static class DatabaseSettings
         SqlConnectionStringBuilder sql;
         try { sql = new SqlConnectionStringBuilder(raw); }
         catch (ArgumentException) { throw new InvalidOperationException("Invalid private SQL connection configuration; values are not logged."); }
+        if(LandPortal.Domain.PortalBuildCapabilities.LegacyLanSchema15 &&
+            (config["Deployment:Profile"]!="LAN_DEMO"||sql.InitialCatalog!="LandPortal_LanDemo"||sql.DataSource!=@".\SQLEXPRESS"||!sql.IntegratedSecurity||
+             Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")!="Development"||Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Development"))
+            throw new InvalidOperationException("Legacy schema15 build is restricted to the existing local LAN database in every runtime.");
         var expected = config["Sql:ExpectedDatabase"];
         if (string.IsNullOrWhiteSpace(expected) || !string.Equals(sql.InitialCatalog, expected, StringComparison.Ordinal))
             throw new InvalidOperationException("CSDL kết nối không khớp Sql__ExpectedDatabase. Đã chặn thao tác.");

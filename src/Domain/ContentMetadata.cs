@@ -40,6 +40,9 @@ public sealed class ContentMetadata
     public DateTimeOffset? ConsultationEndUtc { get; set; }
     [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Email nhận góp ý không đúng định dạng.")]
     [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+#if LANDPORTAL_LAN_SCHEMA15
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+#endif
     public string? ConsultationEmail { get; set; }
     public string ConsultationDateEvidence { get; set; } = "";
     public string MappingStatus { get; set; } = "Unmapped";

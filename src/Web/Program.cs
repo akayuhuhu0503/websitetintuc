@@ -18,6 +18,8 @@ var storage = StorageOptions.FromConfiguration(builder.Configuration);
 var baseUrl = builder.Configuration["Public:BaseUrl"] ?? "http://127.0.0.1:5188";
 var uat=UatDeployment.Validate(builder.Configuration,builder.Environment.EnvironmentName);
 var lan=LanDemoDeployment.Validate(builder.Configuration,builder.Environment.EnvironmentName);
+if(LandPortal.Domain.PortalBuildCapabilities.LegacyLanSchema15 && (!lan||builder.Environment.EnvironmentName!="Development"||builder.Configuration["Sql:ExpectedDatabase"]!="LandPortal_LanDemo"))
+    throw new InvalidOperationException("Schema15 compatibility build is restricted to the existing isolated LAN database.");
 if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var publicUri) || !uat && !lan && !publicUri.IsLoopback || publicUri.Scheme is not ("http" or "https") || publicUri.AbsolutePath != "/")
     throw new InvalidOperationException("Bản chạy local chỉ cho phép Public__BaseUrl là địa chỉ HTTP(S) loopback.");
 if(!uat)builder.WebHost.UseUrls(baseUrl); // ANCM owns its backend port under IIS.
@@ -134,6 +136,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SiteConfigurationService>();
 builder.Services.AddScoped<PublicSiteService>();
 var app = builder.Build();
+if(LandPortal.Domain.PortalBuildCapabilities.LegacyLanSchema15)
+{
+    using var scope=app.Services.CreateScope();var legacyDb=scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+    var history=(await legacyDb.Database.GetAppliedMigrationsAsync()).ToArray();
+    if(history.Length!=15||history.Contains("20261102042625_DraftConsultationEmail"))throw new InvalidOperationException("LAN schema15 compatibility guard failed; no migration is run automatically.");
+}
 // Statistics uploads stay in bounded memory before CSRF/model binding can read the form.
 // LAN sample policy must reject unknown bytes before Windows real-time AV can see a temp file.
 app.Use(async(context,next)=>

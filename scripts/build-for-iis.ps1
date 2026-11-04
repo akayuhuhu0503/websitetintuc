@@ -95,6 +95,11 @@ try{
  $sqlValues=New-Object System.Data.Common.DbConnectionStringBuilder
  $sqlValues.set_ConnectionString([string]$inputSettings.Settings.ConnectionStrings.Portal)
  foreach($key in @($sqlValues.Keys)){if($key -iin @('Password','Pwd')){$secrets+=[string]$sqlValues[$key]}}
+ if([string]$inputSettings.Settings.ConnectionStrings.GiayHuyReadOnly){
+  $sourceSql=New-Object System.Data.Common.DbConnectionStringBuilder
+  $sourceSql.set_ConnectionString([string]$inputSettings.Settings.ConnectionStrings.GiayHuyReadOnly)
+  foreach($key in @($sourceSql.Keys)){if($key -iin @('Password','Pwd')){$secrets+=[string]$sourceSql[$key]}}
+ }
  foreach($f in Get-ChildItem -LiteralPath $staging -File -Recurse){
   if($f.Extension -in @('.json','.config','.xml','.ps1','.md','.log','.txt','.js','.css','.html','.sql','.sqlcmd') -or $f.Name -like '.env*'){
    $body=[IO.File]::ReadAllText($f.FullName)

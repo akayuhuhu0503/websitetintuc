@@ -1,10 +1,19 @@
 (() => {
     const form = document.querySelector('[data-lookup-filter]');
     if (!(form instanceof HTMLFormElement)) return;
-    form.querySelector('[name="year"]')?.addEventListener('change', () => {
-        const province = form.querySelector('[name="province"]');
-        if (province instanceof HTMLSelectElement) province.value = '';
-        form.requestSubmit();
+    document.querySelectorAll('.lookup-expand').forEach(button => {
+        const text = document.getElementById(button.getAttribute('aria-controls'));
+        if (!text) return;
+        const measure = () => { button.hidden = button.getAttribute('aria-expanded') !== 'true' && text.scrollHeight <= text.clientHeight + 1; };
+        measure();
+        void document.fonts.ready.then(measure);
+        if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(text);
+        button.addEventListener('click', () => {
+            const expanded = button.getAttribute('aria-expanded') !== 'true';
+            button.setAttribute('aria-expanded', String(expanded));
+            button.textContent = expanded ? 'Thu gọn' : 'Xem thêm';
+            text.classList.toggle('is-expanded', expanded);
+        });
     });
     form.addEventListener('submit', () => {
         form.setAttribute('aria-busy', 'true');

@@ -1,34 +1,27 @@
-using System.Globalization;
-using System.Text;
-
 namespace LandPortal.Web.Services;
-
-// Same exact-name aliases as the source grouping service. No speculative province mergers.
+public sealed record GiayHuyProvinceEntry(string Key, string Name, string[] SourceNames);
 public static class GiayHuyProvince
 {
-    private static readonly string[] Names = "An Giang|Bà Rịa - Vũng Tàu|Bắc Giang|Bắc Kạn|Bạc Liêu|Bắc Ninh|Bến Tre|Bình Định|Bình Dương|Bình Phước|Bình Thuận|Cà Mau|Cao Bằng|Cần Thơ|Đà Nẵng|Đắk Lắk|Đắk Nông|Điện Biên|Đồng Nai|Đồng Tháp|Gia Lai|Hà Giang|Hà Nam|Hà Nội|Hà Tĩnh|Hải Dương|Hải Phòng|Hậu Giang|Hòa Bình|Hưng Yên|Khánh Hòa|Kiên Giang|Kon Tum|Lai Châu|Lâm Đồng|Lạng Sơn|Lào Cai|Long An|Nam Định|Nghệ An|Ninh Bình|Ninh Thuận|Phú Thọ|Phú Yên|Quảng Bình|Quảng Nam|Quảng Ngãi|Quảng Ninh|Quảng Trị|Sóc Trăng|Sơn La|Tây Ninh|Thái Bình|Thái Nguyên|Thanh Hóa|Thừa Thiên Huế|Tiền Giang|Thành phố Hồ Chí Minh|Trà Vinh|Tuyên Quang|Vĩnh Long|Vĩnh Phúc|Yên Bái|Huế".Split('|');
-    private static readonly HashSet<string> Cities = ["Hà Nội", "Hải Phòng", "Đà Nẵng", "Cần Thơ", "Huế"];
-    private static readonly Dictionary<string, string> Known = Names.ToDictionary(Key, x => x, StringComparer.Ordinal);
-    public static string Normalize(string value)
-    {
-        var key = Key(value);
-        if (key is "hcm" or "tphcm") return "Thành phố Hồ Chí Minh";
-        if (!Known.TryGetValue(key, out var name)) return "Chưa xác định Tỉnh/Thành phố";
-        return name.StartsWith("Thành phố ", StringComparison.Ordinal) ? name : (Cities.Contains(name) ? "Thành phố " : "Tỉnh ") + name;
-    }
-    private static string Key(string value)
-    {
-        var b = new StringBuilder();
-        foreach (var ch in value.Normalize(NormalizationForm.FormD))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark) continue;
-            var c = ch is 'đ' or 'Đ' ? 'd' : char.ToLowerInvariant(ch);
-            if (char.IsLetterOrDigit(c)) b.Append(c);
-            else if (b.Length > 0 && b[^1] != ' ') b.Append(' ');
-        }
-        var key = b.ToString().Trim();
-        foreach (var prefix in new[] { "thanh pho ", "tinh ", "tp " })
-            if (key.StartsWith(prefix, StringComparison.Ordinal)) return key[prefix.Length..];
-        return key;
-    }
+    // Verified NQ202/2025/QH15 Art.1-2; Thua Thien Hue -> Hue: NQ175/2024/QH15.
+    public const string Source="https://baochinhphu.vn/nghi-quyet-cua-quoc-hoi-ve-sap-xep-don-vi-hanh-chinh-cap-tinh-102250612191145158.htm";
+    public const string Unknown="chua-xac-dinh";
+    public static readonly GiayHuyProvinceEntry[] All = [
+        new("ha-noi","Thành phố Hà Nội",["Hà Nội"]),new("hue","Thành phố Huế",["Huế","Thừa Thiên Huế"]),
+        new("hai-phong","Thành phố Hải Phòng",["Hải Phòng","Hải Dương"]),new("da-nang","Thành phố Đà Nẵng",["Đà Nẵng","Quảng Nam"]),
+        new("ho-chi-minh","Thành phố Hồ Chí Minh",["Hồ Chí Minh","HCM","TPHCM","TP HCM","Bình Dương","Bà Rịa - Vũng Tàu"]),
+        new("can-tho","Thành phố Cần Thơ",["Cần Thơ","Hậu Giang","Sóc Trăng"]),
+        new("cao-bang","Tỉnh Cao Bằng",["Cao Bằng"]),new("dien-bien","Tỉnh Điện Biên",["Điện Biên"]),new("ha-tinh","Tỉnh Hà Tĩnh",["Hà Tĩnh"]),
+        new("lai-chau","Tỉnh Lai Châu",["Lai Châu"]),new("lang-son","Tỉnh Lạng Sơn",["Lạng Sơn"]),new("nghe-an","Tỉnh Nghệ An",["Nghệ An"]),
+        new("quang-ninh","Tỉnh Quảng Ninh",["Quảng Ninh"]),new("thanh-hoa","Tỉnh Thanh Hóa",["Thanh Hóa"]),new("son-la","Tỉnh Sơn La",["Sơn La"]),
+        new("tuyen-quang","Tỉnh Tuyên Quang",["Tuyên Quang","Hà Giang"]),new("lao-cai","Tỉnh Lào Cai",["Lào Cai","Yên Bái"]),
+        new("thai-nguyen","Tỉnh Thái Nguyên",["Thái Nguyên","Bắc Kạn"]),new("phu-tho","Tỉnh Phú Thọ",["Phú Thọ","Vĩnh Phúc","Hòa Bình"]),
+        new("bac-ninh","Tỉnh Bắc Ninh",["Bắc Ninh","Bắc Giang"]),new("hung-yen","Tỉnh Hưng Yên",["Hưng Yên","Thái Bình"]),
+        new("ninh-binh","Tỉnh Ninh Bình",["Ninh Bình","Nam Định","Hà Nam"]),new("quang-tri","Tỉnh Quảng Trị",["Quảng Trị","Quảng Bình"]),
+        new("quang-ngai","Tỉnh Quảng Ngãi",["Quảng Ngãi","Kon Tum"]),new("gia-lai","Tỉnh Gia Lai",["Gia Lai","Bình Định"]),
+        new("khanh-hoa","Tỉnh Khánh Hòa",["Khánh Hòa","Ninh Thuận"]),new("lam-dong","Tỉnh Lâm Đồng",["Lâm Đồng","Đắk Nông","Bình Thuận"]),
+        new("dak-lak","Tỉnh Đắk Lắk",["Đắk Lắk","Phú Yên"]),new("dong-nai","Tỉnh Đồng Nai",["Đồng Nai","Bình Phước"]),
+        new("tay-ninh","Tỉnh Tây Ninh",["Tây Ninh","Long An"]),new("vinh-long","Tỉnh Vĩnh Long",["Vĩnh Long","Bến Tre","Trà Vinh"]),
+        new("dong-thap","Tỉnh Đồng Tháp",["Đồng Tháp","Tiền Giang"]),new("ca-mau","Tỉnh Cà Mau",["Cà Mau","Bạc Liêu"]),
+        new("an-giang","Tỉnh An Giang",["An Giang","Kiên Giang"])
+    ];
 }

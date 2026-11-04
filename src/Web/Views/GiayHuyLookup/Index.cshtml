@@ -1,31 +1,28 @@
 @model GiayHuyLookupModel
-@{ ViewData["Title"] = "Giấy chứng nhận sai hỏng, hủy"; Layout = ViewData["GiayHuyLayout"] as string ?? "_Layout"; }
-@section Styles { <link rel="stylesheet" href="~/css/giay-huy-lookup.css" asp-append-version="true" /> }
+@{ ViewData["Title"]="Giấy chứng nhận sai hỏng, hủy"; Layout=ViewData["GiayHuyLayout"] as string??"_Layout";var pages=Math.Max(1,(Model.Total+19)/20); }
+@section Styles{<link rel="stylesheet" href="~/css/giay-huy-lookup.css" asp-append-version="true"/>}
 <section class="giay-huy-lookup" aria-labelledby="lookup-title">
-    <nav aria-label="Đường dẫn" class="lookup-breadcrumb"><a href="/">Trang chủ</a><span>›</span><a href="/cong-khai-thong-tin">Công khai thông tin</a><span>›</span><span>Giấy chứng nhận sai hỏng, hủy</span></nav>
-    <h1 id="lookup-title">Giấy chứng nhận sai hỏng, hủy</h1>
-    <p class="lookup-intro">Tra cứu thông tin quyết định, thông báo và số hiệu giấy chứng nhận đã được phép công khai.</p>
-    <form method="get" class="lookup-filter" data-lookup-filter>
-        <div><label for="lookup-year">Năm</label><select id="lookup-year" name="year"><option value="">Tất cả các năm</option>@foreach (var year in Model.Years) { <option value="@year" selected="@(Model.Year == year)">@year</option> }</select></div>
-        <div><label for="lookup-province">DVHC</label><select id="lookup-province" name="province"><option value="">Tất cả Tỉnh/Thành phố</option>@foreach (var province in Model.Provinces) { <option value="@province" selected="@(Model.Province == province)">@province</option> }</select></div>
-        <div class="lookup-keyword"><label for="lookup-q">Từ khóa</label><input id="lookup-q" name="q" maxlength="200" value="@Model.Query" placeholder="Số quyết định, số hiệu GCN, nội dung công khai…" /></div>
-        <button type="submit">Tra cứu</button><a class="lookup-reset" href="@GiayHuyLookup.Route">Xóa bộ lọc</a>
-        <p class="lookup-loading" role="status" hidden>Đang tra cứu…</p>
-    </form>
-    @if (Model.Unavailable) { <div class="lookup-message" role="alert">Hiện chưa thể kết nối dịch vụ tra cứu. Vui lòng thử lại sau.</div> }
-    else {
-        <p class="lookup-count" role="status"><strong>@Model.Total</strong> kết quả · Trang @Model.Page</p>
-        @if (Model.Rows.Count == 0) { <div class="lookup-message">Chưa có hồ sơ được công bố phù hợp với điều kiện tra cứu.</div> }
-        else {
-            <div class="lookup-table-wrap" tabindex="0" role="region" aria-label="Kết quả tra cứu, có thể cuộn ngang"><table class="lookup-table"><caption class="visually-hidden">Danh sách giấy chứng nhận sai hỏng, hủy</caption><thead><tr><th scope="col">STT</th><th scope="col">Năm</th><th scope="col">DVHC</th><th scope="col">Số quyết định</th><th scope="col">Nội dung quyết định/thông báo</th><th scope="col">Số hiệu GCN</th><th scope="col">Chi tiết</th></tr></thead><tbody>
-            @for (var i = 0; i < Model.Rows.Count; i++) { var row = Model.Rows[i]; <tr><td>@((Model.Page - 1) * 10 + i + 1)</td><td>@(row.Year.Length > 0 ? row.Year : "Chưa xác định")</td><td>@row.Province</td><td>@(row.DecisionNumber.Length > 0 ? row.DecisionNumber : "Chưa công bố")</td><td>@(row.DecisionContent.Length > 0 ? row.DecisionContent : "Chưa công bố nội dung")</td><td>@(row.CertificateSerial.Length > 0 ? row.CertificateSerial : "Chưa công bố")</td><td><a asp-controller="GiayHuyLookup" asp-action="Detail" asp-route-id="@row.Id" asp-route-year="@Model.Year" asp-route-province="@Model.Province" asp-route-q="@Model.Query" asp-route-page="@Model.Page" aria-label="Chi tiết quyết định @row.DecisionNumber">Xem chi tiết →</a></td></tr> }
-            </tbody></table></div>
-            <nav class="lookup-pagination" aria-label="Phân trang">
-                @if (Model.Page > 1) { <a asp-action="Index" asp-route-year="@Model.Year" asp-route-province="@Model.Province" asp-route-q="@Model.Query" asp-route-page="@(Model.Page - 1)">← Trang trước</a> }
-                <span aria-current="page">@Model.Page / @((Model.Total + 9) / 10)</span>
-                @if (Model.Page * 10 < Model.Total) { <a asp-action="Index" asp-route-year="@Model.Year" asp-route-province="@Model.Province" asp-route-q="@Model.Query" asp-route-page="@(Model.Page + 1)">Trang sau →</a> }
-            </nav>
-        }
-    }
+<nav class="lookup-breadcrumb" aria-label="Đường dẫn"><a href="/">Trang chủ</a><span>›</span><a href="/cong-khai-thong-tin">Công khai thông tin</a><span>›</span><span>Giấy chứng nhận sai hỏng, hủy</span></nav>
+<h1 id="lookup-title">Giấy chứng nhận sai hỏng, hủy</h1><p class="lookup-intro">Tra cứu thông tin giấy chứng nhận hủy theo năm, đơn vị hành chính và từ khóa.</p>
+<form method="get" class="lookup-filter" data-lookup-filter>
+<input type="hidden" name="applied" value="1"/>
+<div><label for="lookup-year">Năm</label><select id="lookup-year" name="year"><option value="">Tất cả các năm</option>
+@if(Model.Year.HasValue&&!Model.Years.Contains(Model.Year.Value)){<option value="@Model.Year" selected>@Model.Year (chưa có hồ sơ)</option>}
+@foreach(var y in Model.Years){<option value="@y" selected="@(Model.Year==y)">@y</option>}</select></div>
+<div><label for="lookup-province">DVHC</label><select id="lookup-province" name="province"><option value="">Tất cả DVHC</option>@foreach(var p in GiayHuyProvince.All.OrderBy(x=>x.Name,StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"),true))){<option value="@p.Key" selected="@(Model.Province==p.Key)">@p.Name</option>}<option value="chua-xac-dinh" selected="@(Model.Province==GiayHuyProvince.Unknown)">Chưa xác định Tỉnh/Thành phố</option></select></div>
+<div class="lookup-keyword"><label for="lookup-q">Từ khóa</label><input id="lookup-q" name="q" maxlength="200" value="@Model.Query" placeholder="Ngày phát hành, quyết định, số hiệu, tên chủ sử dụng…"/></div>
+<button type="submit">Tìm kiếm</button><a class="lookup-reset" href="@GiayHuyLookup.Route">Đặt lại</a><p class="lookup-loading" role="status" hidden>Đang tìm kiếm…</p>
+</form>
+@if(Model.Unavailable){<div class="lookup-message" role="alert">Hiện chưa thể kết nối dịch vụ tra cứu. Vui lòng thử lại sau.</div>}
+else{<p class="lookup-count" role="status"><strong>@Model.Total.ToString("N0",System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</strong> kết quả · Trang @Model.Page/@pages · 20 hồ sơ/trang</p>
+@if(Model.Rows.Count==0){<div class="lookup-message">Không có hồ sơ phù hợp với điều kiện tra cứu.</div>}
+else{<div class="lookup-table-wrap" tabindex="0" role="region" aria-label="Kết quả tra cứu, có thể cuộn ngang"><table class="lookup-table"><thead><tr><th scope="col">STT</th><th scope="col">Ngày phát hành</th><th scope="col">Số quyết định</th><th scope="col">Quyết định</th><th scope="col">Số hiệu giấy chứng nhận</th><th scope="col">Số vào sổ</th><th scope="col">Tên chủ sử dụng</th><th scope="col">Năm</th></tr></thead><tbody>
+@for(var i=0;i<Model.Rows.Count;i++){var row=Model.Rows[i];<tr><td>@((Model.Page-1)*20+i+1)</td><td>@(row.IssueDate.Length>0?row.IssueDate:"—")</td><td>@(row.DecisionNumber.Length>0?row.DecisionNumber:"—")</td><td><div class="lookup-decision" id="lookup-decision-@i">@(row.DecisionContent.Length>0?row.DecisionContent:"—")</div><button type="button" class="lookup-expand" aria-expanded="false" aria-controls="lookup-decision-@i" hidden>Xem thêm</button></td><td>@(row.CertificateSerial.Length>0?row.CertificateSerial:"—")</td><td>@(row.RegisterNumber.Length>0?row.RegisterNumber:"—")</td><td>@(row.OwnerName.Length>0?row.OwnerName:"—")</td><td>@(row.Year.Length>0?row.Year:"—")</td></tr>}
+</tbody></table></div>
+<nav class="lookup-pagination" aria-label="Phân trang">
+@if(Model.Page>1){<a asp-action="Index" asp-route-applied="1" asp-route-year="@(Model.Year?.ToString()??"")" asp-route-province="@(Model.Province??"")" asp-route-q="@Model.Query" asp-route-page="@(Model.Page-1)">← Trước</a>}
+@for(var p=Math.Max(1,Model.Page-2);p<=Math.Min(pages,Model.Page+2);p++){if(p==Model.Page){<span aria-current="page">@p</span>}else{<a asp-action="Index" asp-route-applied="1" asp-route-year="@(Model.Year?.ToString()??"")" asp-route-province="@(Model.Province??"")" asp-route-q="@Model.Query" asp-route-page="@p">@p</a>}}
+@if(Model.Page<pages){<a asp-action="Index" asp-route-applied="1" asp-route-year="@(Model.Year?.ToString()??"")" asp-route-province="@(Model.Province??"")" asp-route-q="@Model.Query" asp-route-page="@(Model.Page+1)">Sau →</a>}
+</nav>}}
 </section>
-@section Scripts { <script src="~/js/giay-huy-lookup.js" asp-append-version="true" defer></script> }
+@section Scripts{<script src="~/js/giay-huy-lookup.js" asp-append-version="true" defer></script>}
