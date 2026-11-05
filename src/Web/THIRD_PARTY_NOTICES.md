@@ -1,5 +1,11 @@
 # Third-party dependencies
 
+## Self-hosted website fonts (05/11/2026)
+
+- Roboto: Copyright 2011 The Roboto Project Authors; SIL Open Font License 1.1. Official source: https://github.com/google/fonts/tree/main/ofl/roboto
+- Merriweather: Copyright 2020 The Merriweather Project Authors, Reserved Font Name Merriweather; SIL Open Font License 1.1. Official source: https://github.com/google/fonts/tree/main/ofl/merriweather
+- Unmodified official Google Fonts WOFF2 subsets (Vietnamese, Latin and Latin Extended) are served locally. License texts, exact upstream URLs, SHA-256 and byte lengths are in `wwwroot/fonts/`. Browser rendering does not call Google Fonts or another font CDN. Roboto weights 400/500/600/700/800 share the supplied font bytes; Merriweather uses 700 only. Six files total 185,068 bytes, loaded on demand by unicode range and family.
+
 ## Phase 2A server file validators
 
 - SkiaSharp 3.119.4 and matching SkiaSharp.NativeAssets.Win32/macOS 3.119.4: MIT. Copyright 2015-2016 Xamarin, Inc.; 2017-2018 Microsoft Corporation. Original package LICENSE and native THIRD-PARTY-NOTICES are preserved in `licenses/media/`; native dependencies have their own notices. Package source and version: https://www.nuget.org/packages/SkiaSharp/3.119.4

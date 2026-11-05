@@ -10,7 +10,15 @@ $uri=[Uri]$c.Public.BaseUrl
 if(-not(Get-NetIPAddress -AddressFamily IPv4 -IPAddress $uri.Host -ErrorAction SilentlyContinue)){throw 'Configured LAN IPv4 is no longer assigned; review config before starting'}
 # Inspect the owning process as well: some CIM responses omit the State property.
 # Do not overwrite the host record or launch a duplicate when HTTP is already served.
-$owners=@(Get-NetTCPConnection -LocalPort $uri.Port -ErrorAction SilentlyContinue|Where-Object {$_.LocalAddress -eq $uri.Host -or $_.LocalAddress -in @('0.0.0.0','::')}|Select-Object -ExpandProperty OwningProcess -Unique)
+function Get-LanListenerOwners {
+ # CIM may omit/mislabel listening states. Use live process ownership + HTTP,
+ # while refusing every ambiguous owner; ignore only already terminated PIDs.
+ $candidates=@(Get-NetTCPConnection -LocalPort $uri.Port -ErrorAction SilentlyContinue|Where-Object {$_.LocalAddress -eq $uri.Host -or $_.LocalAddress -in @('0.0.0.0','::')}|Select-Object -ExpandProperty OwningProcess -Unique)
+ foreach($owner in $candidates){
+  if($owner -gt 0 -and (Get-CimInstance Win32_Process -Filter ('ProcessId='+$owner))){$owner}
+ }
+}
+$owners=@(Get-LanListenerOwners)
 if($owners.Count){
  if($owners.Count -ne 1){throw 'Ambiguous existing LAN socket owner; no process started'}
  $existing=Get-CimInstance Win32_Process -Filter ('ProcessId='+$owners[0])
@@ -19,6 +27,8 @@ if($owners.Count){
  if($health.StatusCode -ne 200){throw 'Existing LAN process is not healthy; reconcile before restarting'}
  Write-Output ('Existing approved LAN build is healthy at '+$uri.AbsoluteUri+'; no duplicate instance started.');return
 }
+$unattributed=$null;try{$unattributed=Invoke-WebRequest ($uri.AbsoluteUri+'health') -UseBasicParsing -TimeoutSec 2}catch{}
+if($unattributed){throw 'LAN already responds without an attributable socket owner; no process started'}
 $env:LANDPORTAL_CONFIG=$state.config;$env:LANDPORTAL_HOME=$state.home
 # External isolated config must win over inherited developer settings. No persistent environment changes.
 foreach($key in @('ConnectionStrings__Portal','Sql__ExpectedDatabase','Runtime__RolePassword','Storage__MediaRoot','Storage__SnapshotRoot','Storage__TempRoot','Storage__KeysRoot','Public__BaseUrl','Public__CanonicalHost','Deployment__Profile','Mail__Transport','Scanner__Provider','Media__AllowUnscannedDevelopmentUploads','AdminSession__IdleMinutes','Captcha__TestScope')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}

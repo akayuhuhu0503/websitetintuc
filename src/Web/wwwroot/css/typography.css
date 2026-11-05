@@ -1,0 +1,20 @@
+/* Shared display typography only. Never rewrites stored editorial HTML. */
+:root{--font-sans:"Roboto",Arial,"Segoe UI",sans-serif;--font-editorial:"Merriweather",Georgia,"Times New Roman",serif;--text-base:16px;--text-form:15px;--text-small:13px;--leading-ui:1.55;--leading-article:1.75;--weight-regular:400;--weight-medium:500;--weight-semibold:600;--weight-bold:700;--weight-brand:800}
+body.public-portal,body.admin-body{font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading-ui)}
+input,select,textarea,button,.portal-shell .button,.portal-shell button[type="submit"],.portal-shell .mobile-menu-toggle,.admin-body .button{font-family:var(--font-sans)}
+.portal-shell,.portal-shell .brand,.portal-shell .main-nav,.portal-shell .site-footer,.portal-shell .header-search{font-family:var(--font-sans)}
+.portal-shell .brand strong{font-weight:var(--weight-brand)}
+.portal-shell .main-nav a,.portal-shell .main-nav button{font-size:13px}
+.portal-shell .article-detail--news>header>h1{font-family:var(--font-editorial);font-weight:700;font-size:clamp(26px,2.5vw,36px);line-height:1.4}
+@media(min-width:1024px){.portal-shell .lead-copy h3{font-family:var(--font-editorial);font-weight:700;line-height:1.4}}
+.portal-shell .article-body{font-family:var(--font-sans);font-size:18px;line-height:var(--leading-article)}
+.portal-shell .article-summary{font-size:clamp(18px,1.4vw,20px);line-height:1.7}
+.portal-shell .news-card h3{font-size:clamp(16px,1.1vw,19px);line-height:1.45;font-weight:700}
+.portal-shell .item-meta,.portal-shell .article-meta,.portal-shell .lookup-breadcrumb{font-size:12px}
+.giay-huy-lookup .lookup-table{font-family:var(--font-sans);font-size:14px;line-height:1.55}
+.admin-body,.admin-body h1,.admin-body h2,.admin-body h3,.admin-body table,.admin-body .jodit-container,.admin-body .jodit-wysiwyg{font-family:var(--font-sans)}
+.admin-body input,.admin-body select,.admin-body textarea,.admin-body button{font-family:var(--font-sans);font-size:var(--text-form)}
+.admin-body .jodit-wysiwyg{font-size:18px;line-height:var(--leading-article)}
+/* Existing pasted font declarations affect presentation only, not persisted HTML. */
+.article-body [style*="font-family"],.jodit-wysiwyg [style*="font-family"]{font-family:var(--font-sans)!important}
+@media(max-width:600px){.portal-shell .article-detail--news>header>h1{font-size:26px}}

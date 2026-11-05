@@ -1,3 +1,9 @@
+## FR-06 LAN và typography — 05/11/2026
+
+- **PASS schema/deployment LAN:** exact15→17, 2 email columns + audit index, 69 bảng dữ liệu cũ digest0diff/Identity/quyền giữ nguyên; 288/290/703/570. Backup SQL COPY_ONLY/CHECKSUM/HEADERONLY/VERIFYONLY và snapshot789file PASS; SQLrestoreNOTRUN. Web schema17 RUNNING5188/SMTPWorkerDisabled; shared/sourceSQL không thay đổi.
+- **PASS typography focused:** Roboto UI/CMS/form/body, Merriweather H1 Tin tức/lead desktop; font tự host Vietnamese/OFL, no CDN/font error. Home390/768/1366/1920 không tràn, menu desktop1hàng; GCN vẫn rộng/8cột/Roboto14px/yearnowrap/mobiletable scroll. Public/login/document/draft HTTP200, build PASS; không full regression.
+- **FR06 CMS E2E CHỜ BA / không giả PASS:** chưa có session soạn/duyệt để kiểm tra email revision qua editor→preview→history→publish. Không credential cũ/reset hay bypass. Xem `lan-fr06-typography.md`; không nghiệm thu UAT/Production từ kết quả LAN.
+
 ## FR-17 GCN — phê duyệt View/tám cột, 04/11/2026
 
 - **CODE COMPLETE / LIVE INTEGRATION BLOCKED:** owner cho phép allconfirmed/effective/future8fields, View-only SQLlogin/TLSexceptionLAN-UAT; IDallowlist cũsuperseded. SQL20/page/filter/search, default2026/HN,8cols/ownerjoin/expand, noDetail/PDF; mapping34verified/unknownseparate. Không C#datasetpaging/copyDB.

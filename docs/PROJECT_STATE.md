@@ -1,3 +1,10 @@
+## FR-06 LAN schema17 và font dùng chung — 05/11/2026
+
+- **APPLIED/VERIFIED LAN15→17**, đúng MinhAnh\SQLEXPRESS/LandPortal_LanDemo; 2 migration AuditRecoveryLookup/DraftConsultationEmail, 2 cột nullable, index audit; 69 bảng dữ liệu cũ/Identity/role/permission digest0diff. LAN288content/290revision/703media/570alias/3account giữ nguyên; không bootstrap/import/reset/grant/source hoặc shared SQL write.
+- Backup SQL duy nhất COPY_ONLY/CHECKSUM/HEADERONLY/VERIFYONLY/hash PASS và 789 snapshotfiles hash PASS; private `.local/backups/fr06-fonts-20261105T031748Z-2e9aba`, receipts `.local/fr06-fonts-20261105T031748Z-2e9aba/apply`. SQLrestoreNOTRUN. Web chuẩn17 đã RUNNING5188, config/source reader cũ giữ nguyên, SMTP/WorkerDisabled; binary15 không còn dùng và không rollback vào schema17.
+- Roboto UI/form/table/CMS/body, Merriweather700 chỉ H1 Tin tức/lead lớn desktop; selfhost6WOFF2/185068byte/Vietnamese+Latin+LatinExt, OFL+sourceSHA. Typography CSS chung/không sửa HTML trong SQL. Focused home390/768/1366/1920, bài, GCN/mobile/table/year PASS; public/login/vanban/duthao HTTP200. Launcher sửa nhận dạng PID TCP đã kết thúc, live binary+HTTP guard giữ nguyên/no duplicate.
+- **FR06 DEPLOYED / authenticated CMS E2E CHỜ BA**: chưa có session BA hợp lệ để nhập email/preview/history/duyệt công khai; không dùng credential cũ/reset/bypass. Không nhận schema/build/HTTP là PASS workflow. Hướng dẫn ngắn `docs/lan-fr06-typography.md`; không full regression/crawl/SMTP thật/Production.
+
 ## GCN: View chuyên dụng và tám cột — 04/11/2026
 
 - Chủ dự án đã duyệt SourceView/login SELECT riêng, TLS exception riêngLAN/UAT và công bố mọi hồ sơ confirmed/effective hiện tại+tương lai theo8trường; **supersedes ID/hash allowlist cũ**. Code đổi sang View-only, SQLfilter/OFFSET-FETCH20/COUNT_BIGOVER/date-desc+ID, default2026/ha-noi, submit-only,8cột/tên1;tên2/expand tạiô; bỏDetail/PDF. Mapping34 có nguồnNQ202/2025 vàNQ175/2024; unknown riêng.

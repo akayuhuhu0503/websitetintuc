@@ -1,0 +1,42 @@
+{
+  "provider": "Google Fonts official CSS/WOFF2, unmodified bytes",
+  "downloaded": "2026-11-05",
+  "files": [
+    {
+      "file": "roboto-vietnamese.woff2",
+      "source": "https://fonts.gstatic.com/s/roboto/v51/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3OUBGEe.woff2",
+      "sha256": "0b60bbe04e9c479444b31270a72179f53e400beee57b7dd176c08e5e2e716831",
+      "bytes": 14340
+    },
+    {
+      "file": "roboto-latin-ext.woff2",
+      "source": "https://fonts.gstatic.com/s/roboto/v51/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3KUBGEe.woff2",
+      "sha256": "cedb374b05a35034cf96db185db4eeb8f8ce49e1a56197673702ff11b5533d6e",
+      "bytes": 29392
+    },
+    {
+      "file": "roboto-latin.woff2",
+      "source": "https://fonts.gstatic.com/s/roboto/v51/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBA.woff2",
+      "sha256": "1404ca348bd75ef836f4dd8b6f2cc719458642d1237c368296b2fc652dca47dc",
+      "bytes": 43136
+    },
+    {
+      "file": "merriweather-vietnamese.woff2",
+      "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4D0qyriQwlOrhSvowK_l5UcA6zuSYEqOzpPe3HOZJ5eX1WtLaQwmYiScCmDxhtNOKl8yDrOSAaG131GvU.woff2",
+      "sha256": "ffb524044bbe0844e3751f9df121587a08ecc86f6a7301b5a6c03614b01373b2",
+      "bytes": 6660
+    },
+    {
+      "file": "merriweather-latin-ext.woff2",
+      "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4D0qyriQwlOrhSvowK_l5UcA6zuSYEqOzpPe3HOZJ5eX1WtLaQwmYiScCmDxhtNOKl8yDrOSAaGl31GvU.woff2",
+      "sha256": "c4d28d6ee3414f8e0482f1acd62a35ea6409a2447c427191bcfa2f4f4ee670ff",
+      "bytes": 42880
+    },
+    {
+      "file": "merriweather-latin.woff2",
+      "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4D0qyriQwlOrhSvowK_l5UcA6zuSYEqOzpPe3HOZJ5eX1WtLaQwmYiScCmDxhtNOKl8yDrOSAaFF31.woff2",
+      "sha256": "4e1ab49396c02be0d9a2a25eed7bc73781c047d85fcb5dfc2889873eaf992b09",
+      "bytes": 48660
+    }
+  ]
+}

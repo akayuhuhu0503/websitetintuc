@@ -14,11 +14,18 @@ using Microsoft.Data.SqlClient;
 var root=PortalConfiguration.FindWorkspace();
 var home=Environment.GetEnvironmentVariable("LAN_DEMO_HOME")??throw new InvalidOperationException("Private demo home required");
 var configPath=Path.Combine(home,"config.json");
+if(args.FirstOrDefault()=="upgrade-fr06-schema"){
+    configPath=Path.GetFullPath(Environment.GetEnvironmentVariable("LAN_DEMO_CONFIG")??configPath);
+    if(!configPath.StartsWith(Path.GetFullPath(home)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("LAN config must stay in its private home.");
+}
 var c=new ConfigurationBuilder().AddJsonFile(configPath).AddInMemoryCollection(new Dictionary<string,string?>{{"WorkspaceRoot",home}}).Build();
 if(!args.Contains("disable"))LanDemoDeployment.Validate(c,"Development");
 else if(c["Deployment:Profile"]!="LAN_DEMO"||c["Sql:ExpectedDatabase"]!=LanDemoDeployment.Database||new SqlConnectionStringBuilder(DatabaseSettings.Connection(c)).DataSource!=@".\SQLEXPRESS")throw new InvalidOperationException("Exact isolated demo target required even after demo expiry.");
 var opts=DatabaseSettings.Options(c,forMigration:true);
 await using var dest=new PortalDbContext(opts);
+if(args.FirstOrDefault()=="upgrade-fr06-schema"){
+    try{await LanFr06Upgrade.RunAsync(root,configPath,c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN FR06 stopped: "+error.GetType().Name+"; inspect private receipt/reconcile before retry; no secret logged.");Environment.ExitCode=1;}return;
+}
 if(args.FirstOrDefault()=="grant-lan-reviewer-interactions"){
     if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
     try{await LanReviewerPermissions.RunAsync(c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN reviewer grant stopped at "+LanReviewerPermissions.Stage+": "+error.GetType().Name+"; no secret logged.");Environment.ExitCode=1;}return;
