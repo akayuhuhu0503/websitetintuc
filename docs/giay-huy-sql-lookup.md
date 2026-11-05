@@ -28,6 +28,8 @@ Sau commit: đọc View/count/duplicate, kiểm tra quyền và bốn SELECT TOP
 
 ## Private config LAN/UAT
 
+Checkpoint 05/11/2026: View/login đã tạo và đối soát thành công; **không chạy lại provision** trên instance hiện tại. Hậu kiểm từng lỗi do ShowPlanXML được provider trả dưới kiểu nvarchar; parser đã sửa và phiên DBA chỉ đọc xác nhận đúng View/hash, unique count, quyền và plan. `reconcile-receipt.json` trong private run là bằng chứng khép lại lỗi hậu commit, không phải lần tạo mới. Source runtime config đã gắn vào LAN5188, SQL Portal/role secret website giữ nguyên. Count là dữ liệu trực tiếp: 6.948 khi đối soát, 6.955 khi browser smoke; không coi đó là snapshot cố định. Bản LAN schema15 không triển khai FR06 email revision.
+
 Merge đúng hai section của `source-runtime.private.json` vào private JSON Web; giữ nguyên `ConnectionStrings:Portal`, role secret, storage, Identity, SMTP và các cấu hình khác. Không ghi đè toàn file bằng mảnh cấu hình nguồn.
 Chỉ merge/probe khi receipt đã ghi `VIEW_LOGIN_VERIFIED`; sự tồn tại của file private chưa chứng minh login đã commit hoặc đã kiểm chứng. Không tái sử dụng secret pending của một lần rollback.
 

@@ -57,7 +57,13 @@ function Invoke-GiayHuyProvision {
  $planCommand=$Connection.CreateCommand();$planCommand.CommandTimeout=15
  $planCommand.CommandText="SET STATISTICS XML ON;SELECT COUNT_BIG(1) OVER() Total,v.RecordId,v.IssueDateText,v.DecisionNumber,v.DecisionContent,v.CertificateSerial,v.RegisterNumber,v.Owner1,v.Owner2,v.YearText FROM dbo.vw_GiayChungNhanHuyCongKhai v WHERE v.YearNumber=2026 AND v.ProvinceKey=N'ha-noi' ORDER BY v.IssueDate DESC,v.RecordId OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY OPTION(RECOMPILE);SET STATISTICS XML OFF;"
  $timer=[Diagnostics.Stopwatch]::StartNew();$planReader=$planCommand.ExecuteReader();$planCaptured=$false
- do{while($planReader.Read()){if($planReader.FieldCount -eq 1 -and $planReader.GetDataTypeName(0) -eq 'xml'){[IO.File]::WriteAllText((Join-Path $PrivateRoot 'default-query-actual-plan.sqlplan'),$planReader.GetSqlXml(0).Value,[Text.UTF8Encoding]::new($false));$planCaptured=$true}}}while($planReader.NextResult())
+ do{while($planReader.Read()){if($planReader.FieldCount -eq 1){
+  $planText=if($planReader.GetDataTypeName(0) -eq 'xml'){$planReader.GetSqlXml(0).Value}else{[string]$planReader.GetValue(0)}
+  $planXml=$null;try{$planXml=[xml]$planText}catch{}
+  if($planXml -and $planXml.DocumentElement.LocalName -eq 'ShowPlanXML' -and $planXml.DocumentElement.NamespaceURI -eq 'http://schemas.microsoft.com/sqlserver/2004/07/showplan'){
+   [IO.File]::WriteAllText((Join-Path $PrivateRoot 'default-query-actual-plan.sqlplan'),$planText,[Text.UTF8Encoding]::new($false));$planCaptured=$true
+  }
+ }}}while($planReader.NextResult())
  $planReader.Close();$timer.Stop();$planCommand.Dispose()
  if(-not $planCaptured){throw 'Actual plan was not captured'}
  $receipt=@{status='VIEW_LOGIN_VERIFIED';server='WIN-S1IBJB84OOO';database='QuanLyDuAnTrungTamDuLieuDatDai';viewSha256=$ExpectedViewSha;officialCount=$count;directTableDenials=$denials;otherUserDbMappings=$otherMappings;sourceTableSchemaUnchanged=$true;businessDmlExecuted=$false;actualPlanCaptured=$planCaptured;defaultPlanWallMs=$timer.Elapsed.TotalMilliseconds;utc=[DateTimeOffset]::UtcNow.ToString('O');approvalReference='Owner attachment ffd9e929-bbee-49e5-8d86-297e4ec9eefe / 2026-11-04'}
