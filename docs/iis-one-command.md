@@ -1,6 +1,6 @@
 # Một file .env, một lệnh Publish
 
-**Developer:** chuẩn bị `scripts/ttdl.env.example` bằng hai giá trị private hiện hành: connection string có app password và `Runtime__RolePassword`. Physical SQL và ngoại lệ TLS UAT đã xác nhận có sẵn trong mẫu. Không tạo secret mới, không chỉnh `.env` Dev. Giao file hoàn chỉnh riêng; người vận hành không phải sửa các biến kỹ thuật.
+**Developer:** chuẩn bị `scripts/ttdl.env.example` bằng credential hiện hành của hai connection string (`ConnectionStrings__Portal`, `ConnectionStrings__GiayHuyReadOnly`) và `Runtime__RolePassword`. Giữ hai khóa phê duyệt `GiayHuy__PublicationScope`, `GiayHuy__LanUatTlsException` trong mẫu. Physical SQL và ngoại lệ TLS chỉ áp dụng UAT đã xác nhận; không dùng sa, không tạo secret mới, không chỉnh `.env` Dev. Giao file hoàn chỉnh riêng; người vận hành không phải tạo lại SQL/schema/login/role. Hướng dẫn ngắn: [TTDL-GITHUB-IIS-HANDOFF.md](TTDL-GITHUB-IIS-HANDOFF.md).
 
 **Người build:** đặt file thành `.env` ở gốc clone, chạy:
 

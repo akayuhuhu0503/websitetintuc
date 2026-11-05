@@ -1,5 +1,4 @@
 @inject LandPortal.Web.Services.PublicSiteService Sites
-@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @inject LandPortal.Infrastructure.PublicUrlPolicy PublicUrls
 @inject LandPortal.Web.Services.PublicTraffic Traffic
 @{ var site = await Sites.GetAsync(); var englishName=LandPortal.Infrastructure.SitePresentation.EnglishName(site?.Revision.EnglishName); var canonical=PublicUrls.Absolute(ViewData["CanonicalPath"] as string ?? Context.Request.Path.Value ?? "/");var publicPage=site?.IsPreview != true && !Context.Request.Path.StartsWithSegments("/admin") && !Context.Request.Path.StartsWithSegments("/tuong-tac") && !Context.Request.Path.StartsWithSegments("/tra-cuu-ho-so"); }
@@ -8,6 +7,7 @@
 @{var adminPage=Context.Request.Path.StartsWithSegments("/admin");var organization=site?.Revision.OrganizationName??"Cục Quản lý đất đai";var footerLinks=site?.Menus.Where(x=>x.Position=="footer"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();var agencyLinks=site?.Menus.Where(x=>x.Position=="links"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();}
 @functions {
     private static bool KnownText(string? value)=>!string.IsNullOrWhiteSpace(value)&&!System.Text.RegularExpressions.Regex.IsMatch(value,@"chưa|chờ xác|cần xác|REPLACE|UNALLOCATED|example\.|đang cập nhật",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static bool DeploymentCopy(string? value)=>!string.IsNullOrWhiteSpace(value)&&System.Text.RegularExpressions.Regex.IsMatch(value,@"bản thử nghiệm|bản chạy thử|dành cho BA|phục vụ kiểm tra|chưa phải website vận hành chính thức|môi trường phát triển|LAN_DEMO",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static bool FooterLink(LandPortal.Web.Services.SiteNavigationItem item)=>KnownText(item.Label)&&!string.IsNullOrWhiteSpace(item.Url)&&item.Url!="#"&&!item.Url.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)&&(item.Url!="/"||item.Label.Equals("Trang chủ",StringComparison.OrdinalIgnoreCase));
 }
 <!DOCTYPE html>
@@ -16,7 +16,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
-    <meta name="description" content="@(ViewData["Description"] ?? site?.Revision.SeoDescription ?? "Cổng thông tin Cục Quản lý đất đai — bản chạy thử tại môi trường phát triển.")" />
+    <meta name="description" content="@(ViewData["Description"] ?? (DeploymentCopy(site?.Revision.SeoDescription) || !KnownText(site?.Revision.SeoDescription) ? "Thông tin, chính sách và văn bản về quản lý đất đai." : site!.Revision.SeoDescription))" />
     <title>@ViewData["Title"] — Cục Quản lý đất đai | @englishName</title>
     <meta name="application-name" content="@englishName" />
     @if(publicPage) {
@@ -54,7 +54,6 @@
 </header>
 @if (site != null) { foreach (var banner in site.Banners.Where(x => x.Position == "header")) { <div class="container"><a class="site-banner" href="@banner.Url" target="@(banner.NewWindow ? "_blank" : null)" rel="@(banner.NewWindow ? "noopener noreferrer" : null)"><img src="@banner.ImageUrl" alt="@banner.Alt" /></a></div> } }
 @await Component.InvokeAsync("PortalNavigation")
-<div class="container environment-note"><span class="status-dot" aria-hidden="true"></span> Bản thử nghiệm @(Configuration["Deployment:Profile"]=="LAN_DEMO"?"LAN":"") · Phục vụ kiểm tra, chưa phải website vận hành chính thức</div>
 <main id="main-content" class="container main-content" tabindex="-1">
     @RenderBody()
 </main>
@@ -66,14 +65,14 @@
             @if(KnownText(site.Revision.ContactPhone)){<p>Điện thoại: @site.Revision.ContactPhone</p>}
             @if(KnownText(site.Revision.ContactHotline)){<p>Đường dây nóng: @site.Revision.ContactHotline</p>}
             @if(KnownText(site.Revision.ContactEmail)){<p>Email: @site.Revision.ContactEmail</p>}
-        </address>@if(KnownText(site.Revision.FooterText)){<p class="footer-note">@site.Revision.FooterText</p>}}
+        </address><p class="footer-note">@(KnownText(site.Revision.FooterText) && !DeploymentCopy(site.Revision.FooterText) ? site.Revision.FooterText : "Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử Cục Quản lý đất đai.")</p>}
         </div>
         @if(footerLinks.Length>0){<nav class="footer-navigation" aria-label="Thông tin và tra cứu"><h3>Thông tin &amp; tra cứu</h3>@foreach(var item in footerLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label</a>}</nav>}
         @if(agencyLinks.Length>0){<nav class="footer-navigation" aria-label="Liên kết cơ quan"><h3>Liên kết cơ quan</h3>@foreach(var item in agencyLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label <span aria-hidden="true">↗</span></a>}</nav>}
     </div>
     @if(site is not null&&(KnownText(site.Revision.SupervisingAgency)||KnownText(site.Revision.ResponsiblePerson)||KnownText(site.Revision.LicenseNumber))){<div class="container footer-legal">@if(KnownText(site.Revision.SupervisingAgency)){<p>Cơ quan chủ quản: @site.Revision.SupervisingAgency</p>}@if(KnownText(site.Revision.ResponsiblePerson)){<p>Người chịu trách nhiệm chính: @site.Revision.ResponsiblePerson</p>}@if(KnownText(site.Revision.LicenseNumber)){<p>Số giấy phép: @site.Revision.LicenseNumber</p>}</div>}
     @if(traffic is not null){<details class="container public-traffic"><summary>Thống kê truy cập <span>Hôm nay: @traffic.Today · Tổng: @traffic.Total</span></summary><p>Đang truy cập (5 phút): @traffic.Active · Tháng này: @traffic.Month</p><small>Số phiên truy cập từ khi hệ thống bắt đầu ghi nhận, không phải số người duy nhất. Phiên hết hạn sau 20 phút không hoạt động. Không thu địa chỉ IP, tài khoản hay email; dùng cookie ngẫu nhiên. Cập nhật @traffic.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm:ss").</small></details>}
-    <div class="footer-bottom"><div class="container"><span>© @DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Year @organization</span><span>Bản thử nghiệm @(Configuration["Deployment:Profile"]=="LAN_DEMO"?"LAN":"") · Chưa phải website vận hành chính thức</span></div></div>
+    <div class="footer-bottom"><div class="container"><span>© @DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Year @organization</span></div></div>
 </footer>
 <script src="~/js/site.js" asp-append-version="true" defer></script>
 @await RenderSectionAsync("Scripts", required: false)

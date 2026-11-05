@@ -1,13 +1,14 @@
 ﻿[CmdletBinding()]
 param([switch]$Replace,
  [string]$EnvFile,
- [ValidateSet('Transfer','Local')][string]$PrivateMode='Transfer')
+ [ValidateSet('Transfer','Local')][string]$PrivateMode='Transfer',
+ [ValidatePattern('^TTDL-IIS(?:-[A-Za-z0-9][A-Za-z0-9-]{0,63})?$')][string]$OutputName='TTDL-IIS')
 # Build only: parses private .env as data; never sources it or starts an application/SQL tool.
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 $repo=Split-Path -Parent $PSScriptRoot
 $base=[IO.Path]::GetFullPath((Join-Path $repo '.local/publish'))
-$output=Join-Path $base 'TTDL-IIS';$staging=Join-Path $base 'TTDL-IIS-building';$previous=Join-Path $base 'TTDL-IIS.previous'
+$output=Join-Path $base $OutputName;$staging=Join-Path $base ($OutputName+'-building');$previous=Join-Path $base ($OutputName+'.previous')
 foreach($path in @($base,$output,$staging,$previous)){
  for($node=$path;$node;$node=[IO.Path]::GetDirectoryName($node)){
   if((Test-Path -LiteralPath $node)-and ((Get-Item -LiteralPath $node).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Reparse publish path refused'}
@@ -74,9 +75,11 @@ try{
   Invoke-BuildCommand $npm @('run','build')
  }finally{Pop-Location}
  # Reuse the existing publisher, but do not generate/run schema or application code.
- & (Join-Path $PSScriptRoot 'package-uat.ps1') -RunId 'TTDL-IIS-building' -SkipSchemaGeneration
+ & (Join-Path $PSScriptRoot 'package-uat.ps1') -RunId ($OutputName+'-building') -SkipSchemaGeneration -AllowAdditionalPackage:($OutputName -cne 'TTDL-IIS')
  if(-not(Test-Path -LiteralPath (Join-Path $staging 'manifest.json'))){throw 'Publisher did not complete'}
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'START.md')
+ Copy-Item -LiteralPath (Join-Path $repo 'docs/TTDL-GITHUB-IIS-HANDOFF.md') -Destination (Join-Path $staging 'TTDL-GITHUB-IIS-HANDOFF.md')
+ Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'iis-one-command.md')
  $config=Join-Path $staging 'web/web.config'
  [xml]$xml=Get-Content -LiteralPath $config -Raw -Encoding UTF8
  if((Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash -cne $envSha){throw 'Input .env changed during build; configuration not released'}
@@ -91,6 +94,13 @@ try{
  # No private JSON or private-input digest is copied into the public package.
  $required=@('web/Web.dll','web/Web.runtimeconfig.json','web/web.config','web/wwwroot/css/site.css','web/wwwroot/vendor/jodit/jodit.min.js','worker/Worker.dll','worker/Worker.runtimeconfig.json','tools/MigrationCli.dll','tools/uat-data/UatDataHandoff.dll','ops/uat-runtime.ps1','ops/uat-data.ps1','ops/prepare-iis-config.ps1','ops/configure-iis-uat.ps1','ops/iis-approval.example.json','ops/uat-config.example.json','START.md')
  foreach($relative in $required){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing publish output: '+$relative)}}
+ foreach($relative in @('web/wwwroot/css/font-faces.css','web/wwwroot/css/typography.css','web/wwwroot/css/giay-huy-lookup.css','web/wwwroot/js/giay-huy-lookup.js','web/wwwroot/fonts/roboto-OFL.txt','web/wwwroot/fonts/merriweather-OFL.txt','web/wwwroot/fonts/sources.json','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing current handoff asset: '+$relative)}}
+ $fonts=Get-Content -LiteralPath (Join-Path $repo 'src/Web/wwwroot/fonts/sources.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ foreach($font in $fonts.files){
+  if($font.file -cnotmatch '^(roboto|merriweather)-(latin|latin-ext|vietnamese)\.woff2$'){throw 'Unexpected font inventory path'}
+  $fontPath=Join-Path $staging ('web/wwwroot/fonts/'+$font.file)
+  if(-not(Test-Path -LiteralPath $fontPath)-or (Get-Item -LiteralPath $fontPath).Length -ne $font.bytes -or (Get-FileHash -LiteralPath $fontPath).Hash -ine $font.sha256){throw 'Published font byte/hash mismatch'}
+ }
  $secrets=@([string]$inputSettings.Settings.Runtime.RolePassword,[string]$inputSettings.Settings.Mail.Password)
  $sqlValues=New-Object System.Data.Common.DbConnectionStringBuilder
  $sqlValues.set_ConnectionString([string]$inputSettings.Settings.ConnectionStrings.Portal)
@@ -112,8 +122,8 @@ try{
   @{path=$f.FullName.Substring($staging.Length+1).Replace('\','/');bytes=$f.Length;sha256=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
  }})
  $encoding=[Text.UTF8Encoding]::new($false)
- $records+=@{path='START.md';bytes=(Get-Item -LiteralPath (Join-Path $staging 'START.md')).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging 'START.md') -Algorithm SHA256).Hash.ToLowerInvariant()}
- $manifest=@{schema=1;runId='TTDL-IIS';utc=[DateTimeOffset]::UtcNow.ToString('O');status='PUBLISHED_CONFIG_PREPARED_NOT_DEPLOYED';privateMode=$PrivateMode;environment='Staging';schemaIncluded=$false;sqlExecuted=$false;servicesInstalled=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');files=$records;productionReady=$false}
+ foreach($name in @('START.md','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')){$records+=@{path=$name;bytes=(Get-Item -LiteralPath (Join-Path $staging $name)).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging $name) -Algorithm SHA256).Hash.ToLowerInvariant()}}
+ $manifest=@{schema=1;runId=$OutputName;utc=[DateTimeOffset]::UtcNow.ToString('O');status='PUBLISHED_CONFIG_PREPARED_NOT_DEPLOYED';privateMode=$PrivateMode;environment='Staging';schemaIncluded=$false;sqlExecuted=$false;servicesInstalled=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');files=$records;productionReady=$false}
  [IO.File]::WriteAllText((Join-Path $staging 'manifest.json'),($manifest|ConvertTo-Json -Depth 8),$encoding)
  [IO.File]::WriteAllText((Join-Path $staging 'build-only.json'),(@{kind='TTDL-IIS-BUILD-ONLY';sealed=$false;manifestSha256=(Get-FileHash -LiteralPath (Join-Path $staging 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()}|ConvertTo-Json),$encoding)
  if(Test-Path -LiteralPath $output){Move-Item -LiteralPath $output -Destination $previous}

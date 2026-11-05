@@ -24,7 +24,7 @@ foreach($project in @('Web','Worker','MigrationCli','UatDataHandoff')){
  $folder=switch($project){'Web'{'web'}'Worker'{'worker'}'MigrationCli'{'tools'}'UatDataHandoff'{'tools/uat-data'}}
  $projectFile=if($project -eq 'UatDataHandoff'){'tools/UatDataHandoff/UatDataHandoff.csproj'}else{'src/'+$project+'/'+$project+'.csproj'}
  $saved=$ErrorActionPreference;try{$ErrorActionPreference='Continue';
- $publishArgs=@('publish',(Join-Path $script:ProjectRoot $projectFile),'-c','Release','-p:RestoreLockedMode=true','-p:DebugType=None','-p:DebugSymbols=false','-p:IisHandoffPublish=true','--artifacts-path',(Join-Path $script:ProjectRoot '.local/build/iis-release'),'--output',($destination+'/'+$folder))
+ $publishArgs=@('publish',(Join-Path $script:ProjectRoot $projectFile),'-c','Release','-p:RestoreLockedMode=true','-p:DebugType=None','-p:DebugSymbols=false','-p:IisHandoffPublish=true','-p:LandPortalLanSchema15=false','--artifacts-path',(Join-Path $script:ProjectRoot '.local/build/iis-release'),'--output',($destination+'/'+$folder))
  if(Get-Command rtk -ErrorAction SilentlyContinue){& rtk proxy $script:DotnetPath @publishArgs *> ($destination+'/publish-'+$project+'.log')}else{& $script:DotnetPath @publishArgs *> ($destination+'/publish-'+$project+'.log')};$code=$LASTEXITCODE}finally{$ErrorActionPreference=$saved}
  if($code){throw ('Publish failed: '+$project)}
 }

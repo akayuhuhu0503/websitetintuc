@@ -55,6 +55,12 @@ function Assert-IisPublishConfiguration($Settings) {
  foreach($key in @($sql.Keys)){if($key -iin @('Password','Pwd') -and [string]$sql[$key] -ceq $secret){throw 'SQL login and application role secrets must differ'}}
  if([string]$Settings.Media.AllowUnscannedDevelopmentUploads -ine 'false'){throw 'Unscanned media bypass forbidden'}
  if($Settings.Mail.Transport -cne 'Disabled' -or [string]$Settings.Mail.DeliveryEnabled -ine 'false'){throw 'This offline handoff keeps SMTP Disabled'}
+ if(-not [string]::IsNullOrWhiteSpace([string]$Settings.ConnectionStrings.GiayHuyReadOnly)){
+  try{$source=New-Object System.Data.SqlClient.SqlConnectionStringBuilder ([string]$Settings.ConnectionStrings.GiayHuyReadOnly)}catch{throw 'Invalid private source SQL syntax; values withheld'}
+  if($Settings.Deployment.Profile -cne 'UAT' -or $source.DataSource -cne '45.120.229.43,1433' -or $source.InitialCatalog -cne 'QuanLyDuAnTrungTamDuLieuDatDai' -or $source.UserID -cne 'landportal_giayhuy_reader' -or $source.IntegratedSecurity -or -not $source.Encrypt -or [string]::IsNullOrEmpty($source.Password) -or $source.AttachDBFilename -or $source.PersistSecurityInfo){throw 'Source connection must use the approved UAT View-only reader; values withheld'}
+  if($Settings.GiayHuy.PublicationScope -cne 'OfficialConfirmedEightFields-OwnerApproved-20261104' -or ($source.TrustServerCertificate -and $Settings.GiayHuy.LanUatTlsException -cne 'OwnerApproved-20261104')){throw 'Source publication/TLS approval missing or outside UAT'}
+  if($source.Password -ceq $secret){throw 'Source login and runtime role secrets must differ'}
+ }
  # Target allocation/HTTPS/storage/scanner/video authority is checked at
  # activation/Preflight, never fabricated to make Publish succeed.
 }

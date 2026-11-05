@@ -71,3 +71,11 @@
  .admin-body .interaction-panel h1{font-size:22px}
  .admin-body .interaction-inboxes>a{flex:1 1 140px}
 }
+.vietnamese-date-control{display:flex;align-items:center;position:relative;width:100%;min-width:0;gap:6px}
+.vietnamese-date-control>input[data-localized-date-input]{flex:1;min-width:0;width:100%;margin-bottom:0}
+.vietnamese-date-control>.vietnamese-date-picker{position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none;bottom:0;left:0}
+.vietnamese-date-control>.vietnamese-date-button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;min-height:40px;padding:8px;border:1px solid #ccdbe5;border-radius:8px;background:#f5faf9;color:#006958;cursor:pointer}
+.vietnamese-date-control>.vietnamese-date-button[hidden]{display:none}
+.vietnamese-date-control>.vietnamese-date-button:disabled{opacity:.5;cursor:default}
+.vietnamese-date-control>.vietnamese-date-button:focus-visible{outline:2px solid #007c68;outline-offset:2px}
+.portal-shell>.environment-note{display:none}
