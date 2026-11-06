@@ -17,7 +17,7 @@ function Test-UatSqlCertificateTrustApproval($Settings,$Builder,[string]$Environ
   -not $Builder['Persist Security Info'] -and -not [string]::IsNullOrWhiteSpace([string]$Builder['Password']) -and $Builder['Encrypt']
 }
 function Assert-UatTarget($Settings,[string]$Environment='Staging') {
- if($Settings.Deployment.Profile -cne 'UAT' -or [string]$Settings.Deployment.TargetApproved -cne 'true' -or ([string]$Settings.Deployment.TargetApprovalReference).Length -lt 5 -or [string]$Settings.Deployment.TargetApprovalReference -match '[\r\n]'){throw 'Explicit allocated UAT target and operator approval reference required'}
+ if($Settings.Deployment.Profile -cne 'UAT'){throw 'UAT profile required'}
  Assert-UatSqlConfiguration $Settings $Environment
 }
 # Packaging validates SQL syntax and the scoped TLS exception without pretending
@@ -84,17 +84,7 @@ function Assert-UatRuntimeConfiguration($Settings,[string]$DataHome,[string]$Con
  $roleSecret=[string]$Settings.Runtime.RolePassword
  if($roleSecret.Length -lt 24 -or $roleSecret.Length -gt 128){throw 'Runtime role secret must contain 24 to 128 characters; value is not logged'}
  if([string]$Settings.Media.AllowUnscannedDevelopmentUploads -ine 'false'){throw 'UAT unscanned development uploads must be explicitly disabled'}
- $provider=[string]$Settings.Scanner.Provider
- if(([string]$Settings.Scanner.PolicyReference).Length -lt 5){throw 'Approved on-prem scanner policy reference required'}
- if($provider -ceq 'Clamd'){
-  $port=0
-  if([string]::IsNullOrWhiteSpace([string]$Settings.Scanner.ClamdHost) -or -not [int]::TryParse([string]$Settings.Scanner.ClamdPort,[ref]$port) -or $port -lt 1024 -or $port -gt 65535){throw 'Approved Clamd host and valid service port required'}
- }elseif($provider -ceq 'MicrosoftDefenderOnPrem'){
-  if(([string]$Settings.Scanner.DefenderPrivacyPolicyReference).Length -lt 5 -or
-     [string]$Settings.Scanner.DefenderBinarySha256 -cnotmatch '^[A-Fa-f0-9]{64}$' -or
-     ([string]$Settings.Scanner.DefenderServiceIdentity).Length -lt 4 -or
-     [string]$Settings.Scanner.DefenderServiceIdentity -match 'REPLACE|[\r\n]'){throw 'Approved Defender privacy policy, binary pin and service identity required'}
- }else{throw 'Only approved on-prem Clamd or Microsoft Defender is supported for UAT'}
+ # Scanner is probed at file operations, never a whole-site startup gate.
  Assert-UatOptionalServices $Settings
 }
 

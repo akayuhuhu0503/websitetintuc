@@ -1,3 +1,10 @@
+## 06/11/2026 — IIS runtime không yêu cầu mã phê duyệt thủ công
+
+- Bỏ bốn trường TargetApproved/TargetApprovalReference và Scanner PolicyReference/DefenderPrivacyPolicyReference khỏi runtime, template và pipeline Publish mặc định. Input .env cũ có các khóa này vẫn đọc được nhưng bỏ qua; không tạo trạng thái approved thay thế. Giữ SQL identity/TLS/Application Role, HTTPS, password/ACL và private config hash.
+- Scanner không sẵn sàng không chặn startup; các upload UAT ảnh/tài liệu/hỏi đáp/video/phụ đề bị chặn trước nhận tệp khi health không đạt. Defender vẫn kiểm tra binary Microsoft/pin, engine/definitions, privacy thực tế và byte; không giả Clean hay công khai NotScanned. LAN/Development không đổi policy.
+- Publish PASS; build 0 warning/error. 24 kiểm tra PowerShell và 12 runtime/scanner/target guards PASS. Binary Web khởi động HTTPS Staging qua external private config, bốn trường vắng mặt/scanner chưa cấu hình: /health và /robots.txt HTTP200, không mở SQL. Portable binding/hash kiểm tra offline; IIS dưới tài khoản dịch vụ TTDL thực tế NOT RUN.
+- Hai connection và role secret hiện hành MATCH, secret không nằm trong public output; không SQL write/migration/import/backup, không restart/thay dữ liệu/tài khoản/quyền LAN; không full regression. Quy trình: một .env → một lệnh Publish → copy nguyên gói → IIS trỏ web/; chỉ còn điều kiện kỹ thuật thực tế, không mã phê duyệt bổ sung.
+
 ## 06/11/2026 — IIS một .env, một lệnh Publish
 
 - Mặc định `build-for-iis.ps1` dùng Portable: tự tạo/gắn `private/uat.json` cạnh `web/`; không cần tên máy/site, sửa JSON hoặc chạy script cấu hình bổ sung. Copy nguyên gói qua kênh riêng, IIS chỉ trỏ `web/`. Gói chứa secret, không đưa lên Git/URL công khai.

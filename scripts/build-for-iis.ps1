@@ -153,11 +153,7 @@ try{
  Write-Output 'Web + Worker (5 modes) + tools + ops ready. SQL/IIS/deployment NOT RUN. Read START.md.'
  if($PrivateMode -eq 'Portable'){
   Write-Output 'GÓI CHỨA CẤU HÌNH BÍ MẬT: chuyển cả thư mục Publish bằng kênh riêng; IIS chỉ trỏ web/. Không đưa gói lên Git hoặc URL tải công khai.'
-  $missing=@();$s=$inputSettings.Settings
-  if($s.Deployment.TargetApproved -cne 'true'){$missing+='xác nhận triển khai thực tế'}
-  foreach($pair in @(@('Deployment','TargetApprovalReference'),@('Scanner','PolicyReference'),@('Scanner','DefenderPrivacyPolicyReference'))){$v=[string]$s.($pair[0]).($pair[1]);if($v.Length -lt 5 -or $v -match 'REPLACE|PENDING|FIXTURE'){$missing+=($pair -join '__')}}
-  if($missing.Count){Write-Output ('VẬN HÀNH BLOCKED: Developer cần nhận đủ '+($missing -join '; ')+' trước khi gửi .env hoàn chỉnh; trưởng phòng không phải sửa file.')}
-  Write-Output 'Không cần tên máy/site hoặc script cấu hình bổ sung. Runtime tự tìm private/uat.json và thông tin IIS; thiếu quyền/HTTPS/scanner thật thì giữ đóng và báo503.'
+  Write-Output 'Không cần tên máy/site hoặc script cấu hình bổ sung. Runtime tự tìm private/uat.json và thông tin IIS; thiếu quyền/HTTPS thì báo503; scanner chưa sẵn sàng chỉ chặn upload cần quét.'
  }
  if($PrivateMode -in @('Auto','Local')){
   $gaps=@(Get-IisInputGaps $inputSettings)

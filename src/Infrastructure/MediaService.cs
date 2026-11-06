@@ -73,6 +73,11 @@ public sealed record MediaUploadResult(MediaAsset Asset, bool Reused);
 /// <summary>Stores immutable uploaded originals outside static roots. No network downloader or video path.</summary>
 public sealed class MediaService(PortalDbContext db, StorageOptions storage, MediaUploadOptions options, IConfiguration? configuration=null)
 {
+    public async Task RequireUploadScannerAsync(CancellationToken ct=default)
+    {
+        if(configuration!=null&&UatDeployment.Enabled(configuration)&&!(await InquiryScannerFactory.Create(configuration,"Staging").HealthAsync(ct)).Ready)
+            throw new MediaUploadException("Bộ quét virus chưa sẵn sàng. Vui lòng thử tải tệp sau.",503);
+    }
     private static readonly Dictionary<string, string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png",
@@ -82,6 +87,7 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
     public async Task<MediaUploadResult> UploadAsync(Stream input, string originalName, string declaredMimeType, string userId,
         bool canManageAllMedia, CancellationToken cancellationToken = default, Func<Task>? validateEnvelope = null)
     {
+        await RequireUploadScannerAsync(cancellationToken);
         if (!options.UploadEnabled)
             throw new MediaUploadException("Chưa có máy quét mã độc. Upload chỉ mở khi bật ngoại lệ rõ ràng ở Development trên loopback; production vẫn bị chặn.", 503);
         ValidatePrivateStorageRoot(storage.MediaRoot);
@@ -145,8 +151,10 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
             {
                 if(configuration==null||!UatDeployment.Validate(configuration,"Staging"))throw new MediaUploadException("Thiếu profile UAT được kiểm chứng.",503);
                 var scanner=InquiryScannerFactory.Create(configuration,"Staging",maximum);
+                if(!(await scanner.HealthAsync(cancellationToken)).Ready)throw new MediaUploadException("Bộ quét virus chưa sẵn sàng. Vui lòng thử tải tệp sau.",503);
                 await using var scanning=new FileStream(temporaryPath,FileMode.Open,FileAccess.Read,FileShare.Read);
                 scan=await scanner.ScanAsync(scanning,cancellationToken);scanning.Position=0;
+                if(scan.State==LandPortal.Domain.InquiryScanState.ScanFailed)throw new MediaUploadException("Không thể hoàn tất quét virus. Tệp chưa được tiếp nhận.",503);
                 if(Convert.ToHexStringLower(await SHA256.HashDataAsync(scanning,cancellationToken))!=digest||scan.State==LandPortal.Domain.InquiryScanState.Clean&&(scan.Provider!=configuration["Scanner:Provider"]||scan.EngineVersion is not{Length:>0}))scan=new(LandPortal.Domain.InquiryScanState.ScanFailed,"ScannerProofOrBytesInvalid",null);
                 asset.ScanStatus=scan.State.ToString();asset.IsQuarantined=scan.State!=LandPortal.Domain.InquiryScanState.Clean;asset.ValidationStatus=asset.IsQuarantined?"PendingScan":"Validated";
                 if(validateEnvelope!=null)await validateEnvelope();

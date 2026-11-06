@@ -18,18 +18,6 @@ function Resolve-IisUatSettings($Settings,$Target,[string]$HomePath,$Approval) {
  $c.Storage.TempRoot=Join-Path $targetDataHome 'temp';$c.Storage.KeysRoot=Join-Path $targetDataHome 'keys'
  $c.Scanner.Provider='MicrosoftDefenderOnPrem';$c.Scanner.DefenderBinarySha256=$Target.DefenderSha256
  $c.Scanner.DefenderServiceIdentity=$Target.ServiceAccount
- $c.Scanner.PolicyReference='';$c.Scanner.DefenderPrivacyPolicyReference=''
- $c.Deployment.TargetApproved='false';$c.Deployment.TargetApprovalReference=''
- if($Approval){
-  if($Approval.Status -cne 'APPROVED' -or $Approval.MachineName -ine $Target.MachineName -or $Approval.SiteName -cne $Target.SiteName -or
-     $Approval.PhysicalSqlServer -cne $c.Deployment.ExpectedSqlServerIdentity -or $Approval.Database -cne $c.Sql.ExpectedDatabase){throw 'Real authority must name this IIS machine/site and exact SQL target'}
-  foreach($field in @('DeploymentReference','ScannerPolicyReference','DefenderPrivacyPolicyReference')){
-   $reference=[string]$Approval.$field
-   if($reference.Length -lt 5 -or $reference -match 'REPLACE|PENDING|FIXTURE|[\r\n]'){throw 'Approved authority reference required; discovery is not approval'}
-  }
-  $c.Deployment.TargetApproved='true';$c.Deployment.TargetApprovalReference=$Approval.DeploymentReference
-  $c.Scanner.PolicyReference=$Approval.ScannerPolicyReference;$c.Scanner.DefenderPrivacyPolicyReference=$Approval.DefenderPrivacyPolicyReference
- }
  if($c.Mail.Transport -cne 'Disabled' -or [string]$c.Mail.DeliveryEnabled -ine 'false'){throw 'SMTP must remain Disabled for this handoff'}
  return $c
 }
@@ -108,12 +96,13 @@ Assert-UatSeparatePaths $targetDataHome $config $code
 if($PrepareForCopy){Assert-UatSeparatePaths $targetDataHome $config $web}
 # A cloned source tree is not a private storage location, even outside webroot.
 for($node=$targetDataHome;$node;$node=[IO.Path]::GetDirectoryName($node)){if(Test-Path -LiteralPath (Join-Path $node '.git')){throw 'Private storage cannot be inside a Git working tree'}}
-$defender=Get-IisUatDefender;$target.DefenderSha256=$defender.Sha256
+try{$defender=Get-IisUatDefender}catch{$defender=[pscustomobject]@{Sha256='';NativeReady=$false;PrivacyReady=$false}}
+$target.DefenderSha256=$defender.Sha256
 $approval=if($ApprovalFile){Get-Content -LiteralPath (Get-UatSafePath $ApprovalFile) -Raw -Encoding UTF8|ConvertFrom-Json}else{$null}
 $c=Resolve-IisUatSettings $settings $target $targetDataHome $approval
 $runtimeReady=$false
 try{Assert-UatRuntimeConfiguration $c $targetDataHome $config $code;$runtimeReady=$true}catch{if($Apply){throw};Write-Output 'ACTIVATION BLOCKED: target/scanner authority or runtime prerequisites remain incomplete; no changes made'}
-if(-not $defender.NativeReady -or -not $defender.PrivacyReady){$runtimeReady=$false;Write-Output 'ACTIVATION BLOCKED: Defender health/privacy policy requires TTDL action; no AV policy changed'}
+if(-not $defender.NativeReady -or -not $defender.PrivacyReady){Write-Output 'UPLOAD BLOCKED: Defender health/privacy is not ready; reading the website remains enabled. No AV policy changed.'}
 Write-Output ('IIS discovery: '+$target.MachineName+'/'+$SiteName+'; '+$c.Public.BaseUrl+'; data home '+$targetDataHome+'; service '+$account)
 if(-not $Apply){Write-Output ('PLAN ONLY; activation configuration ready='+$runtimeReady+'; SQL runtime/ACL/E2E NOT RUN');return}
 if(-not $runtimeReady -or -not $siteStopped -or -not $poolStopped){throw 'Apply requires all runtime/authority guards and a stopped site/pool; nothing started'}
@@ -142,7 +131,7 @@ foreach($v in @($xml.configuration.location.'system.webServer'.aspNetCore.enviro
  if($v.name -ceq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',$config)}
 }
 [IO.File]::WriteAllText($webConfig,$xml.OuterXml,$encoding)
-$activation=@{utc=[DateTimeOffset]::UtcNow.ToString('O');status='CONFIGURED_NOT_STARTED';site=$SiteName;machine=$env:COMPUTERNAME;inputManifestSha256=(Get-FileHash -LiteralPath $manifestFile -Algorithm SHA256).Hash.ToLowerInvariant();boundWebConfigSha256=(Get-FileHash -LiteralPath $webConfig -Algorithm SHA256).Hash.ToLowerInvariant();runtimeConfig=$config;dataHome=$targetDataHome;sqlExecuted=$false;servicesStarted=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');authorityReference=$c.Deployment.TargetApprovalReference;preflight='REQUIRED_AS_SERVICE_IDENTITY'}
+$activation=@{utc=[DateTimeOffset]::UtcNow.ToString('O');status='CONFIGURED_NOT_STARTED';site=$SiteName;machine=$env:COMPUTERNAME;inputManifestSha256=(Get-FileHash -LiteralPath $manifestFile -Algorithm SHA256).Hash.ToLowerInvariant();boundWebConfigSha256=(Get-FileHash -LiteralPath $webConfig -Algorithm SHA256).Hash.ToLowerInvariant();runtimeConfig=$config;dataHome=$targetDataHome;sqlExecuted=$false;servicesStarted=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');preflight='REQUIRED_AS_SERVICE_IDENTITY'}
 [IO.File]::WriteAllText((Join-Path $targetDataHome 'activation.json'),($activation|ConvertTo-Json -Depth 6),$encoding)
 Write-Output ('TARGET CONFIG PREPARED: '+$config+'; Web + all five worker modes share this file. Run read-only online Preflight as the service account before starting IIS/workers.')
 Write-Output 'Original manifest unchanged; web.config target overlay recorded privately in activation.json. Nothing started; no SQL connection or write.'

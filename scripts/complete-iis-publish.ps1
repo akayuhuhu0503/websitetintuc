@@ -43,12 +43,9 @@ try{
  $acl=New-Object Security.AccessControl.DirectorySecurity;$acl.SetAccessRuleProtection($true,$false)
  foreach($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User,[Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
  [void][IO.Directory]::CreateDirectory($privateInput,$acl)
- # Approval is transcribed only from explicit operator input, never from discovery.
- $approval=@{Status='APPROVED';MachineName=[string]$inputSettings.Metadata.IIS_MACHINE_NAME;SiteName=[string]$inputSettings.Metadata.IIS_SITE_NAME;PhysicalSqlServer=[string]$inputSettings.Settings.Deployment.ExpectedSqlServerIdentity;Database=[string]$inputSettings.Settings.Sql.ExpectedDatabase;DeploymentReference=[string]$inputSettings.Settings.Deployment.TargetApprovalReference;ScannerPolicyReference=[string]$inputSettings.Settings.Scanner.PolicyReference;DefenderPrivacyPolicyReference=[string]$inputSettings.Settings.Scanner.DefenderPrivacyPolicyReference}
- $json=Join-Path $privateInput 'input.json';$authority=Join-Path $privateInput 'authority.json'
+ $json=Join-Path $privateInput 'input.json'
  [IO.File]::WriteAllText($json,($inputSettings.Settings|ConvertTo-Json -Depth 16),[Text.UTF8Encoding]::new($false))
- [IO.File]::WriteAllText($authority,($approval|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
- & (Join-Path $PSScriptRoot 'configure-iis-uat.ps1') -PublishRoot $code -PrivateConfig $json -SiteName $inputSettings.Metadata.IIS_SITE_NAME -ApprovalFile $authority -DataHome $inputSettings.Metadata.LANDPORTAL_HOME -Apply -PrepareForCopy:$PrepareForCopy
+ & (Join-Path $PSScriptRoot 'configure-iis-uat.ps1') -PublishRoot $code -PrivateConfig $json -SiteName $inputSettings.Metadata.IIS_SITE_NAME -DataHome $inputSettings.Metadata.LANDPORTAL_HOME -Apply -PrepareForCopy:$PrepareForCopy
  Write-Output 'ĐÃ TỰ TẠO VÀ GẮN CẤU HÌNH PRIVATE. Web và 5 Worker dùng chung uat.json. Chưa khởi động IIS/Worker; chạy Preflight bằng tài khoản dịch vụ trước khi mở site.'
 }catch{
  # Never echo a configuration/provider exception, which may contain secret values.

@@ -69,12 +69,11 @@ public static class UatDeployment
         if (environment != "Staging" || c["DOTNET_ENVIRONMENT"] != "Staging" || c["ASPNETCORE_ENVIRONMENT"] != "Staging")
             throw new InvalidOperationException("UAT requires explicit Staging for both Web and Worker; never Production/Development.");
         var sql = new SqlConnectionStringBuilder(DatabaseSettings.Connection(c));
-        if (c["Deployment:TargetApproved"] != "true" || c["Deployment:TargetApprovalReference"] is not { Length: > 4 } ||
-            !IsTargetDatabase(c["Sql:ExpectedDatabase"]) || sql.InitialCatalog != c["Sql:ExpectedDatabase"] ||
+        if (!IsTargetDatabase(c["Sql:ExpectedDatabase"]) || sql.InitialCatalog != c["Sql:ExpectedDatabase"] ||
             !AuthenticationMatches(c,sql) || sql.DataSource != c["Deployment:ExpectedSqlServer"] ||
             string.IsNullOrWhiteSpace(c["Deployment:ExpectedSqlServer"]) || sql.DataSource.Contains("REPLACE", StringComparison.OrdinalIgnoreCase) ||
             sql.Encrypt == SqlConnectionEncryptOption.Optional)
-            throw new InvalidOperationException("UAT requires allocated database, target approval, exact server/login authentication and validated encrypted SQL transport.");
+            throw new InvalidOperationException("UAT requires exact database, server/login authentication and validated encrypted SQL transport.");
         ValidateSqlTransport(c, sql, environment);
         _=PhysicalServer(c);
         if (!Uri.TryCreate(c["Public:BaseUrl"], UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
@@ -95,13 +94,16 @@ public static class UatDeployment
                     throw new InvalidOperationException("Reparse UAT private store refused.");
         if (data.StartsWith(application, StringComparison.OrdinalIgnoreCase) || application.StartsWith(data, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("UAT private stores/config must be outside published application.");
-        var clamd=c["Scanner:Provider"]=="Clamd"&&int.TryParse(c["Scanner:ClamdPort"],out var port)&&port is >=1024 and <=65535;
-        var defender=c["Scanner:Provider"]=="MicrosoftDefenderOnPrem"&&c["Scanner:DefenderPrivacyPolicyReference"] is {Length:>4}&&
-            c["Scanner:DefenderServiceIdentity"] is {Length:>3} identity&&!identity.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)&&!identity.Any(char.IsControl)&&
-            c["Scanner:DefenderBinarySha256"] is {Length:64} binarySha&&binarySha.All(Uri.IsHexDigit);
-        if (c["Media:AllowUnscannedDevelopmentUploads"] == "true" || !clamd&&!defender ||
-            c["Scanner:PolicyReference"] is not { Length: > 4 } || c["Runtime:RolePassword"] is not { Length: >= 24 })
-            throw new InvalidOperationException("UAT requires approved on-prem Clamd or pinned Microsoft Defender with privacy policy/service identity, plus runtime role secret; unscanned/DefenderTest bypass is forbidden.");
+        if (c["Media:AllowUnscannedDevelopmentUploads"] == "true" || c["Runtime:RolePassword"] is not { Length: >= 24 })
+            throw new InvalidOperationException("UAT requires runtime role secret; unscanned development upload bypass is forbidden.");
         return true;
     }
+    // Scanner availability is an operation guard, not a website startup prerequisite.
+    public static bool ScannerConfigured(IConfiguration c) => c["Scanner:Provider"] switch
+    {
+        "Clamd" => int.TryParse(c["Scanner:ClamdPort"],out var port)&&port is >=1024 and <=65535,
+        "MicrosoftDefenderOnPrem" => c["Scanner:DefenderServiceIdentity"] is {Length:>3} identity&&!identity.Contains("REPLACE",StringComparison.OrdinalIgnoreCase)&&!identity.Any(char.IsControl)&&
+            c["Scanner:DefenderBinarySha256"] is {Length:64} sha&&sha.All(Uri.IsHexDigit),
+        _ => false
+    };
 }

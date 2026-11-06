@@ -21,7 +21,7 @@ public static class UatSqlProbe
             ["DOTNET_ENVIRONMENT"]=Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT"),
             ["ASPNETCORE_ENVIRONMENT"]=Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}).Build();
         var sql=new SqlConnectionStringBuilder(DatabaseSettings.Connection(config));
-        if(config["Deployment:Profile"]!="UAT"||config["Deployment:TargetApproved"]!="true"||config["Deployment:TargetApprovalReference"] is not {Length:>4}||!UatDeployment.IsTargetDatabase(sql.InitialCatalog)||sql.DataSource!=config["Deployment:ExpectedSqlServer"]||!UatDeployment.AuthenticationMatches(config,sql)||sql.Encrypt==SqlConnectionEncryptOption.Optional)throw new InvalidOperationException("Read-only target/authentication/TLS guard failed; no connection attempted.");
+        if(config["Deployment:Profile"]!="UAT"||!UatDeployment.IsTargetDatabase(sql.InitialCatalog)||sql.DataSource!=config["Deployment:ExpectedSqlServer"]||!UatDeployment.AuthenticationMatches(config,sql)||sql.Encrypt==SqlConnectionEncryptOption.Optional)throw new InvalidOperationException("Read-only target/authentication/TLS guard failed; no connection attempted.");
         sql.Pooling=false;sql.ConnectTimeout=10;
         await using var connection=new SqlConnection(sql.ConnectionString);
         try

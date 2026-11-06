@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
 
 // Plain WebVTT only: reject active markup/settings rather than silently rewriting immutable bytes.
-public sealed class VideoSubtitleService(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions)
+public sealed class VideoSubtitleService(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions,MediaService? media=null)
 {
     public const int MaximumBytes=1024*1024;
     public static double Validate(byte[] bytes)
@@ -31,6 +31,7 @@ public sealed class VideoSubtitleService(PortalDbContext db,StorageOptions stora
     }
     public async Task<VideoSubtitle> UploadAsync(Guid videoId,string user,string name,Stream input,CancellationToken ct=default)
     {
+        if(media!=null)await media.RequireUploadScannerAsync(ct);
         var video=await db.Set<VideoFile>().AsNoTracking().SingleOrDefaultAsync(x=>x.MediaAssetId==videoId)??throw new MediaUploadException("Không tìm thấy video.",404);
         var uploads=new VideoUploadService(db,storage,options,permissions);var session=await uploads.GetAsync(video.UploadSessionId,user,true,ct);
         if(Path.GetExtension(name).ToLowerInvariant()!=".vtt"||name.Length>160||name.IndexOfAny(['/','\\',':'])>=0)throw new MediaUploadException("Chỉ nhận tệp .vtt.");

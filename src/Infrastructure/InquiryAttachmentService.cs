@@ -83,6 +83,7 @@ public sealed class InquiryAttachmentService(PortalDbContext db,StorageOptions s
     }
     public async Task<InquiryAttachment> UploadAsync(Stream input,string name,string claimedMime,string session,CancellationToken ct=default)
     {
+        await validation.RequireUploadScannerAsync(ct);
         if(!options.Enabled)throw new MediaUploadException("Chưa bật kho tiếp nhận tệp riêng tại môi trường này.",503);
         if(string.IsNullOrWhiteSpace(name)||name.Length>150||name.Any(char.IsControl)||name.Contains('/')||name.Contains('\\')||name.Contains(':')||name.Count(x=>x=='.')!=1)throw new MediaUploadException("Tên tệp không hợp lệ; chỉ tên đơn với một phần mở rộng.");
         var ext=System.IO.Path.GetExtension(name).ToLowerInvariant();var mime=ext switch{".pdf"=>"application/pdf",".jpg" or ".jpeg"=>"image/jpeg",".png"=>"image/png",_=>""};

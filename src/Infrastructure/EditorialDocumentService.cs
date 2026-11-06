@@ -44,6 +44,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
     }
     public async Task<MediaAsset> UploadAsync(Guid contentId, Stream input, string name, string declaredMime, ContentActor actor, CancellationToken ct = default)
     {
+        await media.RequireUploadScannerAsync(ct);
         actor = await rights.GetAsync(actor.UserId);
         var content = await db.Contents.SingleOrDefaultAsync(x => x.Id == contentId, ct);
         if (content == null || content.IsTrashed || !actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();

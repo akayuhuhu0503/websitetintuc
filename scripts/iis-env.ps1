@@ -2,8 +2,6 @@
 function Get-IisInputGaps($InputSettings){
  $gaps=@();$s=$InputSettings.Settings;$m=$InputSettings.Metadata
  foreach($k in @('IIS_SITE_NAME','IIS_MACHINE_NAME')){if([string]::IsNullOrWhiteSpace([string]$m[$k]) -or [string]$m[$k] -match 'REPLACE|PENDING|FIXTURE|[\r\n]'){$gaps+=$k}}
- if($s.Deployment.TargetApproved -cne 'true'){$gaps+='Deployment__TargetApproved=true (chỉ khi đã được duyệt)'}
- foreach($pair in @(@('Deployment','TargetApprovalReference'),@('Scanner','PolicyReference'),@('Scanner','DefenderPrivacyPolicyReference'))){$v=[string]$s.($pair[0]).($pair[1]);if($v.Length -lt 5 -or $v -match 'REPLACE|PENDING|FIXTURE|[\r\n]'){$gaps+=($pair -join '__')}}
  return $gaps
 }
 function Read-IisEnvironment([string]$Path,[switch]$ForPublish) {
@@ -19,6 +17,7 @@ function Read-IisEnvironment([string]$Path,[switch]$ForPublish) {
   if(-not $seen.Add($key)){throw ('Trường .env bị lặp: '+$key)}
   if($value.Length -ge 2 -and (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))){$value=$value.Substring(1,$value.Length-2)}
   if($key -cin @('LANDPORTAL_HOME','DOTNET_ENVIRONMENT','ASPNETCORE_ENVIRONMENT','IIS_SITE_NAME','IIS_MACHINE_NAME')){$meta[$key]=$value;continue}
+  if($key -cin @('Deployment__TargetApproved','Deployment__TargetApprovalReference','Scanner__PolicyReference','Scanner__DefenderPrivacyPolicyReference')){continue} # Obsolete keys in existing private inputs are ignored.
   if(-not $allowed.Contains($key)){throw ('Trường không được hỗ trợ trong .env IIS: '+$key+'. Dùng scripts/ttdl.env.example; không dùng .env Development.')}
   $parts=$key -split '__';$settings.($parts[0]).($parts[1])=$value
  }

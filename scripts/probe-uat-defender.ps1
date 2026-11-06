@@ -16,7 +16,7 @@ try{
  $authorized=$false
  if($Settings){
   $c=Get-Content -LiteralPath $Settings -Raw -Encoding UTF8|ConvertFrom-Json;Assert-UatTarget $c
-  $authorized=$c.Scanner.Provider -ceq 'MicrosoftDefenderOnPrem' -and ([string]$c.Scanner.PolicyReference).Length -gt 4 -and ([string]$c.Scanner.DefenderPrivacyPolicyReference).Length -gt 4 -and $c.Scanner.DefenderServiceIdentity -ieq $identity -and $c.Scanner.DefenderBinarySha256 -ieq $sha
+  $authorized=$c.Scanner.Provider -ceq 'MicrosoftDefenderOnPrem' -and $c.Scanner.DefenderServiceIdentity -ieq $identity -and $c.Scanner.DefenderBinarySha256 -ieq $sha
  }
  @{status=if(-not $Settings){'INVENTORY_ONLY_NOT_RUNTIME_ACCEPTANCE'}elseif($nativeReady -and $privacyReady -and $authorized){'LOCAL_GUARDS_READY_TARGET_ENGINE_E2E_STILL_REQUIRED'}else{'BLOCKED'};binarySha256=$sha;engine=$status.AMEngineVersion;definitions=$status.AntivirusSignatureVersion;definitionsUpdatedUtc=$status.AntivirusSignatureLastUpdated.ToUniversalTime().ToString('O');signedMicrosoft=($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'Microsoft');privacyReady=$privacyReady;policyRequires='SubmitSamplesConsent=2 and MAPSReporting=0, configured externally by TTDL authority';serviceIdentity=$identity;configuredIdentityAndPinMatch=$authorized;scannedFiles=0;settingsChanged=$false}|ConvertTo-Json
  if($Settings -and (-not $nativeReady -or -not $privacyReady -or -not $authorized)){exit 2}

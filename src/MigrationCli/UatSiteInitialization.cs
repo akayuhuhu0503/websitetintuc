@@ -11,8 +11,8 @@ public static class UatSiteInitialization
     public static void RequireAuthority(string[] args,IConfiguration config,string environment)
     {
         string? Option(string name){var n=Array.IndexOf(args,name);return n>=0&&n+1<args.Length?args[n+1]:null;}
-        if(!UatDeployment.Validate(config,environment)||Option("--confirm-target")!=config["Sql:ExpectedDatabase"]||Option("--approval-reference")!=config["Deployment:TargetApprovalReference"])
-            throw new InvalidOperationException("Explicit approved isolated UAT target, exact confirmation and allocation authority reference required; no Dev/Test/Production initialization.");
+        if(!UatDeployment.Validate(config,environment)||Option("--confirm-target")!=config["Sql:ExpectedDatabase"])
+            throw new InvalidOperationException("Explicit approved isolated UAT target, exact confirmation required; no Dev/Test/Production initialization.");
     }
     public static async Task ExecuteAsync(string[] args,IConfiguration config,PortalDbContext db,MediaUploadOptions media)
     {

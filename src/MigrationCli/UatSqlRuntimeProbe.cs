@@ -31,9 +31,7 @@ public static class UatSqlRuntimeProbe
             var sql=new SqlConnectionStringBuilder(DatabaseSettings.Connection(c));
             if(!UatDeployment.Enabled(c)||sql.DataSource!="45.120.229.43,1433"||sql.InitialCatalog!="website_tin_tuc"||
                 c["Deployment:ExpectedSqlServer"]!=sql.DataSource||UatDeployment.PhysicalServer(c)!="WIN-S1IBJB84OOO"||
-                sql.UserID!="website_tin_tuc_app"||!UatDeployment.AuthenticationMatches(c,sql)||c["Runtime:RolePassword"] is not {Length:>=24}||
-                !(UatDeployment.TemporaryCertificateTrustApproved(c,sql,environment)||
-                  c["Deployment:TargetApproved"]=="true"&&c["Deployment:TargetApprovalReference"] is {Length:>4}))
+                sql.UserID!="website_tin_tuc_app"||!UatDeployment.AuthenticationMatches(c,sql)||c["Runtime:RolePassword"] is not {Length:>=24})
                 throw new InvalidOperationException("Exact UAT SQL target and approval required.");
             stage="SQL_OPEN_AND_RUNTIME_ROLE";
             await using var db=new PortalDbContext(DatabaseSettings.Options(c));

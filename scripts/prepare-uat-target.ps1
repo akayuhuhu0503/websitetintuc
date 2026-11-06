@@ -18,7 +18,7 @@ foreach($relative in @('ops/uat-config.example.json','ops/schema-idempotent.sql'
  if($records.Count -ne 1 -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $records[0].sha256){throw 'Package template hash differs; no target packet created'}
 }
 $c=Get-Content -LiteralPath (Join-Path $code 'ops/uat-config.example.json') -Raw -Encoding UTF8|ConvertFrom-Json
-$c.Deployment.TargetApproved='true';$c.Deployment.TargetApprovalReference=$t.ApprovalReference;$c.Deployment.ExpectedSqlServer=$t.SqlServer;$c.Deployment.ExpectedHost=$t.HostName
+$c.Deployment.ExpectedSqlServer=$t.SqlServer;$c.Deployment.ExpectedHost=$t.HostName
 $c.Sql.ExpectedDatabase=$t.Database
 $sql=New-Object System.Data.SqlClient.SqlConnectionStringBuilder
 $mode=if($t.PSObject.Properties.Name -contains 'SqlAuthentication'){[string]$t.SqlAuthentication}else{'Windows'}
@@ -37,13 +37,12 @@ $c.ConnectionStrings.Portal=$sql.ConnectionString;$c.Public.BaseUrl='https://'+$
 $c.Storage.MediaRoot=Join-Path $homePath 'media';$c.Storage.SnapshotRoot=Join-Path $homePath 'snapshots';$c.Storage.TempRoot=Join-Path $homePath 'temp';$c.Storage.KeysRoot=Join-Path $homePath 'keys'
 $c.Scanner.Provider=if($t.PSObject.Properties.Name -contains 'ScannerProvider'){[string]$t.ScannerProvider}else{'Clamd'}
 if($c.Scanner.Provider -eq 'MicrosoftDefenderOnPrem'){
- if(([string]$t.DefenderPrivacyPolicyReference).Length -lt 5 -or [string]$t.DefenderBinarySha256 -notmatch '^[A-Fa-f0-9]{64}$' -or ([string]$t.ServiceAccount).Length -lt 4 -or [string]$t.ServiceAccount -match 'REPLACE|[\r\n]'){throw 'Approved Defender privacy policy, binary SHA256 and actual service identity required before preparing target files'}
- $c.Scanner.DefenderPrivacyPolicyReference=[string]$t.DefenderPrivacyPolicyReference
+ if([string]$t.DefenderBinarySha256 -notmatch '^[A-Fa-f0-9]{64}$' -or ([string]$t.ServiceAccount).Length -lt 4 -or [string]$t.ServiceAccount -match 'REPLACE|[\r\n]'){throw 'Approved Defender privacy policy, binary SHA256 and actual service identity required before preparing target files'}
  $c.Scanner.DefenderBinarySha256=[string]$t.DefenderBinarySha256
  $c.Scanner.DefenderServiceIdentity=[string]$t.ServiceAccount
 }
 elseif($c.Scanner.Provider -cne 'Clamd'){throw 'Unsupported UAT scanner provider'}
-$c.Scanner.ClamdHost=$t.ScannerHost;$c.Scanner.ClamdPort=[string]$t.ScannerPort;$c.Scanner.PolicyReference=$t.ScannerPolicyReference
+$c.Scanner.ClamdHost=$t.ScannerHost;$c.Scanner.ClamdPort=[string]$t.ScannerPort
 $c.Mail.Host=$t.SmtpHost;$c.Mail.Port=[string]$t.SmtpPort;$c.Mail.From=$t.SmtpFrom
 # Runtime role secret, mail credentials and bootstrap credentials remain absent.
 # SQL-password packet intentionally has no secret and cannot start runtime yet.

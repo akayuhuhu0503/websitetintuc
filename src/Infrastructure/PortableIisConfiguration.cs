@@ -63,9 +63,10 @@ public static class PortableIisConfiguration
             var platform=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"Microsoft","Windows Defender","Platform");
             var binary=Directory.Exists(platform)?Directory.GetDirectories(platform).OrderDescending(StringComparer.Ordinal).Select(d=>Path.Combine(d,"MpCmdRun.exe")).FirstOrDefault(File.Exists):null;
             binary??=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Windows Defender","MpCmdRun.exe");
-            if(File.Exists(binary)){using var stream=File.OpenRead(binary);config["Scanner:DefenderBinarySha256"]=Convert.ToHexStringLower(SHA256.HashData(stream));}
+            try{if(File.Exists(binary)){using var stream=File.OpenRead(binary);config["Scanner:DefenderBinarySha256"]=Convert.ToHexStringLower(SHA256.HashData(stream));}}
+            catch(Exception e) when(e is IOException or UnauthorizedAccessException){/* Upload scanner stays unavailable; reading the site remains enabled. */}
         }
-        // Actual authority and all original target/scanner/TLS guards remain mandatory.
+        // Technical target/TLS guards remain mandatory; unavailable scanning blocks file operations.
         UatDeployment.Validate(config,"Staging");
         foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})Directory.CreateDirectory(config["Storage:"+name]!);
         return config;

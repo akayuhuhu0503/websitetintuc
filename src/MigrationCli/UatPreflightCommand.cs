@@ -48,7 +48,7 @@ public static class UatPreflightCommand
         {
             status = args.Contains("--online") ? "READ_ONLY_SQL_PREFLIGHT_PASS" : "OFFLINE_CONFIG_PASS",
             database = config["Sql:ExpectedDatabase"], server = config["Deployment:ExpectedSqlServer"],
-            approvalReference = config["Deployment:TargetApprovalReference"], sql = sqlStatus,
+            sql = sqlStatus,
             scanner = "NOT RUN: use InquiryScan/Documents/Video --health on target", smtp = "NOT RUN: approved relay acceptance required",
             iisHttps = "NOT RUN", authentication = "Password + configured CAPTCHA; ATTT acceptance pending", writes = 0, productionReady = false
         };

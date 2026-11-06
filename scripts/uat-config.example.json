@@ -2,8 +2,6 @@
   "Deployment": {
     "Profile": "UAT",
     "OperatingOwner": "Trung tâm Dữ liệu và Thông tin đất đai (TTDL)",
-    "TargetApproved": "false",
-    "TargetApprovalReference": "",
     "SqlTlsExceptionApproved": "false",
     "SqlTlsExceptionReference": "",
     "ExpectedSqlServer": "REPLACE_WITH_APPROVED_SQL_INSTANCE",
@@ -43,9 +41,7 @@
     "Provider": "MicrosoftDefenderOnPrem",
     "ClamdHost": "127.0.0.1",
     "ClamdPort": "3310",
-    "PolicyReference": "",
     "TimeoutSeconds": "120",
-    "DefenderPrivacyPolicyReference": "",
     "DefenderBinarySha256": "",
     "DefenderServiceIdentity": "REPLACE_APPROVED_SERVICE_IDENTITY"
   },

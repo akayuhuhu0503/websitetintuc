@@ -17,8 +17,8 @@ if($IisPublishOnly){
  function SaveInput([string[]]$Lines){[IO.File]::WriteAllLines($envFile,$Lines,[Text.UTF8Encoding]::new($false))}
  SaveInput $base
  $inputSettings=Read-IisEnvironment $envFile -ForPublish;$c=$inputSettings.Settings
- Check 'Minimal env accepted without hostname storage scanner approval' (-not $c.Public.BaseUrl -and -not $c.Storage.MediaRoot -and -not $c.Scanner.PolicyReference -and -not $inputSettings.Metadata.LANDPORTAL_HOME)
- Check 'SQL identifiers inferred from connection, UAT defaults safe' ($c.Deployment.ExpectedSqlServer -ceq '45.120.229.43,1433' -and $c.Deployment.ExpectedSqlLogin -ceq 'website_tin_tuc_app' -and $c.Sql.ExpectedDatabase -ceq 'website_tin_tuc' -and $c.Deployment.TargetApproved -ceq 'false' -and $c.Video.Enabled -ceq 'false')
+ Check 'Minimal env accepted without hostname storage scanner approval' (-not $c.Public.BaseUrl -and -not $c.Storage.MediaRoot -and -not ($c.Scanner.PSObject.Properties.Name -contains 'PolicyReference') -and -not $inputSettings.Metadata.LANDPORTAL_HOME)
+ Check 'SQL identifiers inferred from connection, UAT defaults safe' ($c.Deployment.ExpectedSqlServer -ceq '45.120.229.43,1433' -and $c.Deployment.ExpectedSqlLogin -ceq 'website_tin_tuc_app' -and $c.Sql.ExpectedDatabase -ceq 'website_tin_tuc' -and -not ($c.Deployment.PSObject.Properties.Name -contains 'TargetApproved') -and $c.Video.Enabled -ceq 'false')
  $targetDataHome=Join-Path $report 'private';$publish=Join-Path $report 'code'
  & (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $envFile -DataHome $targetDataHome -PublishRoot $publish -ForPublish -DeferTarget -ValidateOnly
  Check 'Deferred validation opens no SQL and creates no config' (-not(Test-Path -LiteralPath $targetDataHome))
@@ -37,15 +37,10 @@ if($IisPublishOnly){
  $derived=Resolve-IisUatSettings $c $target $targetDataHome $null
  Check 'Actual target binding maps once to host and URL' ($derived.Public.BaseUrl -ceq 'https://uat.example.invalid:8443/' -and $derived.Deployment.ExpectedHost -ceq $target.HostName)
  Check 'Storage and service pin derived without secret changes' ($derived.Storage.KeysRoot -ceq (Join-Path $targetDataHome 'keys') -and $derived.Runtime.RolePassword -ceq $c.Runtime.RolePassword -and $derived.ConnectionStrings.Portal -ceq $c.ConnectionStrings.Portal -and $derived.Scanner.DefenderBinarySha256 -ceq $target.DefenderSha256)
- Check 'Discovery does not manufacture authority' ($derived.Deployment.TargetApproved -ceq 'false' -and -not $derived.Scanner.PolicyReference -and -not $derived.Scanner.DefenderPrivacyPolicyReference)
- Denied 'Discovery alone cannot pass runtime' {Assert-UatRuntimeConfiguration $derived $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish}
- $a=[pscustomobject]@{Status='PENDING';MachineName='UNIT-TEST';SiteName='UNIT-TEST';PhysicalSqlServer='WIN-S1IBJB84OOO';Database='website_tin_tuc';DeploymentReference='UNIT-TEST-ONLY';ScannerPolicyReference='UNIT-TEST-ONLY';DefenderPrivacyPolicyReference='UNIT-TEST-ONLY'}
- Denied 'Pending approval rejected' {Resolve-IisUatSettings $c $target $targetDataHome $a}
- $a.Status='APPROVED';$a.MachineName='WRONG'
- Denied 'Approval bound to different target rejected' {Resolve-IisUatSettings $c $target $targetDataHome $a}
- $a.MachineName='UNIT-TEST';$candidate=Resolve-IisUatSettings $c $target $targetDataHome $a
- Assert-UatRuntimeConfiguration $candidate $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish
- Check 'Complete technical fixture reaches offline runtime validation only' ($candidate.Mail.Transport -ceq 'Disabled')
+ Check 'No manual approval fields emitted' (-not ($derived.Deployment.PSObject.Properties.Name -contains 'TargetApproved') -and -not ($derived.Scanner.PSObject.Properties.Name -contains 'DefenderPrivacyPolicyReference'))
+ Assert-UatRuntimeConfiguration $derived $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish
+ Check 'Technical target reaches validation without approval codes' ($derived.Mail.Transport -ceq 'Disabled')
+ $candidate=$derived
  $candidate.Video.Enabled='true'
  Denied 'Video approval still required at activation' {Assert-UatRuntimeConfiguration $candidate $targetDataHome (Join-Path $targetDataHome 'uat.json') $publish}
  foreach($name in @('build-for-iis.ps1','package-uat.ps1','iis-env.ps1','uat-common.ps1','prepare-iis-config.ps1','configure-iis-uat.ps1')){
@@ -73,7 +68,7 @@ SaveTarget
 $prepare=Join-Path $PSScriptRoot 'prepare-uat-target.ps1';$output=Join-Path $report 'prepared'
 & $prepare -TargetFile $inputFile -PublishRoot $code -OutputDirectory $output
 $cfg=Get-Content -LiteralPath (Join-Path $output 'uat.private-template.json') -Raw -Encoding UTF8|ConvertFrom-Json
-Check 'Native Defender configuration binds policy pin and service identity' ($cfg.Scanner.Provider -ceq 'MicrosoftDefenderOnPrem' -and $cfg.Scanner.DefenderPrivacyPolicyReference -ceq $t.DefenderPrivacyPolicyReference -and $cfg.Scanner.DefenderBinarySha256 -ceq $t.DefenderBinarySha256 -and $cfg.Scanner.DefenderServiceIdentity -ceq $t.ServiceAccount)
+Check 'Native Defender configuration binds policy pin and service identity' ($cfg.Scanner.Provider -ceq 'MicrosoftDefenderOnPrem' -and $cfg.Scanner.DefenderBinarySha256 -ceq $t.DefenderBinarySha256 -and $cfg.Scanner.DefenderServiceIdentity -ceq $t.ServiceAccount)
 Check 'Allocated DB preserved, mail disabled and no secret generated' ($cfg.Sql.ExpectedDatabase -ceq $t.Database -and $cfg.Mail.Transport -ceq 'Disabled' -and $cfg.Runtime.RolePassword -ceq '')
 $schema=Get-Content -LiteralPath (Join-Path $output 'schema-bound.sqlcmd') -Raw -Encoding UTF8
 Check 'SQLCMD stops on error and pins exact DB and physical SQL instance' ($schema.StartsWith(':ON ERROR EXIT') -and $schema.Contains('USE [AgencyPortal_UatAllocated]') -and $schema.Contains("SERVERPROPERTY('ServerName')") -and $schema.Contains("uat.invalid\SQL") -and -not $schema.Contains('UNALLOCATED'))
@@ -90,7 +85,8 @@ $t.Database='AgencyPortal_UatAllocated';$t.DataHome=$code;SaveTarget
 Denied 'Private/public overlap refused' {& $prepare -TargetFile $inputFile -PublishRoot $code -OutputDirectory (Join-Path $report 'bad-overlap')}
 $t.DataHome=Join-Path $report 'private';SaveTarget
 $t.DefenderPrivacyPolicyReference='';SaveTarget
-Denied 'Missing Defender privacy authority refused' {& $prepare -TargetFile $inputFile -PublishRoot $code -OutputDirectory (Join-Path $report 'bad-privacy')}
+& $prepare -TargetFile $inputFile -PublishRoot $code -OutputDirectory (Join-Path $report 'without-privacy-reference')
+Check 'No manual Defender privacy reference required' $true
 $t.DefenderPrivacyPolicyReference='TECHNICAL FIXTURE PRIVACY NOT AUTHORITY';$t.DefenderBinarySha256='bad';SaveTarget
 Denied 'Invalid Defender binary pin refused' {& $prepare -TargetFile $inputFile -PublishRoot $code -OutputDirectory (Join-Path $report 'bad-binary-pin')}
 $t.DefenderBinarySha256=('B'*64);SaveTarget

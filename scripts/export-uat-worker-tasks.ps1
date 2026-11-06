@@ -47,7 +47,7 @@ foreach($mode in @('Scheduler','Documents','InquiryScan','Video','Mail')){
  }finally{$writer.Dispose()}
  $rows+=@{mode=$mode;path=$path;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
-$result=@{status='PREPARED_NOT_REGISTERED';tasks=$rows;environment='Staging';database=$cfg.Sql.ExpectedDatabase;approvalReference=$cfg.Deployment.TargetApprovalReference;credentialsIncluded=$false;tasksInstalled=0;identityGranted=$false;restart='Host scheduler: 3 attempts / 1 minute; SQL durable leases survive restart';targetAcceptance='NOT RUN';utc=[DateTimeOffset]::UtcNow.ToString('O')}
+$result=@{status='PREPARED_NOT_REGISTERED';tasks=$rows;environment='Staging';database=$cfg.Sql.ExpectedDatabase;credentialsIncluded=$false;tasksInstalled=0;identityGranted=$false;restart='Host scheduler: 3 attempts / 1 minute; SQL durable leases survive restart';targetAcceptance='NOT RUN';utc=[DateTimeOffset]::UtcNow.ToString('O')}
 $json=$result|ConvertTo-Json -Depth 8
 [IO.File]::WriteAllText((Join-Path $outputPath 'tasks-manifest.json'),$json,[Text.UTF8Encoding]::new($false))
 Write-Output 'Prepared 5 UAT worker task XML files; no task installed or service identity changed. Operator review/registration and crash-restart acceptance are still required.'

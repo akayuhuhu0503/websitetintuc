@@ -7,7 +7,7 @@ using LandPortal.Domain;
 using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
 
-public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions,TimeProvider? clock=null)
+public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions,TimeProvider? clock=null,MediaService? media=null)
 {
     private DateTimeOffset Now=>(clock??TimeProvider.System).GetUtcNow();
     public string ChunkPath(Guid session,int index)=>MediaService.ResolveMediaPath(storage,$"video-upload/{session:N}/{index:D6}.chunk");
@@ -37,6 +37,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     }
     public async Task<VideoUploadSession> CreateAsync(Guid contentId,string user,string name,string mime,long bytes,string chunkManifestHash,CancellationToken ct=default)
     {
+        if(media!=null)await media.RequireUploadScannerAsync(ct);
         await AuthorizeAsync(user,contentId,true,ct);
         if(!IsHash(chunkManifestHash))throw new MediaUploadException("Cần SHA-256 của manifest chunk trước khi tạo phiên.");
         if(bytes<1||bytes>options.MaxFileBytes)throw new MediaUploadException("Dung lượng video vượt giới hạn cấu hình hoặc tệp rỗng.",413);
@@ -63,6 +64,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     }
     public async Task<bool> ChunkAsync(Guid id,string user,int index,string digest,Stream input,CancellationToken ct=default)
     {
+        if(media!=null)await media.RequireUploadScannerAsync(ct);
         if(!IsHash(digest))throw new MediaUploadException("Chunk cần SHA-256 hợp lệ.");
         await GetAsync(id,user,true,ct);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(60));ct=timeout.Token;
@@ -94,6 +96,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     public async Task<VideoUploadSession> CompleteAsync(Guid id,string user,CancellationToken ct=default)
     {
         var previous=await GetAsync(id,user,false,ct);if(previous.State==VideoUploadState.Completed)return previous;
+        if(media!=null)await media.RequireUploadScannerAsync(ct);
         await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted,ct);await Lock("video:complete",ct);
         // Another complete may have committed while this request waited.
         var check=await db.Set<VideoUploadSession>().AsNoTracking().SingleAsync(x=>x.Id==id,ct);if(check.State==VideoUploadState.Completed){await tx.CommitAsync(ct);return check;}

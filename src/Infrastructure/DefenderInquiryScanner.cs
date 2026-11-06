@@ -11,8 +11,24 @@ public static class InquiryScannerFactory
     public static IInquiryScanner Create(IConfiguration config,string environment,long maximumBytes=InquiryFileOptions.MaximumBytes)
     {
         if(maximumBytes<1||maximumBytes>1024L*1024*1024)throw new InvalidOperationException("Scanner byte limit is invalid.");
+        if(UatDeployment.Enabled(config))
+        {
+            UatDeployment.Validate(config,environment);
+            if(!UatDeployment.ScannerConfigured(config))return new UnavailableInquiryScanner();
+            try
+            {
+                return config["Scanner:Provider"]=="Clamd"?new ClamdInquiryScanner(config,maximumBytes):DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes);
+            }
+            catch(Exception e) when(e is InvalidOperationException or IOException or UnauthorizedAccessException){return new UnavailableInquiryScanner();}
+        }
         return config["Scanner:Provider"] switch{null or "" or "Clamd"=>new ClamdInquiryScanner(config,maximumBytes),"DefenderTest"=>new DefenderInquiryScanner(config,environment,maximumBytes),"MicrosoftDefenderOnPrem"=>DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes),LanStatisticsSamples.Provider=>DefenderInquiryScanner.ForApprovedLanSamples(config,environment,maximumBytes),_=>throw new InvalidOperationException("Unsupported scanner provider; no automatic Clean fallback.")};
     }
+}
+
+public sealed class UnavailableInquiryScanner:IInquiryScanner
+{
+    public Task<(bool Ready,string Code)> HealthAsync(CancellationToken cancellation=default)=>Task.FromResult((false,"ScannerNotReady"));
+    public Task<InquiryScanResult> ScanAsync(Stream file,CancellationToken cancellation=default)=>Task.FromResult(new InquiryScanResult(InquiryScanState.ScanFailed,"ScannerNotReady",null));
 }
 
 // Existing signed Windows engine only; no install, policy change, exclusions, or implicit production provider.
@@ -46,6 +62,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
         if(onPrem)
         {
             if(!OperatingSystem.IsWindows()||environment!="Staging"||!UatDeployment.Validate(config,environment)||config["Scanner:DefenderServiceIdentity"] is not string identity||!string.Equals(identity,System.Security.Principal.WindowsIdentity.GetCurrent().Name,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Defender UAT must run under the explicitly approved Windows service identity.");
+            if(!UatDeployment.ScannerConfigured(config))throw new InvalidOperationException("Defender binary pin/service identity missing.");
             binaryPin=config["Scanner:DefenderBinarySha256"]!.ToLowerInvariant();
         }
         else if(lanSample)

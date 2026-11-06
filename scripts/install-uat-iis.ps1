@@ -18,7 +18,7 @@ if(-not $WebCredential -or $WebCredential.UserName -ine $t.ServiceAccount -or $W
 if(-not $PSCmdlet.ShouldProcess(($t.MachineName+'/'+$t.SiteName),'Create dedicated UAT IIS site/pool and HTTPS binding; no DB creation, worker registration or ACL grants')){return}
 $cfg=Get-Content -LiteralPath $config -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-UatTarget $cfg
-if($cfg.Sql.ExpectedDatabase -cne $t.Database -or $cfg.Deployment.ExpectedSqlServer -cne $t.SqlServer -or $cfg.Deployment.ExpectedHost -cne $t.HostName -or $cfg.Deployment.TargetApprovalReference -cne $t.ApprovalReference){throw 'Private config differs from approved target packet'}
+if($cfg.Sql.ExpectedDatabase -cne $t.Database -or $cfg.Deployment.ExpectedSqlServer -cne $t.SqlServer -or $cfg.Deployment.ExpectedHost -cne $t.HostName){throw 'Private config differs from approved target packet'}
 $package=Get-Content -LiteralPath (Join-Path $code 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
 if((Get-FileHash -LiteralPath (Join-Path $code 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.packageManifestSha256){throw 'Original package manifest changed'}
 foreach($file in $package.files){

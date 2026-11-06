@@ -28,7 +28,6 @@ $runtimeHome=if($TargetDataHome){Get-UatSafePath $TargetDataHome}else{$homePath}
 if($DeferTarget){
  if(-not $ForPublish){throw 'Deferred target is only supported for offline publishing'}
  Assert-IisPublishConfiguration $settings
- $settings.Deployment.TargetApproved='false';$settings.Deployment.TargetApprovalReference=''
 }else{Assert-UatRuntimeConfiguration $settings $runtimeHome ([IO.Path]::Combine($runtimeHome,'uat.json')) $code}
 if($ValidateOnly){Write-Output 'CONFIG VALIDATION PASS (offline; no SQL connection)';return}
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
