@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([string]$PrivateConfig,[string]$SiteName,
  [string]$PublishRoot=(Split-Path -Parent $PSScriptRoot),
- [string]$DataHome,[string]$HostName,[string]$ApprovalFile,[switch]$Apply)
+ [string]$DataHome,[string]$HostName,[string]$ApprovalFile,[switch]$Apply,[switch]$PrepareForCopy)
 # Target-local preparation only. Default is read-only discovery. No SQL, service
 # startup, account creation, certificate import or Defender policy modification.
 Set-StrictMode -Version Latest
@@ -83,7 +83,7 @@ $manager=New-Object Microsoft.Web.Administration.ServerManager
 try{
  $site=$manager.Sites[$SiteName];if(-not $site){throw 'Configure an allocated IIS site (stopped) first'}
  $web=Get-UatSafePath ([Environment]::ExpandEnvironmentVariables($site.Applications['/'].VirtualDirectories['/'].PhysicalPath))
- if($web -ine (Join-Path $code 'web')){throw 'IIS physical path must be this package web directory'}
+ if($web -ine (Join-Path $code 'web') -and -not $PrepareForCopy){throw 'IIS physical path must be this package web directory'}
  $pool=$manager.ApplicationPools[$site.Applications['/'].ApplicationPoolName]
  if(-not $pool -or $pool.ProcessModel.IdentityType.ToString() -cne 'SpecificUser' -or $pool.ManagedRuntimeVersion -ne '' -or -not $pool.ProcessModel.LoadUserProfile){throw 'Dedicated No Managed Code pool with LoadUserProfile and existing custom service account required for Web + five workers'}
  $account=[string]$pool.ProcessModel.UserName
@@ -105,6 +105,7 @@ try{
 if(-not $DataHome){$DataHome=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) ('LandPortal\Site-'+$siteId)}
 $targetDataHome=Get-UatSafePath $DataHome;$config=Join-Path $targetDataHome 'uat.json'
 Assert-UatSeparatePaths $targetDataHome $config $code
+if($PrepareForCopy){Assert-UatSeparatePaths $targetDataHome $config $web}
 # A cloned source tree is not a private storage location, even outside webroot.
 for($node=$targetDataHome;$node;$node=[IO.Path]::GetDirectoryName($node)){if(Test-Path -LiteralPath (Join-Path $node '.git')){throw 'Private storage cannot be inside a Git working tree'}}
 $defender=Get-IisUatDefender;$target.DefenderSha256=$defender.Sha256

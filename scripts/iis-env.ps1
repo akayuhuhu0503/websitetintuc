@@ -1,26 +1,33 @@
-# Offline input reader. Never evaluates .env or opens SQL; do not print settings.
+﻿# Offline input reader. Never evaluates .env or opens SQL; do not print settings.
+function Get-IisInputGaps($InputSettings){
+ $gaps=@();$s=$InputSettings.Settings;$m=$InputSettings.Metadata
+ foreach($k in @('IIS_SITE_NAME','IIS_MACHINE_NAME')){if([string]::IsNullOrWhiteSpace([string]$m[$k]) -or [string]$m[$k] -match 'REPLACE|PENDING|FIXTURE|[\r\n]'){$gaps+=$k}}
+ if($s.Deployment.TargetApproved -cne 'true'){$gaps+='Deployment__TargetApproved=true (chỉ khi đã được duyệt)'}
+ foreach($pair in @(@('Deployment','TargetApprovalReference'),@('Scanner','PolicyReference'),@('Scanner','DefenderPrivacyPolicyReference'))){$v=[string]$s.($pair[0]).($pair[1]);if($v.Length -lt 5 -or $v -match 'REPLACE|PENDING|FIXTURE|[\r\n]'){$gaps+=($pair -join '__')}}
+ return $gaps
+}
 function Read-IisEnvironment([string]$Path,[switch]$ForPublish) {
  $settings=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'uat-config.example.json') -Raw -Encoding UTF8|ConvertFrom-Json
  $allowed=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
  foreach($section in $settings.PSObject.Properties){foreach($key in $section.Value.PSObject.Properties){[void]$allowed.Add($section.Name+'__'+$key.Name)}}
- $meta=@{DOTNET_ENVIRONMENT='Staging';ASPNETCORE_ENVIRONMENT='Staging';LANDPORTAL_HOME=''}
+ $meta=@{DOTNET_ENVIRONMENT='Staging';ASPNETCORE_ENVIRONMENT='Staging';LANDPORTAL_HOME='';IIS_SITE_NAME='';IIS_MACHINE_NAME=''}
  $seen=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
  foreach($line in [IO.File]::ReadAllLines($Path)){
   $text=$line.Trim();if(-not $text -or $text.StartsWith('#')){continue}
-  if($text -notmatch '^([A-Za-z][A-Za-z0-9_]*)=(.*)$'){throw 'Invalid .env entry; use Key=value (values withheld)'}
+  if($text -notmatch '^([A-Za-z][A-Za-z0-9_]*)=(.*)$'){throw 'Dòng .env không hợp lệ: cần dạng Key=value; không hiển thị giá trị bí mật'}
   $key=$matches[1];$value=$matches[2]
-  if(-not $seen.Add($key)){throw ('Duplicate field: '+$key)}
+  if(-not $seen.Add($key)){throw ('Trường .env bị lặp: '+$key)}
   if($value.Length -ge 2 -and (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))){$value=$value.Substring(1,$value.Length-2)}
-  if($key -cin @('LANDPORTAL_HOME','DOTNET_ENVIRONMENT','ASPNETCORE_ENVIRONMENT')){$meta[$key]=$value;continue}
-  if(-not $allowed.Contains($key)){throw ('Unsupported configuration field: '+$key)}
+  if($key -cin @('LANDPORTAL_HOME','DOTNET_ENVIRONMENT','ASPNETCORE_ENVIRONMENT','IIS_SITE_NAME','IIS_MACHINE_NAME')){$meta[$key]=$value;continue}
+  if(-not $allowed.Contains($key)){throw ('Trường không được hỗ trợ trong .env IIS: '+$key+'. Dùng scripts/ttdl.env.example; không dùng .env Development.')}
   $parts=$key -split '__';$settings.($parts[0]).($parts[1])=$value
  }
  if($ForPublish){
   foreach($key in @('ConnectionStrings__Portal','Runtime__RolePassword','Deployment__ExpectedSqlServerIdentity')){
    $parts=$key -split '__'
-   if(-not $seen.Contains($key) -or [string]::IsNullOrWhiteSpace([string]$settings.($parts[0]).($parts[1]))){throw ('Required developer field: '+$key)}
+   if(-not $seen.Contains($key) -or [string]::IsNullOrWhiteSpace([string]$settings.($parts[0]).($parts[1]))){throw ('Thiếu cấu hình bắt buộc: '+$key)}
   }
-  if($meta.DOTNET_ENVIRONMENT -cne 'Staging' -or $meta.ASPNETCORE_ENVIRONMENT -cne 'Staging'){throw 'Only Staging/UAT is supported; Production is not enabled'}
+  if($meta.DOTNET_ENVIRONMENT -cne 'Staging' -or $meta.ASPNETCORE_ENVIRONMENT -cne 'Staging'){throw 'Chỉ hỗ trợ Staging/UAT; không tự bật hoặc kế thừa ngoại lệ sang Production'}
   try{
    $portable=New-Object System.Data.Common.DbConnectionStringBuilder
    $portable.set_ConnectionString([string]$settings.ConnectionStrings.Portal)

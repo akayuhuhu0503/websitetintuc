@@ -1,5 +1,9 @@
 # Một file .env, một lệnh Publish
 
+**Quy trình ngắn (Auto):** đặt `.env` ở gốc clone → chạy `powershell -NoProfile -File scripts/build-for-iis.ps1` → copy thư mục Publish lên IIS và trỏ site vào `web/`. Nếu build trên cùng IIS và đủ điều kiện, cấu hình private được tạo/gắn tự động. Nếu build ở máy khác, mở `CAU-HINH-IIS.cmd` trên máy IIS, chọn cùng `.env`; không tạo hoặc chuyển `uat.json` thủ công. Site/pool phải dừng khi gắn cấu hình. Xem [hướng dẫn ngắn](TTDL-GITHUB-IIS-HANDOFF.md) cho các khóa mục tiêu/phê duyệt thật cần có trong .env.
+
+Những lệnh JSON/ApprovalFile bên dưới là cách chẩn đoán nâng cao, không phải thao tác thủ công bắt buộc. Thiếu phê duyệt/HTTPS/service account/Defender sẽ được báo tiếng Việt và giữ ứng dụng đóng, không tự cấp quyền hay tạo phê duyệt. Với gói UAT chưa gắn cấu hình, trang503 có mã `IIS-CONFIG-001/002/003` thay cho việc cố mở ứng dụng không hợp lệ.
+
 **Developer:** chuẩn bị `scripts/ttdl.env.example` bằng credential hiện hành của hai connection string (`ConnectionStrings__Portal`, `ConnectionStrings__GiayHuyReadOnly`) và `Runtime__RolePassword`. Giữ hai khóa phê duyệt `GiayHuy__PublicationScope`, `GiayHuy__LanUatTlsException` trong mẫu. Physical SQL và ngoại lệ TLS chỉ áp dụng UAT đã xác nhận; không dùng sa, không tạo secret mới, không chỉnh `.env` Dev. Giao file hoàn chỉnh riêng; người vận hành không phải tạo lại SQL/schema/login/role. Hướng dẫn ngắn: [TTDL-GITHUB-IIS-HANDOFF.md](TTDL-GITHUB-IIS-HANDOFF.md).
 
 **Người build:** đặt file thành `.env` ở gốc clone, chạy:
@@ -10,7 +14,7 @@ powershell -NoProfile -File scripts/build-for-iis.ps1
 
 Output `.local/publish/TTDL-IIS/`: Web, một Worker với 5 chế độ, Tools, Ops, START.md và manifest SHA-256. Cấu hình được tự chuyển sang JSON tại đường dẫn `PRIVATE CONFIG` ngoài source/webroot; ACL người build + SYSTEM. Không kết nối SQL hoặc khởi động ứng dụng. Không cần hostname/storage/scanner/approval để Publish. Gói chưa gắn đích có cờ chặn khởi động.
 
-Nếu build trên máy khác, chuyển cả gói code và **chuyển riêng JSON private** tới máy IIS qua kênh an toàn. Không gửi `.env`/JSON lên Git hoặc đặt trong `web/`. Giữ gói bất biến để kiểm tra manifest. Chỉ thư mục `web/` làm IIS Physical Path.
+Nếu build trên máy khác, chuyển gói code và bàn giao riêng **cùng file `.env`** qua kênh an toàn. Trên IIS mở `CAU-HINH-IIS.cmd`, chọn .env; công cụ tự tạo/gắn JSON private ngoài webroot, không cần người triển khai chuyển JSON từ máy build. Không gửi `.env`/JSON lên Git hoặc đặt trong `web/`. Giữ gói bất biến để kiểm tra manifest; overlay web.config khi gắn đích được ghi receipt riêng. Chỉ thư mục `web/` làm IIS Physical Path.
 
 ## Một lần chuẩn bị trên IIS đích — CNTT
 

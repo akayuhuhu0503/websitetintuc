@@ -1,3 +1,10 @@
+## Publish IIS một .env / Auto — 06/11/2026
+
+- Theo user, IIS500.30 xảy ra khi bỏ bước configure. Tái hiện gói cũ với binding private trống: dừng PortalConfiguration.FindWorkspace trước SQL; chỉ có log tái hiện local, không có log server IIS. Web UAT mới trả503 tiếng Việt khi thiếu binding/file hoặc private config không đạt; không mở controllers/SQL, không thay guard Production.
+- DefaultPublish Auto: cùng máy IIS và đủ target/authority/HTTPS/account/Defender thì tự tạo/gắn private config, không tự start dịch vụ. Build khác máy: copy gói, mở CAU-HINH-IIS.cmd, chọn cùng.env; tự sinh JSON/authority metadata từ phê duyệt thật trong.env, không bắt operator làm file trung gian. Không suy ra approval từ discovery. Source haiSQL/role/secrets giữ nguyên, không SQL/IIS remote write.
+- PUBLISH PASS /429file hash0mismatch/3secretMATCH; 9offlinechecks,6HTTP503 và1Productiondenial focused PASS; không fullsuite. Bản mới riêng .local/publish/TTDL-IIS-simple-20261106T041503Z, không ghi đè gói cũ. LAN5188health200/khôngrestart/reset/migration/backup. Hướng dẫn TTDL-GITHUB-IIS-HANDOFF.md và iis-one-command.md.
+- ACTUAL IIS ACTIVATION NOT RUN: .env còn thiếu IIS_SITE_NAME, IIS_MACHINE_NAME, TargetApproved và3reference triển khai/scanner/privacy; không tự điền. Cần TTDL cung cấp đúng scope đã duyệt và preflight bằng service identity trước khi mở site. CHƯA PRODUCTION READY.
+
 ## FR-06 LAN schema17 và font dùng chung — 05/11/2026
 
 - **APPLIED/VERIFIED LAN15→17**, đúng MinhAnh\SQLEXPRESS/LandPortal_LanDemo; 2 migration AuditRecoveryLookup/DraftConsultationEmail, 2 cột nullable, index audit; 69 bảng dữ liệu cũ/Identity/role/permission digest0diff. LAN288content/290revision/703media/570alias/3account giữ nguyên; không bootstrap/import/reset/grant/source hoặc shared SQL write.

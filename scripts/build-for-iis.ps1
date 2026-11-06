@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param([switch]$Replace,
  [string]$EnvFile,
- [ValidateSet('Transfer','Local')][string]$PrivateMode='Transfer',
+ [ValidateSet('Auto','Transfer','Local')][string]$PrivateMode='Auto',
  [ValidatePattern('^TTDL-IIS(?:-[A-Za-z0-9][A-Za-z0-9-]{0,63})?$')][string]$OutputName='TTDL-IIS')
 # Build only: parses private .env as data; never sources it or starts an application/SQL tool.
 Set-StrictMode -Version Latest
@@ -35,7 +35,7 @@ if(Test-Path -LiteralPath $output){
 . (Join-Path $PSScriptRoot 'iis-env.ps1')
 if(-not $EnvFile){$EnvFile=Join-Path $repo '.env'}
 $EnvFile=Get-UatSafePath $EnvFile
-if(-not(Test-Path -LiteralPath $EnvFile -PathType Leaf)){throw 'Missing root .env; copy the approved TTDL private configuration first'}
+if(-not(Test-Path -LiteralPath $EnvFile -PathType Leaf)){throw 'Thiếu .env: đặt file cấu hình private đã được cấp vào gốc source, hoặc truyền -EnvFile; không dùng mật khẩu giả'}
 $envSha=(Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash
 $inputSettings=Read-IisEnvironment $EnvFile -ForPublish
 $targetHome=''
@@ -44,9 +44,7 @@ if($inputSettings.Metadata.LANDPORTAL_HOME){
  if($targetHome.StartsWith($repo+'\',[StringComparison]::OrdinalIgnoreCase) -or $targetHome -ieq $repo){throw 'LANDPORTAL_HOME must be outside the source repository'}
 }
 if($PrivateMode -eq 'Local'){
- if(-not $targetHome){throw 'Local mode requires allocated LANDPORTAL_HOME; default Transfer mode does not'}
- $privateHome=$targetHome
- if(-not(Test-Path -LiteralPath $privateHome -PathType Container)){throw 'LANDPORTAL_HOME: create the approved private directory/ACL before Local mode'}
+ $privateHome=if($targetHome){$targetHome}else{Join-Path ([Environment]::GetFolderPath('UserProfile')) ('LandPortal-IIS-Private\'+[Guid]::NewGuid().ToString('N'))}
  if(Test-Path -LiteralPath (Join-Path $privateHome 'uat.json')){throw 'Existing private uat.json refused; no overwrite'}
 }else{
  $privateHome=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('LandPortal-IIS-Private\'+[Guid]::NewGuid().ToString('N'))
@@ -83,7 +81,7 @@ try{
  $config=Join-Path $staging 'web/web.config'
  [xml]$xml=Get-Content -LiteralPath $config -Raw -Encoding UTF8
  if((Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash -cne $envSha){throw 'Input .env changed during build; configuration not released'}
- if($PrivateMode -eq 'Transfer'){
+ if(-not(Test-Path -LiteralPath $privateHome -PathType Container)){
   $acl=New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true,$false)
   foreach($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User,(New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'))){$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')))}
@@ -94,7 +92,7 @@ try{
  # No private JSON or private-input digest is copied into the public package.
  $required=@('web/Web.dll','web/Web.runtimeconfig.json','web/web.config','web/wwwroot/css/site.css','web/wwwroot/vendor/jodit/jodit.min.js','worker/Worker.dll','worker/Worker.runtimeconfig.json','tools/MigrationCli.dll','tools/uat-data/UatDataHandoff.dll','ops/uat-runtime.ps1','ops/uat-data.ps1','ops/prepare-iis-config.ps1','ops/configure-iis-uat.ps1','ops/iis-approval.example.json','ops/uat-config.example.json','START.md')
  foreach($relative in $required){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing publish output: '+$relative)}}
- foreach($relative in @('web/wwwroot/css/font-faces.css','web/wwwroot/css/typography.css','web/wwwroot/css/giay-huy-lookup.css','web/wwwroot/js/giay-huy-lookup.js','web/wwwroot/fonts/roboto-OFL.txt','web/wwwroot/fonts/merriweather-OFL.txt','web/wwwroot/fonts/sources.json','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing current handoff asset: '+$relative)}}
+ foreach($relative in @('web/wwwroot/css/font-faces.css','web/wwwroot/css/typography.css','web/wwwroot/css/giay-huy-lookup.css','web/wwwroot/js/giay-huy-lookup.js','web/wwwroot/fonts/roboto-OFL.txt','web/wwwroot/fonts/merriweather-OFL.txt','web/wwwroot/fonts/sources.json','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md','CAU-HINH-IIS.cmd','ops/complete-iis-publish.ps1')){if(-not(Test-Path -LiteralPath (Join-Path $staging $relative) -PathType Leaf)){throw ('Missing current handoff asset: '+$relative)}}
  $fonts=Get-Content -LiteralPath (Join-Path $repo 'src/Web/wwwroot/fonts/sources.json') -Raw -Encoding UTF8|ConvertFrom-Json
  foreach($font in $fonts.files){
   if($font.file -cnotmatch '^(roboto|merriweather)-(latin|latin-ext|vietnamese)\.woff2$'){throw 'Unexpected font inventory path'}
@@ -122,7 +120,7 @@ try{
   @{path=$f.FullName.Substring($staging.Length+1).Replace('\','/');bytes=$f.Length;sha256=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
  }})
  $encoding=[Text.UTF8Encoding]::new($false)
- foreach($name in @('START.md','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')){$records+=@{path=$name;bytes=(Get-Item -LiteralPath (Join-Path $staging $name)).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging $name) -Algorithm SHA256).Hash.ToLowerInvariant()}}
+ foreach($name in @('START.md','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md','CAU-HINH-IIS.cmd')){$records+=@{path=$name;bytes=(Get-Item -LiteralPath (Join-Path $staging $name)).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging $name) -Algorithm SHA256).Hash.ToLowerInvariant()}}
  $manifest=@{schema=1;runId=$OutputName;utc=[DateTimeOffset]::UtcNow.ToString('O');status='PUBLISHED_CONFIG_PREPARED_NOT_DEPLOYED';privateMode=$PrivateMode;environment='Staging';schemaIncluded=$false;sqlExecuted=$false;servicesInstalled=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');files=$records;productionReady=$false}
  [IO.File]::WriteAllText((Join-Path $staging 'manifest.json'),($manifest|ConvertTo-Json -Depth 8),$encoding)
  [IO.File]::WriteAllText((Join-Path $staging 'build-only.json'),(@{kind='TTDL-IIS-BUILD-ONLY';sealed=$false;manifestSha256=(Get-FileHash -LiteralPath (Join-Path $staging 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()}|ConvertTo-Json),$encoding)
@@ -133,4 +131,13 @@ try{
  Write-Output ('PRIVATE CONFIG (not in publish): '+(Join-Path $privateHome 'uat.json'))
  Write-Output 'Target paths/HTTPS/Defender are discovered by ops/configure-iis-uat.ps1 on IIS; activation remains gated. No SQL was contacted.'
  Write-Output 'Web + Worker (5 modes) + tools + ops ready. SQL/IIS/deployment NOT RUN. Read START.md.'
+ if($PrivateMode -in @('Auto','Local')){
+  $gaps=@(Get-IisInputGaps $inputSettings)
+  if($gaps.Count){Write-Output ('CHƯA GẮN IIS: cần TTDL cung cấp/phê duyệt trong cùng .env: '+($gaps -join '; '))}
+  elseif($inputSettings.Metadata.IIS_MACHINE_NAME -ine $env:COMPUTERNAME -or -not(Test-Path (Join-Path $env:windir 'System32/inetsrv/Microsoft.Web.Administration.dll'))){Write-Output 'BUILD KHÁC MÁY IIS: copy gói Publish, cấu hình IIS trỏ web/, rồi mở CAU-HINH-IIS.cmd và chọn cùng file .env. Không tạo/chuyển uat.json thủ công.'}
+  else{
+   & powershell -NoProfile -NonInteractive -File (Join-Path $output 'ops/complete-iis-publish.ps1') -EnvFile $EnvFile -PublishRoot $output -PrepareForCopy
+   if($LASTEXITCODE){Write-Output 'PUBLISH PASS / GẮN IIS BLOCKED: xem điều kiện tiếng Việt bên trên. Không khởi động dịch vụ hoặc bỏ guard.'}
+  }
+ }
 }finally{Pop-Location}

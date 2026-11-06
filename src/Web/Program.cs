@@ -11,7 +11,16 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-var config = PortalConfiguration.Load();
+if(IisStartupNotice.MissingBinding(builder.Configuration,builder.Environment.EnvironmentName) is string setupCode)
+{
+    var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,setupCode);blocked.Run();return;
+}
+Microsoft.Extensions.Configuration.IConfigurationRoot config;
+try{config=PortalConfiguration.Load();}
+catch(Exception error) when(IisStartupNotice.IsUat(builder.Configuration,builder.Environment.EnvironmentName)&&error is (InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or ArgumentException))
+{
+    var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,"IIS-CONFIG-003");blocked.Run();return;
+}
 builder.Configuration.AddConfiguration(config);
 var connection = DatabaseSettings.Connection(builder.Configuration);
 var storage = StorageOptions.FromConfiguration(builder.Configuration);
