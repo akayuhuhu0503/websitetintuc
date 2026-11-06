@@ -19,7 +19,7 @@ Microsoft.Extensions.Configuration.IConfigurationRoot config;
 try{config=PortalConfiguration.Load();}
 catch(Exception error) when(IisStartupNotice.IsUat(builder.Configuration,builder.Environment.EnvironmentName)&&error is (InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException))
 {
-    var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,"IIS-CONFIG-003");blocked.Run();return;
+    var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,error is IisConfigurationException setup?setup.Code:"IIS-CONFIG-003");blocked.Run();return;
 }
 builder.Configuration.AddConfiguration(config);
 var connection = DatabaseSettings.Connection(builder.Configuration);

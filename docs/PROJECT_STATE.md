@@ -1,3 +1,10 @@
+## 06/11/2026 — Sửa IIS-CONFIG-003 cho ApplicationPoolIdentity
+
+- Xác nhận bug nguồn: Portable loader từ chối mọi IIS APPPOOL identity. Đã cho phép virtual identity ít quyền; vẫn từ chối Administrator/SYSTEM, giữ guard private ACL/hash/HTTPS/SQL. Không khẳng định đây là guard đầu tiên lỗi trên IIS từ xa khi chưa có subcode.
+- Mã 003 nay phân biệt ENV/LAYOUT/PRIVATE_READ/PRIVATE_HASH/PRIVATE_ACL/IDENTITY/HTTPS/STORE_WRITE/TECHNICAL, hiển thị hướng xử lý cố định, không raw exception/secret. Scanner không nằm trong thông báo chặn toàn website.
+- Ảnh người dùng xác nhận pool WWW_GDLA, physical path D:\WWW_GDLA\publish\TTDL-IIS\web, binding https://gdla.gov.vn:443; chưa cho thấy pool identity/ACL. File .env bàn giao private local thiếu Public URL/ExpectedHost, đã điền hai giá trị từ binding ảnh; 2 connection/role secret/ACL giữ nguyên, không sửa .env Development.
+- Build Web/Infrastructure 0 warning/error; 10 identity/diagnostic + 12 runtime guards PASS; 3 HTTP portable diagnostics thực tế PASS (admin identity/hash sai/thiếu config), không lộ secret, không mở SQL. Actual ApplicationPoolIdentity trên IIS TTDL NOT RUN. Không đổi database, LAN, account/quyền/mật khẩu.
+
 ## 06/11/2026 — IIS runtime không yêu cầu mã phê duyệt thủ công
 
 - Bỏ bốn trường TargetApproved/TargetApprovalReference và Scanner PolicyReference/DefenderPrivacyPolicyReference khỏi runtime, template và pipeline Publish mặc định. Input .env cũ có các khóa này vẫn đọc được nhưng bỏ qua; không tạo trạng thái approved thay thế. Giữ SQL identity/TLS/Application Role, HTTPS, password/ACL và private config hash.

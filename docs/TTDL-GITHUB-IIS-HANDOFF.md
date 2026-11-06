@@ -17,10 +17,12 @@ Không có trường mã phê duyệt triển khai/scanner bắt buộc. Thiếu
    ```
 
 4. Chuyển **nguyên thư mục** `.local/publish/TTDL-IIS/` lên IIS bằng kênh riêng. IIS Physical Path chỉ trỏ `web/`. Giữ nguyên thư mục `private/` bên cạnh `web/`; không mở, sửa hoặc copy riêng `uat.json`.
-5. Cấu hình IIS/HTTPS theo quy trình quen thuộc: Hosting Bundle ASP.NET Core10, pool No Managed Code/Load User Profile, tài khoản dịch vụ riêng ít quyền, quyền đọc cấu hình private và ghi các kho `private/media`, `snapshots`, `temp`, `keys`. Không cấp quyền cho Everyone/Users/IIS_IUSRS vào private. Bật site khi các điều kiện kỹ thuật thực tế đã đạt. Web/Worker sử dụng cùng cấu hình; Worker/SMTP không tự bật.
+5. Cấu hình IIS/HTTPS theo quy trình quen thuộc: Hosting Bundle ASP.NET Core10, pool No Managed Code/Load User Profile, ApplicationPoolIdentity của pool riêng hoặc tài khoản dịch vụ ít quyền, quyền đọc cấu hình private và ghi các kho `private/media`, `snapshots`, `temp`, `keys`. Không cấp quyền cho Everyone/Users/IIS_IUSRS vào private. Bật site khi các điều kiện kỹ thuật thực tế đã đạt. Web/Worker sử dụng cùng cấu hình; Worker/SMTP không tự bật.
 
 Không chạy `CAU-HINH-IIS.cmd` hoặc `configure-iis-uat.ps1`. Publish tự sinh cấu hình, Web tự tìm theo vị trí gói trên máy IIS, không mang đường dẫn máy Developer sang máy sếp. Các guard SQL, Application Role, HTTPS, scanner, quyền vẫn giữ; thiếu cấu hình SQL/HTTPS/quyền thì ứng dụng đóng với trang503 tiếng Việt, không mở admin/SQL để vượt chặn.
 
 **Gói Publish có chứa secret trong private/.** Chỉ bàn giao cho người được phép, không đưa gói/.env/private lên Git hoặc URL tải công khai. Không trỏ IIS vào gốc Publish. `web.config` ở gốc cũng chặn HTTP vào private nếu trỏ nhầm. JSON được ràng buộc hash trong manifest; muốn thay cấu hình phải republish từ .env gốc, không sửa JSON.
 
 Publish không mở SQL, không thay dữ liệu, không cấp quyền database, không cài/bật IIS hoặc đổi DNS. Mặc định không ghi đè gói cũ đã có; Developer có thể dùng `-OutputName ("TTDL-IIS-"+(Get-Date -Format yyyyMMdd-HHmmss))` khi cần một gói mới riêng. UAT TLS exception không áp dụng Production. Publish PASS không thay nghiệm thu thực tế IIS/UAT.
+
+Nếu gặp IIS-CONFIG-003: bản mới ghi rõ hậu tố. `IDENTITY`: không dùng Administrator/SYSTEM; ApplicationPoolIdentity được hỗ trợ. `PRIVATE_READ`: kiểm tra copy đủ gói và quyền Read cho `IIS AppPool\<tên pool>`. `PRIVATE_ACL`: gỡ quyền đọc rộng trên private, giữ đúng người vận hành/pool. `PRIVATE_HASH`: copy lại nguyên cùng một gói, không chỉnh JSON. `HTTPS`: Developer điền URL/host HTTPS thực tế trong .env trước khi gửi nếu IIS không tự cung cấp metadata. `STORE_WRITE`: cấp Modify chỉ cho bốn kho dữ liệu. Không cấp quyền SQL mới hoặc tắt guard để xử lý các lỗi này.

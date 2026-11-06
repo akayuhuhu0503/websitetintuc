@@ -6,6 +6,12 @@ using Microsoft.Extensions.Configuration;
 
 namespace LandPortal.Infrastructure;
 
+// Only fixed, non-secret diagnostics may cross the startup exception boundary.
+public sealed class IisConfigurationException(string code,string safeMessage):InvalidOperationException(safeMessage)
+{
+    public string Code { get; }=code;
+}
+
 // Publish carries one confidential sibling of web/, never a developer-machine path.
 public static class PortableIisConfiguration
 {
@@ -18,36 +24,71 @@ public static class PortableIisConfiguration
             try{using var m=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root.FullName,"manifest.json")));return m.RootElement.TryGetProperty("privateMode",out var mode)&&mode.GetString()=="Portable";}catch{return false;}
         }
     }
+    public static bool IsServiceIdentityAllowed(string name,bool system,bool administrator) =>
+        !system&&!administrator&&!string.IsNullOrWhiteSpace(name)&&
+        !new[]{"ADMIN","Administrator"}.Contains(name.Split('\\')[^1],StringComparer.OrdinalIgnoreCase)&&
+        !name.StartsWith("NT AUTHORITY\\",StringComparison.OrdinalIgnoreCase);
+
+    public static string StartupHint(string stage)=>stage switch
+    {
+        "ENV"=>"Gói IIS này cần môi trường Staging/UAT; không dùng cấu hình Production.",
+        "LAYOUT"=>"Copy nguyên gói Publish. IIS trỏ vào web; private và manifest.json phải nằm cạnh web.",
+        "PRIVATE_READ"=>"Không đọc được cấu hình private hoặc đường dẫn không hợp lệ. Kiểm tra đã copy đủ gói và cấp Read cho đúng tài khoản Application Pool.",
+        "PRIVATE_HASH"=>"Cấu hình private không khớp manifest. Copy lại nguyên cùng một gói Publish, không sửa JSON sau Publish.",
+        "PRIVATE_ACL"=>"Quyền private quá rộng hoặc không đọc được ACL. Chỉ cấp quyền đọc cho người vận hành và tài khoản pool cụ thể; không cấp Everyone, Users hoặc IIS_IUSRS.",
+        "PROFILE"=>"Cấu hình gói phải dùng profile UAT.",
+        "IDENTITY"=>"Pool phải chạy bằng ApplicationPoolIdentity hoặc tài khoản dịch vụ ít quyền; không chạy bằng Administrator hay SYSTEM.",
+        "HTTPS"=>"Chưa xác định được URL HTTPS duy nhất. Kiểm tra binding HTTPS; nếu IIS không cung cấp metadata, Developer điền Public__BaseUrl và Deployment__ExpectedHost thực tế trước khi Publish.",
+        "DATA_HOME"=>"Kho dữ liệu phải dùng đường dẫn tuyệt đối, private và nằm ngoài thư mục web.",
+        "STORE_WRITE"=>"Tài khoản pool không tạo/ghi được kho dữ liệu. Cấp Modify cho media, snapshots, temp và keys; giữ file cấu hình chỉ đọc.",
+        _=>"Cấu hình kỹ thuật SQL/TLS hoặc kho dữ liệu không hợp lệ. Developer kiểm tra đầu vào; không tắt guard để khởi động."
+    };
+
     public static IConfigurationRoot Load()
     {
+        var stage="ENV";
+        try{return LoadCore(ref stage);}
+        catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException)
+        {throw new IisConfigurationException("IIS-CONFIG-003-"+stage,StartupHint(stage));}
+    }
+    private static IConfigurationRoot LoadCore(ref string stage)
+    {
         if(!(Enabled||Detected)||Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")!="Staging"||Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Staging")throw new InvalidOperationException("Portable configuration is UAT/Staging only.");
+        stage="LAYOUT";
         var component=new DirectoryInfo(AppContext.BaseDirectory);
         var package=component.Name=="uat-data"?component.Parent?.Parent:component.Parent;
         if(package==null||component.Name is not("web" or "worker" or "tools" or "uat-data")||!File.Exists(Path.Combine(package.FullName,"manifest.json")))throw new InvalidOperationException("Published package layout required.");
         var home=Path.Combine(package.FullName,"private");var file=Path.Combine(home,"uat.json");
+        stage="PRIVATE_READ";
         for(string? p=file;p!=null;p=Path.GetDirectoryName(p))if((File.Exists(p)||Directory.Exists(p))&&(File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new InvalidOperationException("Reparse private configuration refused.");
         using(var manifest=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(package.FullName,"manifest.json")))){
             if(!manifest.RootElement.TryGetProperty("privateConfiguration",out var binding)||!binding.TryGetProperty("path",out var boundPath)||boundPath.GetString()!="private/uat.json"||!binding.TryGetProperty("confidential",out var confidential)||!confidential.GetBoolean()||!binding.TryGetProperty("sha256",out var sha))throw new InvalidOperationException("Private package binding missing.");
-            using var bytes=File.OpenRead(file);if(!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)),sha.GetString(),StringComparison.Ordinal))throw new InvalidOperationException("Private config changed after Publish; republish from the approved .env.");
+            using var bytes=File.OpenRead(file);stage="PRIVATE_HASH";if(!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)),sha.GetString(),StringComparison.Ordinal))throw new InvalidOperationException("Private config changed after Publish; republish from the approved .env.");
         }
+        stage="PRIVATE_ACL";
         if(OperatingSystem.IsWindows()){
             var broad=new[]{"S-1-1-0","S-1-5-11","S-1-5-32-545","S-1-5-32-568"};
             var rules=new FileInfo(file).GetAccessControl().GetAccessRules(true,true,typeof(SecurityIdentifier));
             foreach(FileSystemAccessRule rule in rules)if(rule.AccessControlType==AccessControlType.Allow&&broad.Contains(rule.IdentityReference.Value))throw new InvalidOperationException("Private config ACL permits broad access; grant only the allocated operator/service account.");
         }
+        stage="PRIVATE_READ";
         var config=new ConfigurationBuilder().AddJsonFile(file,false,false).AddEnvironmentVariables().Build();
+        stage="PROFILE";
         if(config["Deployment:Profile"]!="UAT")throw new InvalidOperationException("Portable profile must remain UAT.");
+        stage="DATA_HOME";
         if(!string.IsNullOrWhiteSpace(config["PortableRuntime:DataHome"])){
             if(!Path.IsPathFullyQualified(config["PortableRuntime:DataHome"]!))throw new InvalidOperationException("Absolute private data home required.");
             home=Path.GetFullPath(config["PortableRuntime:DataHome"]!);
         }
+        stage="IDENTITY";
         if(OperatingSystem.IsWindows()){
             using var identity=WindowsIdentity.GetCurrent();
-            if(identity.IsSystem||identity.Name.StartsWith("IIS APPPOOL\\",StringComparison.OrdinalIgnoreCase)||new[]{"ADMIN","Administrator"}.Contains(identity.Name.Split('\\')[^1],StringComparer.OrdinalIgnoreCase)||new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)||identity.Name.StartsWith("NT AUTHORITY\\",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A dedicated least-privilege service account is required for Web and workers.");
+            if(!IsServiceIdentityAllowed(identity.Name,identity.IsSystem,new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)))throw new InvalidOperationException("A least-privilege application pool or service account is required.");
         }
         // These values are technical locations, not approval/credentials.
         config["WorkspaceRoot"]=home;config["DOTNET_ENVIRONMENT"]="Staging";config["ASPNETCORE_ENVIRONMENT"]="Staging";
         foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})if(string.IsNullOrWhiteSpace(config["Storage:"+name]))config["Storage:"+name]=Path.Combine(home,name switch{"MediaRoot"=>"media","SnapshotRoot"=>"snapshots","TempRoot"=>"temp",_=>"keys"});
+        stage="HTTPS";
         if(string.IsNullOrWhiteSpace(config["Public:BaseUrl"])){
             var poolFile=Environment.GetEnvironmentVariable("APP_POOL_CONFIG");
             if(!string.IsNullOrWhiteSpace(poolFile)&&File.Exists(poolFile)){
@@ -58,6 +99,8 @@ public static class PortableIisConfiguration
             }
         }
         if(Uri.TryCreate(config["Public:BaseUrl"],UriKind.Absolute,out var url)&&string.IsNullOrWhiteSpace(config["Deployment:ExpectedHost"]))config["Deployment:ExpectedHost"]=url.IdnHost;
+        if(!Uri.TryCreate(config["Public:BaseUrl"],UriKind.Absolute,out var origin)||origin.Scheme!="https"||!string.Equals(origin.IdnHost,config["Deployment:ExpectedHost"],StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Exact HTTPS origin required.");
+        stage="TECHNICAL";
         if(OperatingSystem.IsWindows()&&string.IsNullOrWhiteSpace(config["Scanner:DefenderServiceIdentity"]))config["Scanner:DefenderServiceIdentity"]=WindowsIdentity.GetCurrent().Name;
         if(config["Scanner:Provider"]=="MicrosoftDefenderOnPrem"&&string.IsNullOrWhiteSpace(config["Scanner:DefenderBinarySha256"])){
             var platform=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"Microsoft","Windows Defender","Platform");
@@ -68,6 +111,7 @@ public static class PortableIisConfiguration
         }
         // Technical target/TLS guards remain mandatory; unavailable scanning blocks file operations.
         UatDeployment.Validate(config,"Staging");
+        stage="STORE_WRITE";
         foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})Directory.CreateDirectory(config["Storage:"+name]!);
         return config;
     }
