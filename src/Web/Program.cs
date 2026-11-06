@@ -17,7 +17,7 @@ if(IisStartupNotice.MissingBinding(builder.Configuration,builder.Environment.Env
 }
 Microsoft.Extensions.Configuration.IConfigurationRoot config;
 try{config=PortalConfiguration.Load();}
-catch(Exception error) when(IisStartupNotice.IsUat(builder.Configuration,builder.Environment.EnvironmentName)&&error is (InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or ArgumentException))
+catch(Exception error) when(IisStartupNotice.IsUat(builder.Configuration,builder.Environment.EnvironmentName)&&error is (InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException))
 {
     var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,"IIS-CONFIG-003");blocked.Run();return;
 }

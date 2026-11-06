@@ -1,3 +1,10 @@
+## 06/11/2026 — IIS một .env, một lệnh Publish
+
+- Mặc định `build-for-iis.ps1` dùng Portable: tự tạo/gắn `private/uat.json` cạnh `web/`; không cần tên máy/site, sửa JSON hoặc chạy script cấu hình bổ sung. Copy nguyên gói qua kênh riêng, IIS chỉ trỏ `web/`. Gói chứa secret, không đưa lên Git/URL công khai.
+- Web/5 chế độ Worker dùng chung loader: hash/ACL private, Staging-only, tài khoản dịch vụ ít quyền, target/TLS/Application Role/HTTPS/scanner và phê duyệt thật vẫn bắt buộc. Giữ tương thích chế độ cấu hình ngoài cũ. Không áp dụng portable sang Production.
+- Publish/build tập trung PASS; 429 public-file hash và private binding 0 mismatch; 3 secret hiện hành MATCH, không nằm trong Web. Copy sang đường dẫn khác: 3 trường hợp cấu hình chưa đủ/bị sửa/bị thiếu bị chặn HTTP503; Production bị từ chối trước SQL. IIS thực tế NOT RUN. LAN health HTTP200, không restart/thay dữ liệu.
+- Cấu hình bàn giao hiện còn thiếu xác nhận/ref triển khai và hai ref scanner/privacy thật; VẬN HÀNH BLOCKED, không tạo approval giả. Developer cần hoàn thiện đầu vào trước khi gửi, trưởng phòng không phải sửa .env. Không SQL/backup/migration/import, không full regression.
+
 ## Publish IIS một .env / Auto — 06/11/2026
 
 - Theo user, IIS500.30 xảy ra khi bỏ bước configure. Tái hiện gói cũ với binding private trống: dừng PortalConfiguration.FindWorkspace trước SQL; chỉ có log tái hiện local, không có log server IIS. Web UAT mới trả503 tiếng Việt khi thiếu binding/file hoặc private config không đạt; không mở controllers/SQL, không thay guard Production.

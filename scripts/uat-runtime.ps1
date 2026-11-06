@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
- [Parameter(Mandatory=$true)][Alias('Home')][string]$DataHome,
- [Parameter(Mandatory=$true)][string]$Config,
+ [Alias('Home')][string]$DataHome,
+ [string]$Config,
  [Parameter(Mandatory=$true)][string]$PublishRoot,
  [ValidateSet('Web','Scheduler','Documents','InquiryScan','Video','Mail','Preflight')][string]$Mode='Web',
  [switch]$Once,[switch]$Health,[switch]$Online,[string]$Report
@@ -11,6 +11,17 @@ param(
 # private config outside the published application and approves the target.
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'uat-common.ps1')
+$publishPath=[IO.Path]::GetFullPath($PublishRoot)
+$packageManifest=Join-Path $publishPath 'manifest.json'
+$portable=$false
+if(Test-Path -LiteralPath $packageManifest){$packageInfo=Get-Content -LiteralPath $packageManifest -Raw -Encoding UTF8|ConvertFrom-Json;$portable=($packageInfo.PSObject.Properties.Name -contains 'privateMode')-and ($packageInfo.privateMode -ceq 'Portable')}
+if($portable){
+ if($DataHome -or $Config){throw 'Portable package uses its bound private config; do not supply Home/Config overrides'}
+ # The shared .NET loader checks the manifest/hash, ACL, identity, real approval,
+ # HTTPS, scanner and target guards before any Web/Worker/CLI SQL connection.
+ $env:LANDPORTAL_PORTABLE_UAT='1'
+}else{
+if(-not $DataHome -or -not $Config){throw 'Legacy package requires private DataHome and Config'}
 Assert-UatSeparatePaths $DataHome $Config $PublishRoot
 $homePath=[IO.Path]::GetFullPath($DataHome);$configPath=[IO.Path]::GetFullPath($Config)
 $publishPath=[IO.Path]::GetFullPath($PublishRoot)
@@ -21,6 +32,8 @@ $c=Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-UatRuntimeConfiguration $c $homePath $configPath $publishPath
 foreach($node in @($configPath,$homePath,$publishPath)){if((Get-Item -LiteralPath $node).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse entry refused'}}
 $env:LANDPORTAL_HOME=$homePath;$env:LANDPORTAL_CONFIG=$configPath
+$env:LANDPORTAL_PORTABLE_UAT=$null
+}
 $env:DOTNET_ENVIRONMENT='Staging';$env:ASPNETCORE_ENVIRONMENT='Staging'
 # Avoid ambient local/project override of security/SQL values. No persistent env
 # is changed. Runtime validates SQL TLS/target, private paths, authorization and scanner.
