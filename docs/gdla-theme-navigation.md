@@ -32,3 +32,9 @@ Dropdown hiển thị từ đúng revision CMS; nhiều mục chia cột, nhóm 
 Chỉ CSS, Razor và điều khiển điều hướng phía trình duyệt; không đổi SQL, tài khoản, quyền, dữ liệu 33 bài hoặc pipeline 252 bài/703 media. Bản kiểm tra riêng dùng HTML công khai và model menu thử cục bộ, không ghi cấu hình lên LAN/IIS. Cập nhật source lên IIS do người vận hành thực hiện sau khi chốt giao diện; lượt này không deploy IIS.
 
 Build Web/Razor: 0 warning, 0 error. Kiểm tra tập trung 6 loại trang ở 390/768/1366/1920px: không tràn ngang; menu desktop không xuống hàng; dropdown, bàn phím, focus và trạng thái trang hiện tại hoạt động trên preview. Sáu URL gốc lấy snapshot trả HTTP 200. Tương phản chữ trắng/primary 8,31:1, trắng/hover 10,68:1, primary/nền mềm 7,29:1; đây là kiểm tra các cặp màu liên quan, không thay thế nghiệm thu WCAG toàn website. Không chạy full regression hoặc chụp ảnh/quay video.
+
+## Bố cục trang chủ — 09/11/2026
+
+`home.css` chỉ tải trên hai view trang chủ. Tin đọc nhiều dùng lưới con bên trong `details`, tránh phụ thuộc cách trình duyệt bố trí nội dung ẩn của thẻ này: 1/2/3/4 cột ở 390/768/1366/1920px. Giữ truy vấn và thứ tự xếp hạng 7/30 ngày. Các chuyên mục dùng hàng tin gọn, ảnh 16:9; bài không ảnh hiển thị tin chữ, không chèn ảnh giả hoặc khung trống. Tiêu đề được giới hạn bốn dòng bằng CSS, nội dung lưu trữ không đổi.
+
+Build Web/Razor PASS (0 warning/error). Kiểm tra trên Web local với dữ liệu LAN: bốn kích thước PASS, không tràn ngang, bộ chọn thời gian/menu/mở bài PASS; 35 liên kết và tiêu đề giữ nguyên. Biến thể 1–2 bài, bài chính không ảnh và tên văn bản dài được kiểm tra chỉ trong DOM. Bố cục dự phòng được kiểm tra riêng từ HTML công khai đã lưu và CSS mới, không phải nghiệm thu trên IIS. Không ghi SQL, không thay đổi cấu hình CMS hoặc triển khai IIS; không cần cấu hình CMS thêm để áp dụng sửa bố cục này.

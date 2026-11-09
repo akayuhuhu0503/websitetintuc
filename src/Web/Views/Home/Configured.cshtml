@@ -1,5 +1,6 @@
 @model LandPortal.Web.Services.ConfiguredHomeModel
-@{ ViewData["Title"]="Trang chủ";var categoryIndex=0;var slides=Model.Site.Banners.Where(x=>x.Position=="home").ToArray(); }
+@{ ViewData["Title"]="Trang chủ";var slides=Model.Site.Banners.Where(x=>x.Position=="home").ToArray(); }
+@section Styles { <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" /> }
 <h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
 @if(Model.Site.IsPreview){<div class="warning-message" role="status">Xem trước cấu hình nháp · chưa áp dụng công khai. Nội dung bài vẫn lấy bản đã xuất bản.</div>}
 <partial name="_QuickAccess" />
@@ -8,7 +9,7 @@
 <div class="home-modules">
 @foreach(var group in Model.VisibleBlocks)
 {
-    var variant=group.Block.Type=="Category"?(categoryIndex++%2==0?"home-category-cards":"home-category-list"):"";
+    var variant=group.Block.Type=="Category"?"home-category":"";
     <section class="configured-home-block @variant @(group.Block.Type=="Featured"?"home-featured":group.Block.Type=="Announcements"?"home-notices":"")" data-block-type="@group.Block.Type">
     <div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div>
     @if(group.Block.Type=="Links"){<nav class="site-link-grid" aria-label="@group.Block.Title">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="links"&&x.Url is not null).Take(group.Block.Limit)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">↗</span></a>}</nav>}

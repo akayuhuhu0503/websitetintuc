@@ -1,5 +1,6 @@
 @model HomeModel
 @{ViewData["Title"]="Trang chủ";var lead=Model.News.FirstOrDefault();}
+@section Styles { <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" /> }
 <partial name="_QuickAccess" />
 <div class="home-top"><section class="home-featured"><div class="section-heading"><h1>Thông tin mới nhất</h1><a href="/tin-tuc">Xem tất cả →</a></div>
 @if(lead is not null){<div class="lead-grid"><partial name="_LeadStory" model="lead" /><div class="secondary-stories">@foreach(var item in Model.News.Skip(1).Take(3)){<partial name="_Card" model="item" />}</div></div>}else{<div class="empty-state"><h2>Chưa có nội dung công khai</h2><p>Thông tin sẽ hiển thị sau khi được duyệt và xuất bản.</p></div>}
