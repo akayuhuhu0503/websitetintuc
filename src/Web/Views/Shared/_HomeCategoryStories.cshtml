@@ -1,0 +1,11 @@
+@model IReadOnlyList<ContentCard>
+@if(Model.Count>0)
+{
+    <div class="category-stories @(Model.Count==1?"category-stories--single":"")">
+        <div class="category-lead"><partial name="_Card" model="Model[0]" /></div>
+        @if(Model.Count>1)
+        {
+            <div class="category-support">@foreach(var item in Model.Skip(1)){<partial name="_Card" model="item" />}</div>
+        }
+    </div>
+}

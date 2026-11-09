@@ -66,27 +66,36 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
     public async Task<ConfiguredHomeModel> HomeAsync(SitePublicConfiguration site)
     {
         var blocks = new List<SiteHomeBlockResult>();
-        foreach (var block in site.Revision.Blocks.Where(x => x.Enabled).OrderBy(x => x.SortOrder).ThenBy(x => x.Id))
+        var topStoryIds = new HashSet<Guid>();
+        // Read Featured before Recent so one published article appears only once
+        // in the top cluster, including when CMS sorts Recent first.
+        var configured = site.Revision.Blocks.Where(x => x.Enabled)
+            .OrderBy(x => x.Type == "Featured" ? 0 : x.Type == "Recent" ? 1 : 2)
+            .ThenBy(x => x.SortOrder).ThenBy(x => x.Id).ToList();
+        foreach (var block in configured)
         {
             try
             {
             if (block.Type == "Links") { blocks.Add(new(block, [], "/so-tay")); continue; }
             var kind = block.Type switch { "Announcements" => ContentKind.Announcement, "LegalDocuments" => ContentKind.LegalDocument, "DraftDocuments" => ContentKind.DraftDocument, "Videos" => ContentKind.Video, _ => ContentKind.Article };
-            var rows = query.Published().Where(x => x.Kind == kind);
+            var topNews = block.Type is "Featured" or "Recent";
+            var rows = topNews ? query.HomeArticles() : query.Published(requireCleanThumbnail: true).Where(x => x.Kind == kind);
+            if(topNews && topStoryIds.Count>0){var excluded=topStoryIds.ToArray();rows=rows.Where(x=>!excluded.Contains(x.Id));}
             if(block.Type=="Videos")rows=rows.Where(x=>db.ContentAssets.Any(a=>a.RevisionId==x.RevisionId&&a.MediaAsset.MimeType=="video/mp4"&&!a.MediaAsset.IsQuarantined));
             if (block.Type == "Category") rows = rows.Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == block.CategoryId));
-            var pins = site.Revision.Pins.Where(x => x.BlockId == block.Id).OrderBy(x => x.SortOrder).ThenBy(x => x.ContentId).Select(x => x.ContentId).Distinct().Take(block.Limit).ToArray();
+            var pins = site.Revision.Pins.Where(x => x.BlockId == block.Id).OrderBy(x => x.SortOrder).ThenBy(x => x.ContentId).Select(x => x.ContentId).Distinct().Take(12).ToArray();
             var pinned = pins.Length == 0 ? [] : await PublicContentQuery.ForDisplay(rows.Where(x => pins.Contains(x.Id))).ToListAsync();
-            var selected = pins.Select(id => pinned.SingleOrDefault(x => x.Id == id)).Where(x => x is not null).Select(x => x!).ToList();
+            var selected = pins.Select(id => pinned.SingleOrDefault(x => x.Id == id)).Where(x => x is not null).Select(x => x!).Take(block.Limit).ToList();
             var selectedIds = selected.Select(x => x.Id).ToArray();
             if (selected.Count < block.Limit)
             {
                 var remaining=rows.Where(x=>!selectedIds.Contains(x.Id));
-                var ordered=block.Type=="Featured"?remaining.OrderByDescending(x=>db.Revisions.Any(r=>r.Id==x.RevisionId&&r.Metadata.Featured==true)).ThenByDescending(x=>x.SourceDate??(x.PublishedUtc==null?(DateOnly?)null:DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date))).ThenByDescending(x=>x.PublishedUtc).ThenBy(x=>x.Id):PublicContentQuery.Recent(remaining);
-                selected.AddRange(await query.CardsPageAsync(ordered,0,block.Limit-selected.Count));
+                var ordered=block.Type=="Featured"?query.FeaturedFirst(remaining):PublicContentQuery.Recent(remaining);
+                selected.AddRange(await query.CardsPageAsync(ordered,0,block.Limit-selected.Count,requireCleanThumbnail: true));
             }
             var more = block.Type switch { "Announcements" => "/thong-bao", "LegalDocuments" => "/van-ban", "DraftDocuments" => "/du-thao", "Videos" => "/video", "Category" => "/chuyen-muc/" + site.Revision.Categories.Single(x => x.CategoryId == block.CategoryId).Slug, _ => "/tin-tuc" };
             blocks.Add(new(block, selected.Select(PublicContentQuery.Card).ToList(), more));
+            if(topNews)topStoryIds.UnionWith(selected.Select(x=>x.Id));
             }
             catch(Microsoft.Data.SqlClient.SqlException error)
             {
@@ -95,6 +104,23 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
                 // BR-03: keep the failure in operational logs, hide the failed
                 // module on the public page. Never substitute cached/draft data.
                 blocks.Add(new(block,[],null,correlation));
+            }
+        }
+        // Older CMS configurations have Featured but no Recent block. Complete
+        // the 3 + 4 top layout without changing any saved block/limit. An explicitly
+        // disabled Recent block stays disabled. A failed Featured query is not filled.
+        if(!site.Revision.Blocks.Any(x=>x.Type=="Recent") && topStoryIds.Count>0 && topStoryIds.Count<7
+            && !blocks.Any(x=>x.Block.Type=="Featured"&&x.ErrorReference!=null))
+        {
+            var excluded=topStoryIds.ToArray();
+            try
+            {
+                var latest=await query.CardsPageAsync(PublicContentQuery.Recent(query.HomeArticles().Where(x=>!excluded.Contains(x.Id))),0,7-topStoryIds.Count,requireCleanThumbnail: true);
+                blocks.Add(new(new(){Type="Recent",Title="Tin mới cập nhật",Limit=7-topStoryIds.Count},latest.Select(PublicContentQuery.Card).ToArray(),"/tin-tuc"));
+            }
+            catch(Microsoft.Data.SqlClient.SqlException error)
+            {
+                logger?.LogError("Homepage recent news unavailable; SQL code {SqlCode}; correlation {Correlation}.",error.Number,context.HttpContext?.TraceIdentifier);
             }
         }
         return new() { Site = site, Blocks = blocks };

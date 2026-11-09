@@ -9,12 +9,12 @@ namespace LandPortal.Web.Services;
 
 public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? mediaOptions = null)
 {
-    public IQueryable<PublicRow> Published()
+    public IQueryable<PublicRow> Published(bool requireCleanThumbnail = false)
     {
         var today=DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).DateTime);
-        var legacy=(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback;
+        var legacy=!requireCleanThumbnail&&(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback;
         var verifiedSource=(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed;
-        var uploaded=(mediaOptions??new MediaUploadOptions()).DevelopmentExceptionEnabled;
+        var uploaded=!requireCleanThumbnail&&(mediaOptions??new MediaUploadOptions()).DevelopmentExceptionEnabled;
         // Keep legacy Source NotScanned policy intact. A card must not point at an
         // uploaded/quarantined/Test-only file the current media endpoint will deny.
         var thumbnails=db.MediaAssets.AsNoTracking().Where(m=>!m.IsQuarantined
@@ -60,6 +60,18 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
         };
     }
 
+    // Editorial selection reuses the published revision and its existing Featured flag.
+    // Legacy imported weekly schedules are Articles in the lich-tuan category;
+    // typed schedules also carry WeeklyWeek. Neither becomes news merely by date.
+    public IQueryable<PublicRow> HomeArticles() => Published(requireCleanThumbnail: true)
+        .Where(x => x.Kind == ContentKind.Article && x.CategorySlug != "lich-tuan"
+            && !db.Revisions.Any(r => r.Id == x.RevisionId && r.Metadata.WeeklyWeek != null));
+
+    public IOrderedQueryable<PublicRow> FeaturedFirst(IQueryable<PublicRow> rows) => rows
+        .OrderByDescending(x => db.Revisions.Any(r => r.Id == x.RevisionId && r.Metadata.Featured == true))
+        .ThenByDescending(x => x.SourceDate ?? (x.PublishedUtc == null ? (DateOnly?)null : DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date)))
+        .ThenByDescending(x => x.PublishedUtc).ThenBy(x => x.Id);
+
     public IQueryable<PublicRow> Filter(IQueryable<PublicRow> rows, string? query)
     {
         var value = TextNormalizer.Search(query);
@@ -72,11 +84,11 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
         // sorting wide summaries or search/body strings under a memory grant.
         return ordered.Skip(skip).Take(take).Select(x=>x.RevisionId).ToArrayAsync();
     }
-    public async Task<List<PublicRow>> CardsPageAsync(IOrderedQueryable<PublicRow> ordered,int skip,int take)
+    public async Task<List<PublicRow>> CardsPageAsync(IOrderedQueryable<PublicRow> ordered,int skip,int take,bool requireCleanThumbnail = false)
     {
         var ids=await PageRevisionIdsAsync(ordered,skip,take);
         if(ids.Length==0)return [];
-        var rows=await ForDisplay(Published().Where(x=>ids.Contains(x.RevisionId))).ToListAsync();
+        var rows=await ForDisplay(Published(requireCleanThumbnail).Where(x=>ids.Contains(x.RevisionId))).ToListAsync();
         var byRevision=rows.ToDictionary(x=>x.RevisionId);
         // Recheck the live pointer on materialization. A withdrawn or replaced
         // revision between the two reads is omitted, never served from a cache.

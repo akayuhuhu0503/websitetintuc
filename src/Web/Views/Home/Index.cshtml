@@ -1,12 +1,20 @@
 @model HomeModel
-@{ViewData["Title"]="Trang chủ";var lead=Model.News.FirstOrDefault();}
+@{ ViewData["Title"]="Trang chủ"; ViewData["HomeNewsHero"]=true; }
 @section Styles { <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" /> }
-<partial name="_QuickAccess" />
-<div class="home-top"><section class="home-featured"><div class="section-heading"><h1>Thông tin mới nhất</h1><a href="/tin-tuc">Xem tất cả →</a></div>
-@if(lead is not null){<div class="lead-grid"><partial name="_LeadStory" model="lead" /><div class="secondary-stories">@foreach(var item in Model.News.Skip(1).Take(3)){<partial name="_Card" model="item" />}</div></div>}else{<div class="empty-state"><h2>Chưa có nội dung công khai</h2><p>Thông tin sẽ hiển thị sau khi được duyệt và xuất bản.</p></div>}
-</section><aside class="announcement-panel"><div class="section-heading"><h2>Thông báo</h2><a href="/thong-bao">Xem tất cả →</a></div>@if(Model.Announcements.Count>0){<partial name="_NoticeList" model="Model.Announcements" />}else{<p class="empty-note">Chưa có thông báo được công bố.</p>}</aside></div>
-<div class="category-sections">@foreach(var group in Model.Sections){<section class="category-block"><div class="section-heading"><h2>@group.Name</h2><a href="/chuyen-muc/@group.Slug">Xem tất cả →</a></div><div class="section-stories">@foreach(var item in group.Items.Take(3)){<partial name="_Card" model="item" />}</div></section>}</div>
-@if(Model.Documents.Count>0){<section class="document-preview"><div class="section-heading"><h2>Văn bản mới cập nhật</h2><a href="/van-ban">Xem tất cả →</a></div><div class="document-card-grid">@foreach(var item in Model.Documents.Take(4)){<partial name="_HomeDocumentCard" model="item" />}</div></section>}
-@if(Model.Videos.Count>0){<section><div class="section-heading"><h2>Video</h2><a href="/video">Xem tất cả →</a></div><div class="configured-story-grid">@foreach(var item in Model.Videos.Take(2)){<partial name="_Card" model="item" />}</div></section>}
+<h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
+@if(Model.News.Count>0){<partial name="_HomeNewsCluster" model="Model.News" />}
+else{<div class="empty-state"><h2>Chưa có tin tức công khai</h2><p>Tin tức sẽ hiển thị sau khi được duyệt và xuất bản.</p></div>}
+<div class="category-sections">
+@foreach(var group in Model.Sections)
+{
+    <section class="category-block"><div class="section-heading"><h2>@group.Name</h2><a href="/chuyen-muc/@group.Slug">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_HomeCategoryStories" model="group.Items" /></section>
+}
+</div>
+<div class="home-support-modules">
+@if(Model.Announcements.Count>0){<section class="home-notices"><div class="section-heading"><h2>Thông báo</h2><a href="/thong-bao">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_NoticeList" model="Model.Announcements" /></section>}
+@if(Model.Documents.Count>0){<section class="document-preview"><div class="section-heading"><h2>Văn bản mới cập nhật</h2><a href="/van-ban">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="document-card-grid">@foreach(var item in Model.Documents){<partial name="_HomeDocumentCard" model="item" />}</div></section>}
+@if(Model.Videos.Count>0){<section><div class="section-heading"><h2>Video</h2><a href="/video">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="configured-story-grid">@foreach(var item in Model.Videos){<partial name="_Card" model="item" />}</div></section>}
+</div>
+<section class="home-utilities" aria-labelledby="home-utilities-title"><div class="section-heading"><h2 id="home-utilities-title">Tra cứu và tiện ích</h2></div><partial name="_QuickAccess" /></section>
 @await Component.InvokeAsync("PopularArticles")
 @await Component.InvokeAsync("LandStatistics")

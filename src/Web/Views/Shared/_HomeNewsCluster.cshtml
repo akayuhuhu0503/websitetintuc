@@ -1,0 +1,22 @@
+@model IReadOnlyList<ContentCard>
+@if(Model.Count>0)
+{
+    <section class="home-news-cluster" aria-label="Tin tức" data-news-cluster>
+        <div class="news-hero @(Model.Count==1?"news-hero--single":"")">
+            <partial name="_LeadStory" model="Model[0]" />
+            @if(Model.Count>1)
+            {
+                <div class="hero-support">
+                    @foreach(var item in Model.Skip(1).Take(2)){<partial name="_Card" model="item" />}
+                </div>
+            }
+        </div>
+        @if(Model.Count>3)
+        {
+            <div class="home-latest">
+                <div class="section-heading"><h2>Tin mới cập nhật</h2><a href="/tin-tuc">Xem tất cả <span aria-hidden="true">→</span></a></div>
+                <div class="home-news-strip">@foreach(var item in Model.Skip(3)){<partial name="_Card" model="item" />}</div>
+            </div>
+        }
+    </section>
+}

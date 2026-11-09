@@ -1,22 +1,36 @@
 @model LandPortal.Web.Services.ConfiguredHomeModel
-@{ ViewData["Title"]="Trang chủ";var slides=Model.Site.Banners.Where(x=>x.Position=="home").ToArray(); }
+@{
+    ViewData["Title"]="Trang chủ"; ViewData["HomeNewsHero"]=true;
+    var blocks=Model.VisibleBlocks.ToArray();
+    var news=blocks.Where(x=>x.Block.Type is "Featured" or "Recent").ToArray();
+    var topItems=news.SelectMany(x=>x.Items).DistinctBy(x=>x.Id).ToArray();
+    var slides=Model.Site.Banners.Where(x=>x.Position=="home").ToArray();
+}
 @section Styles { <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" /> }
 <h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
 @if(Model.Site.IsPreview){<div class="warning-message" role="status">Xem trước cấu hình nháp · chưa áp dụng công khai. Nội dung bài vẫn lấy bản đã xuất bản.</div>}
-<partial name="_QuickAccess" />
-@if(slides.Length>0){<section class="activity-slider" data-activity-slider aria-label="Ảnh hoạt động"><div class="activity-slides">@for(var i=0;i<slides.Length;i++){var banner=slides[i];<a class="site-banner activity-slide" data-slide href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="@(i==0?"eager":"lazy")" /></a>}</div>@if(slides.Length>1){<nav class="activity-controls" data-slide-controls hidden aria-label="Chọn ảnh hoạt động"><button type="button" data-slide-prev>Ảnh trước</button><span data-slide-status role="status" aria-live="polite"></span><button type="button" data-slide-next>Ảnh tiếp</button></nav>}</section>}
-@if(Model.Site.Menus.Any(x=>x.Position=="supplementary"&&x.Url is not null)){<nav class="supplementary-links" aria-label="Thông tin chuyên ngành">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="supplementary"&&x.Url is not null)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">→</span></a>}</nav>}
-<div class="home-modules">
-@foreach(var group in Model.VisibleBlocks)
+@if(news.Any(x=>x.Block.Type=="Featured")){<partial name="_HomeNewsCluster" model="topItems" />}
+else if(topItems.Length>0){<section class="home-latest"><div class="section-heading"><h2>@news[0].Block.Title</h2><a href="/tin-tuc">Xem tất cả →</a></div><div class="home-news-strip">@foreach(var item in topItems){<partial name="_Card" model="item" />}</div></section>}
+<div class="category-sections">
+@foreach(var group in blocks.Where(x=>x.Block.Type=="Category"))
 {
-    var variant=group.Block.Type=="Category"?"home-category":"";
-    <section class="configured-home-block @variant @(group.Block.Type=="Featured"?"home-featured":group.Block.Type=="Announcements"?"home-notices":"")" data-block-type="@group.Block.Type">
-    <div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div>
-    @if(group.Block.Type=="Links"){<nav class="site-link-grid" aria-label="@group.Block.Title">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="links"&&x.Url is not null).Take(group.Block.Limit)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">↗</span></a>}</nav>}
-    else{<partial name="_HomeContentBlock" model="group" />}
+    <section class="configured-home-block home-category" data-block-type="Category"><div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div><partial name="_HomeContentBlock" model="group" /></section>
+}
+</div>
+<div class="home-support-modules">
+@foreach(var group in blocks.Where(x=>x.Block.Type is not ("Featured" or "Recent" or "Category")))
+{
+    <section class="configured-home-block @(group.Block.Type=="Announcements"?"home-notices":"")" data-block-type="@group.Block.Type">
+        <div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div>
+        @if(group.Block.Type=="Links"){<nav class="site-link-grid" aria-label="@group.Block.Title">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="links"&&x.Url is not null).Take(group.Block.Limit)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">↗</span></a>}</nav>}
+        else{<partial name="_HomeContentBlock" model="group" />}
     </section>
 }
 </div>
-@foreach(var banner in Model.Site.Banners.Where(x=>x.Position=="sidebar")){<a class="site-banner" href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)"><img src="@banner.ImageUrl" alt="@banner.Alt" /></a>}
+<section class="home-utilities" aria-labelledby="home-utilities-title"><div class="section-heading"><h2 id="home-utilities-title">Tra cứu và tiện ích</h2></div><partial name="_QuickAccess" />
+@if(Model.Site.Menus.Any(x=>x.Position=="supplementary"&&x.Url is not null)){<nav class="supplementary-links" aria-label="Thông tin chuyên ngành">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="supplementary"&&x.Url is not null)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">→</span></a>}</nav>}
+</section>
+@if(slides.Length>0){<section class="activity-slider" data-activity-slider aria-label="Ảnh hoạt động"><div class="activity-slides">@for(var i=0;i<slides.Length;i++){var banner=slides[i];<a class="site-banner activity-slide" data-slide href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" /></a>}</div>@if(slides.Length>1){<nav class="activity-controls" data-slide-controls hidden aria-label="Chọn ảnh hoạt động"><button type="button" data-slide-prev>Ảnh trước</button><span data-slide-status role="status" aria-live="polite"></span><button type="button" data-slide-next>Ảnh tiếp</button></nav>}</section>}
+@foreach(var banner in Model.Site.Banners.Where(x=>x.Position=="sidebar")){<a class="site-banner" href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" /></a>}
 @await Component.InvokeAsync("PopularArticles")
 @await Component.InvokeAsync("LandStatistics")
