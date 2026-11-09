@@ -1,9 +1,58 @@
 @model IReadOnlyList<LandPortal.Web.Services.SiteNavigationItem>
-<nav class="main-nav" aria-label="Điều hướng chính"><div class="container nav-inner"><button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links">☰ <span>Danh mục</span></button><div id="primary-links" class="primary-links">
-@foreach (var item in Model.Where(x => x.Position == "main" && x.ParentId == null))
-{
-    var children = Model.Where(x => x.ParentId == item.Id).ToList();
-    if (children.Count > 0) { <details class="nav-dropdown"><summary>@item.Label</summary><div class="nav-panel site-menu-panel"><partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model, item.Id)" /></div></details> }
-    else if (item.Url != null) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }
+@{
+    // Preserve the selected CMS revision; no hardcoded fallback publication.
+    var roots = Model.Where(x => x.ParentId == null && x.Position == "main")
+        .OrderBy(x => x.SortOrder).ThenBy(x => x.Id).ToArray();
+    var utilities = Model.Where(x => x.Position == "supplementary").ToArray();
 }
-</div></div></nav>
+@if (roots.Length > 0 || utilities.Any(x => x.ParentId == null))
+{
+<nav class="main-nav" aria-label="Điều hướng chính" data-portal-navigation>
+    @if (roots.Length > 0)
+    {
+    <div class="container nav-inner">
+        <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+            <span>Danh mục</span>
+        </button>
+        <div id="primary-links" class="primary-links">
+            @foreach (var item in roots)
+            {
+                var children = Model.Where(x => x.ParentId == item.Id).ToArray();
+                if (children.Length > 0)
+                {
+                    var panelId = "nav-panel-" + item.Id.ToString("N");
+                    var summaryId = "nav-heading-" + item.Id.ToString("N");
+                    var wideClass = children.Length >= 6 ? "nav-dropdown--wide" : "";
+                    var columnClass = children.Length >= 10 ? "site-menu-grid--three" : children.Length >= 6 ? "site-menu-grid--two" : "";
+                    <details class="nav-dropdown @wideClass">
+                        <summary id="@summaryId" aria-controls="@panelId" aria-expanded="false">@item.Label</summary>
+                        <div id="@panelId" class="nav-panel site-menu-panel" aria-labelledby="@summaryId">
+                            @if (item.Url is not null)
+                            {
+                                <a class="nav-parent-link" href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">Tổng quan @item.Label <span aria-hidden="true">→</span></a>
+                            }
+                            <div class="site-menu-grid @columnClass">
+                                <partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model, item.Id)" />
+                            </div>
+                        </div>
+                    </details>
+                }
+                else if (item.Url is not null)
+                {
+                    <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a>
+                }
+            }
+        </div>
+    </div>
+    }
+    @if (utilities.Any(x => x.ParentId == null))
+    {
+        <div class="nav-utilities" role="navigation" aria-label="Liên kết tiện ích">
+            <div class="container nav-utility-links">
+                <partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(utilities, null)" />
+            </div>
+        </div>
+    }
+</nav>
+}

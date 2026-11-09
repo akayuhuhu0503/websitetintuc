@@ -272,45 +272,113 @@
             slider.querySelector('[data-slide-next]')?.addEventListener('click', () => show(current + 1));
         }
     });
-    const toggle = document.querySelector('.mobile-menu-toggle');
-    const links = document.querySelector('#primary-links');
-    toggle?.addEventListener('click', () => {
-        const expanded = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', String(!expanded));
-        links?.classList.toggle('is-open', !expanded);
-    });
-    const menus = Array.from(document.querySelectorAll('.nav-dropdown'));
-    links?.querySelectorAll('a[href]').forEach(link => {
+    const navigation = document.querySelector('[data-portal-navigation]');
+    const toggle = navigation?.querySelector('.mobile-menu-toggle');
+    const links = navigation?.querySelector('#primary-links');
+    const menus = Array.from(navigation?.querySelectorAll('.nav-dropdown, .site-menu-subgroup') || []);
+    const compactViewport = window.matchMedia('(max-width: 1024px)');
+    const closeDropdowns = () => menus.forEach(menu => { menu.open = false; });
+    function setNavigationExpanded(expanded) {
+        toggle?.setAttribute('aria-expanded', String(expanded));
+        links?.classList.toggle('is-open', expanded);
+        if (!expanded)
+            closeDropdowns();
+    }
+    toggle?.addEventListener('click', () => setNavigationExpanded(toggle.getAttribute('aria-expanded') !== 'true'));
+    const normalizedPath = path => path.replace(/\/+$/, '') || '/';
+    const normalizedQuery = search => JSON.stringify(Array.from(new URLSearchParams(search).entries()).sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)));
+    navigation?.querySelectorAll('a[href]').forEach(link => {
         const url = new URL(link.href, location.href);
-        if (url.origin === location.origin && url.pathname.replace(/\/$/, '') === location.pathname.replace(/\/$/, '')) {
+        const queryMatches = !url.search || normalizedQuery(url.search) === normalizedQuery(location.search);
+        if (url.origin === location.origin && normalizedPath(url.pathname) === normalizedPath(location.pathname) && queryMatches) {
             link.setAttribute('aria-current', 'page');
-            link.closest('.nav-dropdown')?.classList.add('is-active');
+            let parent = link.closest('details');
+            while (parent && navigation.contains(parent)) {
+                parent.classList.add('is-active');
+                parent = parent.parentElement?.closest('details');
+            }
         }
     });
-    menus.forEach(menu => menu.addEventListener('toggle', () => {
-        if (menu.open)
-            menus.forEach(other => { if (other !== menu)
-                other.open = false; });
-    }));
-    document.addEventListener('keydown', event => {
-        if (event.key !== 'Escape')
+    function placeDropdown(menu) {
+        if (!menu.matches('.nav-dropdown') || menu.matches('.nav-dropdown--wide'))
             return;
-        const opened = menus.find(menu => menu.open);
+        const panel = menu.querySelector(':scope > .nav-panel');
+        if (!panel)
+            return;
+        panel.style.removeProperty('--nav-panel-shift');
+        if (compactViewport.matches || navigation.classList.contains('nav-is-compact'))
+            return;
+        const boundary = navigation.querySelector('.nav-inner').getBoundingClientRect();
+        const bounds = panel.getBoundingClientRect();
+        const shift = Math.min(0, boundary.right - 12 - bounds.right) + Math.max(0, boundary.left + 12 - bounds.left);
+        panel.style.setProperty('--nav-panel-shift', `${shift}px`);
+    }
+    menus.forEach(menu => {
+        const summary = menu.querySelector(':scope > summary');
+        menu.addEventListener('toggle', () => {
+            summary?.setAttribute('aria-expanded', String(menu.open));
+            if (menu.open) {
+                // Close siblings only; a nested expansion must retain its parents.
+                menus.forEach(other => { if (other !== menu && other.parentElement === menu.parentElement)
+                    other.open = false; });
+                placeDropdown(menu);
+            }
+        });
+        summary?.addEventListener('keydown', event => {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+                return;
+            event.preventDefault();
+            menu.open = true;
+            const targets = Array.from(menu.querySelectorAll('a[href], summary')).filter(element => element !== summary && element.getClientRects().length > 0);
+            (event.key === 'ArrowUp' ? targets.at(-1) : targets[0])?.focus();
+        });
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || !navigation?.contains(document.activeElement))
+            return;
+        const opened = document.activeElement?.closest('details[open]') || menus.find(menu => menu.open);
         if (opened) {
+            event.preventDefault();
             opened.open = false;
-            opened.querySelector('summary')?.focus();
+            opened.querySelector(':scope > summary')?.focus();
         }
         else if (toggle?.getAttribute('aria-expanded') === 'true') {
-            toggle.click();
+            event.preventDefault();
+            setNavigationExpanded(false);
             toggle.focus();
         }
     });
     document.addEventListener('click', event => {
-        if (!(event.target instanceof Node))
-            return;
-        if (!menus.some(menu => menu.contains(event.target)))
-            menus.forEach(menu => { menu.open = false; });
+        if (event.target instanceof Node && navigation && !navigation.contains(event.target))
+            setNavigationExpanded(false);
     });
+    navigation?.addEventListener('focusout', event => {
+        // During a native summary focus transfer activeElement can briefly be
+        // body. Prefer the destination; defer unknown destinations to the next
+        // task so a tap cannot close the mobile menu before its click lands.
+        if (event.relatedTarget instanceof Node && navigation.contains(event.relatedTarget))
+            return;
+        window.setTimeout(() => {
+            if (!navigation.contains(document.activeElement))
+                setNavigationExpanded(false);
+        }, 0);
+    });
+    function fitNavigation() {
+        if (!navigation || !links)
+            return;
+        const wasCompact = compactViewport.matches || navigation.classList.contains('nav-is-compact');
+        // CMS labels and root count vary. Collapse before they can wrap, without
+        // changing the published order or hiding any configured destination.
+        navigation.classList.remove('nav-is-compact');
+        const compact = compactViewport.matches || links.scrollWidth > links.clientWidth + 1;
+        navigation.classList.toggle('nav-is-compact', compact);
+        if (!compact || wasCompact !== compact)
+            setNavigationExpanded(false);
+        menus.filter(menu => menu.open).forEach(placeDropdown);
+    }
+    fitNavigation();
+    void document.fonts.ready.then(fitNavigation);
+    window.addEventListener('resize', fitNavigation);
     const body = document.querySelector('.article-detail .article-body');
     let fontSize = 18;
     const feedback = document.querySelector('.reading-feedback');

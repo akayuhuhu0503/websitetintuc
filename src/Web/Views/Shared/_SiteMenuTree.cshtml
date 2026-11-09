@@ -1,7 +1,23 @@
 @model LandPortal.Web.Services.SiteMenuTreeModel
-@foreach (var item in Model.Items.Where(x => x.ParentId == Model.ParentId))
+@foreach (var item in Model.Items.Where(x => x.ParentId == Model.ParentId).OrderBy(x => x.SortOrder).ThenBy(x => x.Id))
 {
-    var children = Model.Items.Where(x => x.ParentId == item.Id).ToList();
-    if (children.Count > 0) { <details class="site-menu-subgroup"><summary>@item.Label</summary><partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model.Items, item.Id)" /></details> }
-    else if (item.Url != null) { <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a> }
+    var children = Model.Items.Where(x => x.ParentId == item.Id).ToArray();
+    if (children.Length > 0)
+    {
+        var panelId = "nav-subgroup-" + item.Id.ToString("N");
+        <details class="site-menu-subgroup">
+            <summary aria-controls="@panelId" aria-expanded="false">@item.Label</summary>
+            <div id="@panelId" class="site-menu-children">
+                @if (item.Url is not null)
+                {
+                    <a class="nav-parent-link" href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">Tổng quan @item.Label <span aria-hidden="true">→</span></a>
+                }
+                <partial name="_SiteMenuTree" model="new LandPortal.Web.Services.SiteMenuTreeModel(Model.Items, item.Id)" />
+            </div>
+        </details>
+    }
+    else if (item.Url is not null)
+    {
+        <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a>
+    }
 }

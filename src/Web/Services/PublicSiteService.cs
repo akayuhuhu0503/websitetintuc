@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Services;
 
 public sealed record SiteNavigationItem(Guid Id, Guid? ParentId, string Position, string Label, string? Url, bool NewWindow, int SortOrder);
-public sealed record SiteMenuTreeModel(IReadOnlyList<SiteNavigationItem> Items, Guid ParentId);
+public sealed record SiteMenuTreeModel(IReadOnlyList<SiteNavigationItem> Items, Guid? ParentId);
 public sealed record SitePublicBanner(Guid Id, string Label, string Alt, string Position, string ImageUrl, string Url, bool NewWindow, int SortOrder);
 public sealed record SitePublicConfiguration(SiteConfigurationRevision Revision, IReadOnlyList<SiteNavigationItem> Menus, IReadOnlyList<SitePublicBanner> Banners, string? LogoUrl, bool IsPreview);
 public sealed record SiteHomeBlockResult(SiteHomeBlock Block, IReadOnlyList<ContentCard> Items, string? MoreUrl,string? ErrorReference=null);
