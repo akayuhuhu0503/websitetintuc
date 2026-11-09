@@ -108,13 +108,13 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
             .ThenByDescending(x=>x.SourceDate ?? (x.PublishedUtc==null?(DateOnly?)null:DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date)))
             .ThenByDescending(x=>x.PublishedUtc).ThenBy(x=>x.Id);
     }
-    public static IQueryable<PublicRow> ForDisplay(IQueryable<PublicRow> rows) => rows.Select(x => new PublicRow { Id = x.Id, RevisionId = x.RevisionId, Kind = x.Kind, Title = x.Title, Summary = x.Summary, SourceDate = x.SourceDate, PublishedUtc = x.PublishedUtc, OriginalDateText = x.OriginalDateText, CategoryId = x.CategoryId, CategoryName = x.CategoryName, CategorySlug = x.CategorySlug, ThumbnailId = x.ThumbnailId });
+    public static IQueryable<PublicRow> ForDisplay(IQueryable<PublicRow> rows) => rows.Select(x => new PublicRow { Id = x.Id, RevisionId = x.RevisionId, Kind = x.Kind, Title = x.Title, Summary = x.Summary, SourceDate = x.SourceDate, PublishedUtc = x.PublishedUtc, OriginalDateText = x.OriginalDateText, CategoryId = x.CategoryId, CategoryName = x.CategoryName, CategorySlug = x.CategorySlug, ThumbnailId = x.ThumbnailId, Number = x.Number });
     // New editorial content has a real system publication time and no source date.
     // Only the ordering uses that known VN date; original source metadata remains unchanged.
     public static IOrderedQueryable<PublicRow> Recent(IQueryable<PublicRow> rows) => rows
         .OrderByDescending(x => x.SourceDate ?? (x.PublishedUtc == null ? (DateOnly?)null : DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date)))
         .ThenByDescending(x => x.PublishedUtc).ThenBy(x => x.Id);
-    public static ContentCard Card(PublicRow x) => new(x.Id, Slug(x.Title), x.Title, Empty(x.Summary), DisplayDate(x), x.ThumbnailId is null ? null : $"/media/{x.ThumbnailId}", KindLabel(x.Kind), x.CategoryName, x.CategorySlug);
+    public static ContentCard Card(PublicRow x) => new(x.Id, Slug(x.Title), x.Title, Empty(x.Summary), DisplayDate(x), x.ThumbnailId is null ? null : $"/media/{x.ThumbnailId}", KindLabel(x.Kind), x.CategoryName, x.CategorySlug) { DocumentNumber = Empty(x.Number) };
     public static string Slug(string value) { var slug = Regex.Replace(TextNormalizer.Search(value), "[^a-z0-9]+", "-").Trim('-'); return slug[..Math.Min(120, slug.Length)]; }
     public static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
     public static string? DisplayDate(PublicRow row) => row.SourceDate?.ToString("dd/MM/yyyy") ??

@@ -1,2 +1,2 @@
 @model ContentCard
-<article class="document-card"><span class="document-card-icon"><partial name="_PortalIcon" model='"document"' /></span><div><p class="item-meta">@Model.Kind @if(Model.DisplayDate is not null){<span>· @Model.DisplayDate</span>}</p><h3><a href="@Model.Url">@Model.Title</a></h3></div></article>
+<article class="document-card"><span class="document-card-icon"><partial name="_PortalIcon" model='"document"' /></span><div><p class="item-meta">@Model.Kind @if(Model.DisplayDate is not null){<span>· @Model.DisplayDate</span>}</p><h3><a href="@Model.Url">@Model.Title</a></h3>@if(Model.DocumentNumber is not null){<p class="document-number">Số ký hiệu: @Model.DocumentNumber</p>}</div></article>

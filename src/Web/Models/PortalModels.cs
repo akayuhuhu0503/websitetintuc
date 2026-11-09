@@ -5,6 +5,7 @@ namespace LandPortal.Web.Models;
 public sealed record MenuCategory(string Name, string Slug);
 public sealed record ContentCard(Guid Id, string Slug, string Title, string? Summary, string? DisplayDate, string? ThumbnailUrl, string Kind, string? CategoryName = null, string? CategorySlug = null)
 {
+    public string? DocumentNumber { get; init; }
     // The identity route is stable across editorial title changes; historical
     // optional-slug URLs remain accepted by the same published-content endpoint.
     public string Url => $"/bai-viet/{Id}";

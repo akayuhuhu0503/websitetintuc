@@ -42,3 +42,11 @@ CMS tiếp tục dùng **Featured/PinnedContentIds**, không tạo cơ chế Fea
 Build Web/Razor PASS (0 warning/error). Tám kiểm tra chọn tin bằng truy vấn chỉ đọc PASS: ghim, loại private/lịch tuần, chống trùng, Featured, giới hạn CMS, thumbnail Clean và số truy vấn có giới hạn, không N+1. Cả view Configured và fallback được render từ Razor đã compile với dữ liệu LAN; tám tổ hợp view/kích thước PASS, ảnh tải đúng, không tràn ngang. Menu/bàn phím, bộ chọn 7/30 ngày, tìm kiếm, mở bài và URL bài với slug cũ PASS. Hai biến thể không ảnh/ít bài chỉ sửa DOM trong trình duyệt, không tạo dữ liệu. Không full regression, không ghi SQL, không sửa tài khoản hoặc triển khai IIS.
 
 Không cần cấu hình mới để dùng bố cục. Để chủ động chọn tin chính, người có quyền cấu hình vào `/admin/site?section=blocks`, sắp xếp bài ghim trong khối Featured rồi xem trước và áp dụng qua workflow CMS hiện có. Nếu chưa ghim/đánh dấu Featured, hệ thống chọn Article hợp lệ theo thứ tự ngày; lịch tuần không chiếm vị trí này.
+
+### Hoàn thiện kích thước và nhịp đọc
+
+Ảnh hero desktop giới hạn 300–420px theo viewport, tiêu đề 30–34px/tối đa ba dòng; mobile giữ đầy đủ tiêu đề. Đo local 1920×1080: ảnh giảm từ 590 xuống 420px, tiêu đề từ khoảng y=981 xuống y=801 và kết thúc y=939, nằm trong màn hình đầu. Ảnh dùng cover, không kéo méo. Hai tin phụ có thumbnail đồng nhất và tiêu đề tối đa ba dòng trên desktop.
+
+Chuyên mục có nhiều thumbnail hợp lệ dùng mẫu ảnh lớn + tin phụ; ít ảnh dùng bài chính + danh sách chữ, không phân loại bằng tên hardcode. Văn bản dùng mẫu riêng, hiển thị số ký hiệu có sẵn từ revision Published; chỉ bổ sung trường trình bày, không đổi schema. Giữ thứ tự, số bài và URL CMS. Tin đọc nhiều trên trang chủ hiển thị tối đa bốn card đầu, phần còn lại thành hàng chữ gọn theo đúng thứ hạng; ba bài dùng ba cột desktop. Danh sách trong sidebar bài chi tiết không đổi.
+
+Build PASS 0 warning/error. Hai view × bốn breakpoint PASS; trường hợp 1/3/5 tin đọc nhiều và không ảnh/ít bài PASS (biến thể chỉ dùng DOM, không ghi dữ liệu). Tin thứ năm cao khoảng 42px trên desktop, không thành card lẻ. Menu, tìm kiếm, mở bài, URL cũ, bộ chọn 7/30 và kiểm tra ghim/Featured chỉ đọc PASS. Chỉ cập nhật preview local; không deploy IIS, thay private config, SQL hoặc pipeline import.
