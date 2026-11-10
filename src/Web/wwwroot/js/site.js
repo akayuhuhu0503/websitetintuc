@@ -272,6 +272,56 @@
             slider.querySelector('[data-slide-next]')?.addEventListener('click', () => show(current + 1));
         }
     });
+    document.querySelectorAll('[data-event-carousel]').forEach(carousel => {
+        const slides = Array.from(carousel.querySelectorAll('[data-event-slide]'));
+        if (slides.length < 2) return;
+        const dots = Array.from(carousel.querySelectorAll('[data-event-dot]'));
+        const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let current = 0, timer, hovering = false, touching = false, start, suppressClick = false;
+        const schedule = () => {
+            window.clearTimeout(timer);
+            if (!motion.matches && !document.hidden && !hovering && !touching && !carousel.contains(document.activeElement))
+                timer = window.setTimeout(() => show(current + 1), 5000);
+        };
+        const show = next => {
+            current = (next + slides.length) % slides.length;
+            slides.forEach((slide, i) => {
+                slide.hidden = false;
+                slide.classList.toggle('is-active', i === current);
+                slide.inert = i !== current;
+                slide.setAttribute('aria-hidden', String(i !== current));
+            });
+            dots.forEach((dot, i) => dot.setAttribute('aria-current', String(i === current)));
+            schedule();
+        };
+        carousel.classList.add('event-carousel-ready');
+        slides.forEach(slide => { const img = slide.querySelector('img'); if (img) img.loading = 'eager'; });
+        carousel.querySelector('[data-event-dots]').hidden = false;
+        dots.forEach((dot, i) => dot.addEventListener('click', () => show(i)));
+        carousel.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') { hovering = true; schedule(); } });
+        carousel.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { hovering = false; schedule(); } });
+        carousel.addEventListener('focusin', schedule);
+        carousel.addEventListener('focusout', () => window.setTimeout(schedule, 0));
+        document.addEventListener('visibilitychange', schedule);
+        motion.addEventListener('change', schedule);
+        const surface = carousel.querySelector('.event-slides');
+        surface.addEventListener('pointerdown', e => {
+            if (e.pointerType !== 'touch') return;
+            start = { x: e.clientX, y: e.clientY };
+            suppressClick = false; touching = true; schedule();
+        });
+        surface.addEventListener('pointerup', e => {
+            if (!start) return;
+            const dx = e.clientX - start.x, dy = e.clientY - start.y;
+            start = null; touching = false;
+            if (Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+                suppressClick = true; show(current + (dx < 0 ? 1 : -1));
+            } else schedule();
+        });
+        surface.addEventListener('pointercancel', () => { start = null; touching = false; schedule(); });
+        surface.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); suppressClick = false; } }, true);
+        show(0);
+    });
     const navigation = document.querySelector('[data-portal-navigation]');
     const toggle = navigation?.querySelector('.mobile-menu-toggle');
     const links = navigation?.querySelector('#primary-links');

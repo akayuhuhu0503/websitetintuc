@@ -2,20 +2,19 @@
 @{var banners=Model.Banners.Where(x=>x.Position=="home_event_strip").ToArray();}
 @if(banners.Length>0)
 {
-<section class="home-event-strip" data-activity-slider aria-label="Sự kiện và thông tin nổi bật">
+<section class="home-event-strip" data-event-carousel aria-roledescription="băng chuyền" aria-label="Sự kiện và thông tin nổi bật">
     <div class="event-slides">
     @for(var i=0;i<banners.Length;i++)
     {
         var banner=banners[i];
-        <article class="event-slide" data-slide hidden="@(i>0)">
-            <a href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)">
+        <article class="event-slide" data-event-slide hidden="@(i>0)" role="group" aria-roledescription="banner" aria-label="@(i+1) / @banners.Length">
+            <a href="@banner.Url" aria-label="@banner.Label" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)">
                 <img src="@banner.ImageUrl" alt="@banner.Alt" width="1600" height="220" loading="lazy" decoding="async" />
-                <div class="event-caption"><h2>@banner.Label</h2>@if(!string.IsNullOrWhiteSpace(banner.Description)){<p>@banner.Description</p>}</div>
             </a>
         </article>
     }
     </div>
-    @if(banners.Length>1){<nav class="event-controls" data-slide-controls hidden aria-label="Chọn banner sự kiện"><button type="button" data-slide-prev aria-label="Banner trước">←</button><span data-slide-status role="status" aria-live="polite"></span><button type="button" data-slide-next aria-label="Banner tiếp">→</button></nav>}
+    @if(banners.Length>1){<nav class="event-dots" data-event-dots hidden aria-label="Chọn banner sự kiện">@for(var i=0;i<banners.Length;i++){<button type="button" data-event-dot="@i" aria-label="Đến banner @(i+1): @banners[i].Label" aria-current="@(i==0?"true":"false")"><span aria-hidden="true"></span></button>}</nav>}
 </section>
 }
 else if(Model.IsPreview)
