@@ -57,7 +57,8 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         var source = await db.SourceRecords.AsNoTracking().Where(x => x.ContentId == id).Select(x => x.CanonicalUrl).FirstOrDefaultAsync();
         var legal = revision.Metadata;
         var isDocument=row.Kind is ContentKind.LegalDocument or ContentKind.DraftDocument;
-        var inlinePdf=isDocument?await db.ContentAssets.Where(x=>x.RevisionId==row.RevisionId&&x.MediaAsset.MimeType=="application/pdf"&&x.MediaAsset.ScanStatus=="Clean"&&!x.MediaAsset.IsQuarantined).OrderBy(x=>x.SortOrder).Select(x=>(Guid?)x.MediaAssetId).FirstOrDefaultAsync():null;
+        var inlinePdf=isDocument?await db.ContentAssets.Where(x=>x.RevisionId==row.RevisionId&&x.MediaAsset.MimeType=="application/pdf"&&!x.MediaAsset.IsQuarantined&&
+            (x.MediaAsset.ScanStatus=="Clean"||x.MediaAsset.ScanStatus==InternalMediaExceptionPolicy.Status&&x.MediaAsset.ValidationStatus.StartsWith(InternalMediaExceptionPolicy.Prefix)&&db.AuditLogs.Any(g=>g.Action==InternalMediaExceptionPolicy.GrantAction&&g.Actor==x.MediaAssetId.ToString()&&g.Detail==x.MediaAsset.ValidationStatus+"|"+x.MediaAsset.Sha256+"|"+x.MediaAsset.StorageKey))).OrderBy(x=>x.SortOrder).Select(x=>(Guid?)x.MediaAssetId).FirstOrDefaultAsync():null;
         var counts=(Views:0L,Downloads:0L);
         if(isDocument){await usage.ViewAsync(row.Id,row.RevisionId);counts=await usage.CountsAsync(row.Id);}
         var coverCaption=revision.CoverAssetId is Guid coverId?await db.ContentAssets.Where(x=>x.RevisionId==row.RevisionId&&x.MediaAssetId==coverId).Select(x=>x.Caption).FirstOrDefaultAsync():null;
@@ -161,7 +162,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
                 // revision. Draft/private assets and old approvals confer no access.
                 var assets=await db.ContentAssets.AsNoTracking().Where(x=>x.RevisionId==row.RevisionId).Select(x=>x.MediaAsset).ToListAsync();
                 var policy=HttpContext.RequestServices.GetRequiredService<MediaUploadOptions>();
-                var recovered=assets.FirstOrDefault(x=>!string.IsNullOrWhiteSpace(x.SourceUrl)&&SourceUnavailableLinks.Key(x.SourceUrl)==key&&x.ScanStatus=="Clean"&&!x.IsQuarantined&&policy.CanServe(x));
+                var recovered=assets.FirstOrDefault(x=>!string.IsNullOrWhiteSpace(x.SourceUrl)&&SourceUnavailableLinks.Key(x.SourceUrl)==key&&(x.ScanStatus=="Clean"||InternalMediaExceptionPolicy.Candidate(x))&&!x.IsQuarantined&&policy.CanServe(x));
                 if(recovered is not null)return Redirect("/media/"+recovered.Id);
             }
         }

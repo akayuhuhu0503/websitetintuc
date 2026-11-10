@@ -45,7 +45,7 @@ public static class LanReviewerPermissions
                 throw new UnauthorizedAccessException("Live local database/operator mismatch.");
         }
         var services=new ServiceCollection();services.AddLogging();services.AddScoped(_=>db);
-        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>();
+        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();
         var users=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
         var roles=scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();

@@ -43,7 +43,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
                 if (id.HasValue) { var x = r.Menus.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Menu = new() { Label = x.Label, Position = x.Position, ParentId = x.ParentId, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, Enabled=x.Enabled }; model.SystemProtected = false; } break;
             case "banners":
                 model.Banner.Position = "home";
-                if (id.HasValue) { var x = r.Banners.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Banner = new() { Label = x.Label, Alt = x.Alt, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, MediaAssetId = x.MediaAssetId, StartVietnam = x.StartUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime, EndVietnam = x.EndUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime }; } break;
+                if (id.HasValue) { var x = r.Banners.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Banner = new() { Label = x.Label, Alt = x.Alt, Description = x.Description, Enabled = x.Enabled, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, MediaAssetId = x.MediaAssetId, StartVietnam = x.StartUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime, EndVietnam = x.EndUtc?.ToOffset(TimeSpan.FromHours(7)).DateTime }; } break;
             case "blocks":
                 if (id.HasValue) { var x = r.Blocks.SingleOrDefault(x => x.Id == id); if (x is null) return NotFound(); model.Block = new() { Type = x.Type, Title = x.Title, Limit = x.Limit, CategoryId = x.CategoryId, SortOrder = x.SortOrder, Enabled = x.Enabled, PinnedContentIds = r.Pins.Where(p => p.BlockId == id).OrderBy(p => p.SortOrder).Select(p => p.ContentId).ToArray() }; } break;
             case "vocabulary":
@@ -104,7 +104,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
                         var banner = model.ItemId.HasValue ? r.Banners.SingleOrDefault(x => x.Id == model.ItemId) : null;
                         if (model.ItemId.HasValue && banner is null) throw new SiteConfigurationException("Banner không tồn tại.", 404);
                         banner ??= new(); if (!r.Banners.Contains(banner)) r.Banners.Add(banner);
-                        banner.Label = model.Banner.Label.Trim(); banner.Alt = model.Banner.Alt.Trim(); banner.Position = model.Banner.Position; banner.MediaAssetId = model.Banner.MediaAssetId ?? Guid.Empty; banner.TargetKind = model.Banner.TargetKind;
+                        banner.Description = model.Banner.Description.Trim(); banner.Enabled = model.Banner.Enabled; banner.Label = model.Banner.Label.Trim(); banner.Alt = model.Banner.Alt.Trim(); banner.Position = model.Banner.Position; banner.MediaAssetId = model.Banner.MediaAssetId ?? Guid.Empty; banner.TargetKind = model.Banner.TargetKind;
                         banner.CategoryId = model.Banner.TargetKind == "Category" ? model.Banner.CategoryId : null; banner.ContentId = model.Banner.TargetKind == "Content" ? model.Banner.ContentId : null; banner.RouteKey = model.Banner.TargetKind == "Route" ? model.Banner.RouteKey : ""; banner.ExternalUrl = model.Banner.TargetKind == "External" ? model.Banner.ExternalUrl.Trim() : ""; banner.OpenNewWindow = model.Banner.OpenNewWindow; banner.SortOrder = model.Banner.SortOrder; banner.StartUtc = Vietnam(model.Banner.StartVietnam); banner.EndUtc = Vietnam(model.Banner.EndVietnam); break;
                     case "blocks":
                         var block = model.ItemId.HasValue ? r.Blocks.SingleOrDefault(x => x.Id == model.ItemId) : null;
@@ -224,7 +224,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         m.Contact.OrganizationName ??= ""; m.Contact.FooterText ??= ""; m.Contact.ContactAddress ??= ""; m.Contact.ContactPhone ??= ""; m.Contact.ContactHotline ??= ""; m.Contact.ContactEmail ??= "";
         m.Category.DisplayName ??= ""; m.Category.Slug ??= ""; m.Category.Description ??= "";
         m.Menu.Label ??= ""; m.Menu.Position ??= ""; m.Menu.TargetKind ??= ""; m.Menu.RouteKey ??= ""; m.Menu.ExternalUrl ??= "";
-        m.Banner.Label ??= ""; m.Banner.Alt ??= ""; m.Banner.Position ??= ""; m.Banner.TargetKind ??= ""; m.Banner.RouteKey ??= ""; m.Banner.ExternalUrl ??= "";
+        m.Banner.Description ??= ""; m.Banner.Label ??= ""; m.Banner.Alt ??= ""; m.Banner.Position ??= ""; m.Banner.TargetKind ??= ""; m.Banner.RouteKey ??= ""; m.Banner.ExternalUrl ??= "";
         m.Block.Title ??= ""; m.Block.Type ??= ""; m.Block.PinnedContentIds ??= []; m.Vocabulary.Kind ??= ""; m.Vocabulary.Label ??= "";
     }
     private static void Reorder<T>(List<T> items, T item, int direction, Func<T, int> order, Action<T, int> set)

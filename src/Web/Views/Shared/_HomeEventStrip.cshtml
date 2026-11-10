@@ -1,0 +1,24 @@
+@model LandPortal.Web.Services.SitePublicConfiguration
+@{var banners=Model.Banners.Where(x=>x.Position=="home_event_strip").ToArray();}
+@if(banners.Length>0)
+{
+<section class="home-event-strip" data-activity-slider aria-label="Sự kiện và thông tin nổi bật">
+    <div class="event-slides">
+    @for(var i=0;i<banners.Length;i++)
+    {
+        var banner=banners[i];
+        <article class="event-slide" data-slide hidden="@(i>0)">
+            <a href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)">
+                <img src="@banner.ImageUrl" alt="@banner.Alt" width="1600" height="220" loading="lazy" decoding="async" />
+                <div class="event-caption"><h2>@banner.Label</h2>@if(!string.IsNullOrWhiteSpace(banner.Description)){<p>@banner.Description</p>}</div>
+            </a>
+        </article>
+    }
+    </div>
+    @if(banners.Length>1){<nav class="event-controls" data-slide-controls hidden aria-label="Chọn banner sự kiện"><button type="button" data-slide-prev aria-label="Banner trước">←</button><span data-slide-status role="status" aria-live="polite"></span><button type="button" data-slide-next aria-label="Banner tiếp">→</button></nav>}
+</section>
+}
+else if(Model.IsPreview)
+{
+<aside class="event-preview-placeholder"><strong>Vị trí banner sự kiện</strong><p>Sau Tin mới cập nhật, trước các chuyên mục. Chọn vị trí “Dải sự kiện sau Tin mới cập nhật” trong CMS; ảnh khuyến nghị 1600 × 220 px. Vùng này chỉ xuất hiện khi xem trước, không để khoảng trống ngoài trang công khai.</p></aside>
+}

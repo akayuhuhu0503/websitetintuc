@@ -1,3 +1,63 @@
+﻿### 09/11/2026 — Shared SQL media252 COMMITTED_VERIFIED; public core PASS
+
+Exact owner+authenticatedDBA unscanned exception, receipt20fed497…ca8417, plan fedd4da7…c7e9a;252/252/703/504 applied,0mismatch; totals285Published/285revisions/703ScannerSkipped/570aliases/16categories/17migrations.1backup COPY_ONLY/CHECKSUM/header/verify/server+clientSHA PASS; old33/Identity/site/category/source digests unchanged,703 exception grants verified. HTTPhealth/home/category/articles/search/GCN200; homepage19newIDs/8newMedia,2titles verified,3image+2PDF fullSHA PASS. Two old-origin paths under gdla host404;504 SQL aliases exact, cross-domain301 not accepted/cutover not performed. No claim of703HTTP coverage, antivirusClean or Production acceptance. Private evidence `.local/media252-approved-completion-current.json`; no rerun/import/full regression/build/push.
+
+### 09/11/2026 — Exception APPROVED / fresh SQL plan PASS / credential pending
+
+Owner explicitly approves703 NotScanned for exact receipt20fed497…ca8417; approval must not be requested again. Official plan fedd4da7…c7e9a PASS252/252/703/504, no prior batch receipt. Private job `.local/media252-approved-execution-current.json` waiting Get-Credential DBA; backup/import/HTTP verification not yet executed. Native importer/backup/DPAPI/freshness/preservation guards retained, not bypassed. No actual SQL write or success claim at this checkpoint.
+
+### 09/11/2026 — IIS integrity receipt PASS; publication exception PENDING
+
+Received exact SHA20fed497…ca8417; handed-off native .NET validator accepts703entries/364images339PDF, byte/hash/key descriptors and expected mediaRoot/tool binding. Reported machine DBKIEMKE,703NotScanned/0Clean/0Blocked; not antivirus evidence. Fresh until earliest10Nov20:38VN. Private retained bytes/result at `.local/media252-received-integrity-current.json`. No SQL/import this turn. Explicit administrator unscanned release exception + fresh SQL plan/DBA/backup still required, no automatic publication approval from receipt delivery.
+
+### 09/11/2026 — Internal703 integrity-only / publication exception pending
+
+CODE COMPLETE, PASS LOCAL:11 focused receipt/import-policy checks with703 real files and no usable scanner, plus2 updater/rollback checks. Receipt truthfully NotScanned/ScannerSkipped,0Clean; no verification SQL writes/publication. Explicit protected admin+DBA unscanned exception bound to plan/receipt mandatory before import; no real approval created. Source media read/thumbnail/PDF supports approved grant + hash; public uploads retain antivirus. No migration. Actual target IIS receipt and SQL import/readback NOT RUN. Latest bundle `.local/media252-integrity-final-current.json`; earlier mandatory-Clean policy superseded only for this exact internal package.
+
+### 09/11/2026 — ACL admission removed by owner; native receipt still mandatory
+
+PASS LOCAL: 17 storage/HTTP checks + 2 updater filesystem/rollback checks. Exact714 paths/1410 wide ACE warnings no longer block; all703 original files hash/format/read successfully and all714 DACLs unchanged. Actual read denial still fails with file path. Shared Web/Worker/tool ACL admission removed, no ACL remediation, no added approval flags. Real IIS native scanner/receipt NOT RUN; SQL252 remains blocked until receipt. Latest complete handoff `.local/media252-media-iis-final-current.json`; prior ACL-blocking reports describe historical policy only.
+
+### 09/11/2026 — Private ACL: LOCAL PASS / IIS DIAGNOSIS PENDING
+
+Supplied SYSTEM/Administrators/pool principal classes accepted; child explicit/inherited broad ACE detected with exact path/SID. Full-tree read-only inventory + private report precedes update; unreadable ACL is a distinct error. Actual offending IIS object unknown until target execution, no claim of false-positive fix or ACL remediation. No ACL/security/SQL/media changes; actual Clean receipt remains mandatory. Latest package: `.local/media252-private-acl-fix-current.json`.
+
+### 09/11/2026 — Portable private storage compatibility
+
+PASS LOCAL / TARGET IIS PENDING: shared StorageOptions + MediaService validate private sibling by manifest, IIS root, ACL and no-reparse instead of globally allowing publish paths. Web/Worker/tools build PASS; 12 NTFS/HTTP integration checks plus 2 isolated updater/rollback checks, no real IIS scan claimed. Complete binary update required; use `.local/media252-private-storage-fix-current.json`, not V1/V2-only scripts. Approved703 hashes/package unchanged, new SQL0 and targetClean0. Actual native IIS receipt remains mandatory before252 import; no SQL/Production readiness claim.
+
+### 09/11/2026 — Delta252: đối soát SQL hoàn tất, chưa có staging/media receipt
+
+PASS READ-ONLY PREPARATION: nguồn252 Published/252 revision/504 alias khớp dữ liệu và metadata/quan hệ;16category mappings,703 dependencies; target33/33/66/0 +17migration,33rowversions/core+metadata bảo toàn,0mismatch. Chưa có native executable plan/staging vì importer bắt receipt IIS trước SQL; không bypass hoặc đổi Published→Draft. Owner+DBA scope đã duyệt; chờ receipt703 tại IIS, rồi bind fresh plan/session/backup sát ghi. Launcher private bọc importer hiện có, parser/2missing-artifact guards PASS; live252import/HTTPS703 NOT RUN. Không backup/build/full regression/SQLwrites; không nghiệm thu285 hoặc Production. Chi tiết `.local/media252-sql-preparation-current.json`.
+
+### 09/11/2026 — Copy703: approved destination pinned, target receipt pending
+
+Owner chốt `D:\WWW_GDLA\publish\TTDL-IIS\private\media`; cây `uat-data/dee778f3401047f5898169b2fdabdaa3` đúng703file/1.002.856.991byte, không thêm media/media hoặc thay package/hash. COPY-MEDIA-IIS.txt4mục; một Explorer copy + một verify/scan sau copy, không lệnh lấy path hay đổi config. PS guard đối chiếu runtime với đúng D: trước scan, sai thì BLOCKED;7focused root checks+3parser PASS. Không C#Build/Web deploy/SQL/backup;0target media verified/0newSQL. Chờ receipt thực, không giả Clean hoặc Applied; scope owner+DBA không yêu cầu phê duyệt lại.
+
+### 09/11/2026 — Media703 Explorer copy-view READY, target scan NOT RUN
+
+Cùng package dee778f3…/manifest c5bbabdb… đã duyệt, không packet mới: đúng703file tại COPY-MEDIA/uat-data/packageN, byte/hash/MediaId giữ nguyên,10 focused guards PASS và3PSparse/build tool PASS. Có COPY-MEDIA-IIS.txt4mục; verifier đọc runtime thật, in đích và chờ Explorer copy, rồi hash/quét native từ chính file trong storage, không copy lại hoặc ghi SQL. Chưa biết MediaRoot thực tế từ máy Developer, không đoán path; chờ người vận hành hoặc lệnh đọc runtime trên IIS. SQL read-only09/11 vẫn33/33/66/0,16categories/17migrations;3HTTPhealth/home/GCN PASS. 0/252 nhập mới,0/703 target verified; giữ block đến khi receipt thật, không sửa schema/tài khoản/quyền/LAN/Production. Không nghiệm thu285 chỉ từ gói local.
+
+### 09/11/2026 — Owner scope media252 APPROVED / IIS execution NOT RUN
+
+Owner chấp thuận riêng package dee778f3-4010-47f5-8981-69b2fdabdaa3 / SHA c5bbabdb27d518625f95ac073a7843a30d62a51b297e06838e255c2fea4e0ccb, tối đa252/252/703/504 và phương thức owner+DBA có điều kiện. Quyết định thật lưu private ACL; không tạo final execution confirmation trước actual plan/receipt. Owner xác nhận chưa chạy nhập media trên IIS; thiếu actual native Clean/copy/hash/storage receipt là blocker hiện tại. Giữ nguyên gói/hash, chưa ghi SQL252/không backup/build/test/deploy/push; không yêu cầu duyệt trùng scope. Chờ chạy một lệnh tại IIS và trả receipt+SHA; số SQL/HTTP07/11 là lịch sử, không báo mới09/11 hoặc Production PASS.
+
+### 07/11/2026 — Delta252 media handoff READY / SQL NOT APPLIED
+
+Package dee778f3-4010-47f5-8981-69b2fdabdaa3, SHA c5bbabdb27d518625f95ac073a7843a30d62a51b297e06838e255c2fea4e0ccb: 252 Published/252 revision/504 alias/703 media, tách hoàn toàn33 đã commit. 364 ảnh/339PDF, byte/hash + parser703/703 PASS; actual target native scan/copy verified0. Standalone one-command IIS stage/real scanner/no overwrite/DPAPI cache/native receipt; Developer import PendingOnly bound owner+DBA new scope/receipt hash/target machine+operator+storage+tool/TTL, no local-scan fallback. Build tool0 warnings,29 focused offline+3PSparse PASS; IIS execution/SQL252/live703 HTTP NOT RUN. SQL read-only33/33/66/0,16categories/17migrations, không thay user/role/schema; health/home/GCN HTTP200. Chờ exact new-scope confirmation và receipt IIS thật; không signer giả, không backup mới/Web deploy/full regression. Chưa hoàn thành285 hoặc nghiệm thu UAT/Production.
+
+### 07/11/2026 — Direct33 APPLIED/VERIFIED shared SQL
+
+PASS đúng scope: 33 Published/33 revision/0 media/66 alias +16 category/33 source vào `WIN-S1IBJB84OOO/website_tin_tuc` (0→33). Manifest d11d8a41…/plan24b3607f… giữ nguyên; owner+DBA thật/DPAPI SID/audit transaction, fresh plan + đúng 1 backup mới CHECKSUM/HEADERONLY/VERIFYONLY/SHA thật PASS. Native import0 mismatch; reconcile0 errors, duplicate source/alias/revision0; không rerun import. 70 bảng/17 migration, Identity/role/site/media giữ nguyên, LAN không truy cập. Website health/home/list/detail/category/search/GCN route 7/7 HTTP200, trang chủ và tìm kiếm có bài nhập. 252 media-dependent vẫn pending, site-config publication không thực hiện. Không Web deploy/build, migration, grant, SMTP, full regression hoặc nghiệm thu Production.
+
+### 07/11/2026 — Exact33 owner + DBA authorization
+
+METHOD CODE COMPLETE / IMPORT BLOCKED: owner chấp nhận phương thức chủ dự án + DBA cho đúng manifest d11d8a41… và plan 24b3607f… (33/33/0/66). Private DPAPI/SID + exact scope + authenticated DBA + transactional audit; Authenticode các gói khác giữ nguyên. Tool build PASS, 18 focused offline PASS; live DBA/import/readback NOT RUN. Không chạy SQL hoặc tạo backup. Backup đã VERIFYONLY PASS nhưng hết cửa sổ 12h lúc 11:01 ngày 07/11 VN; SHA file/operator session còn thiếu. 0 imported, không báo UAT/Production PASS.
+
+### 06/11/2026 — Chuyển nội dung Published lên SQL dùng chung
+
+PREPARED / IMPORT BLOCKED: LAN 288/285 Published; gói 33 Ready +252 cần target release, 703 Clean lịch sử, 3 thử nghiệm excluded; target 0 content/70 bảng/17 migration. Export/manifest/readback/offline-plan và read-only target plan 33 PASS, không SQL write. Chưa có signer UAT/exact approval/operator/backup import; 703 media phải scan thật tại đích. Không coi gói hay HTTP200 là import thành công; website chưa nghiệm thu UAT/Production.
+
 ## FR-06 LAN và typography — 05/11/2026
 
 - **PASS schema/deployment LAN:** exact15→17, 2 email columns + audit index, 69 bảng dữ liệu cũ digest0diff/Identity/quyền giữ nguyên; 288/290/703/570. Backup SQL COPY_ONLY/CHECKSUM/HEADERONLY/VERIFYONLY và snapshot789file PASS; SQLrestoreNOTRUN. Web schema17 RUNNING5188/SMTPWorkerDisabled; shared/sourceSQL không thay đổi.
@@ -11,18 +71,31 @@
 - **SOURCE DBA SURVEY PASS / DDL NOT APPLIED:**6948eligible/4table schema+uniqueindex đúngWIN/sourceDB. Precheck13601 fingerprintalias collision đãfix trướcDDL. NewDBAcredential UI PID37904 pending; View/login, SELECT-onlydenials, realpaging/timing/actualplan **BLOCKED/NOT RUN**, không còn thiếuownerapproval. Không áp dụng lại scan/batch/migration nào.
 - **LAN PRESERVATION PASS:**288/290/703/570, account+role+permission digests0diff, schema15/noemail,SMTPDisabled. 5188 giữoldbuildhealthy; compatible15code/candidate sẵn sàng, chuyểnmainchỉ sauSourcegatesPASS. No backup/import/sharedWebsiteDB/sourceRepoIIS write/UAT-Production acceptance.
 
-## FR-17 GCN — phê duyệt View/tám cột, 04/11/2026
-
-- **CODE COMPLETE / LIVE INTEGRATION BLOCKED:** owner cho phép allconfirmed/effective/future8fields, View-only SQLlogin/TLSexceptionLAN-UAT; IDallowlist cũsuperseded. SQL20/page/filter/search, default2026/HN,8cols/ownerjoin/expand, noDetail/PDF; mapping34verified/unknownseparate. Không C#datasetpaging/copyDB.
-- **PASS focused offline:**7/7policy/parameter/catalog/DTO/SQLassembly; EFlegacy15mappingPASS và2build PASS;4PSparse+optional.envfieldsPASS. Candidate5194home/login/tintuc/health200/defaults; chưa dùng proof này thaySQL thực tế/table populated/search/paging/plan.
-- **SOURCE DBA SURVEY PASS / DDL NOT APPLIED:**6948eligible/4table schema+uniqueindex đúngWIN/sourceDB. Precheck13601 fingerprintalias collision đãfix trướcDDL. NewDBAcredential UI PID37904 pending; View/login, SELECT-onlydenials, realpaging/timing/actualplan **BLOCKED/NOT RUN**, không còn thiếuownerapproval. Không áp dụng lại scan/batch/migration nào.
-- **LAN PRESERVATION PASS:**288/290/703/570, account+role+permission digests0diff, schema15/noemail,SMTPDisabled. 5188 giữoldbuildhealthy; compatible15code/candidate sẵn sàng, chuyểnmainchỉ sauSourcegatesPASS. No backup/import/sharedWebsiteDB/sourceRepoIIS write/UAT-Production acceptance.
-
 ## FR-17: GCN tra cứu SQL nguồn — 04/11/2026
 
 - **PASS kỹ thuật fixture, chưa nghiệm thu SQL thật:** literal route GCN + detail,2dropdown Năm/DVHC (đổiNăm cậpnhậtDVHC), keywordkhôngdấu,7cột/paging10/tổng/backstate, mobile390px cuộnbảngkhôngtràntrang; rate30/IP/phút/timeout/connectionbounded.
 - **PASS offline fail-closed:** publication expiry/ID/hash/contentfield riêng,0public khi thiếu duyệt, sourcechanged bịloại; cấm sa/website_app/wrongDB/TLSbypass; confirmed/effective/giátrịchốt rỗng đúng sourcecode, không PII/PDF/SELECT*/NOLOCK. SQL thực tế chưa kiểm chứng metadata/plan.
 - **BLOCKED dữ liệu thật:** SELECT riêng chưa có, chưa duyệt công bố (0approved), strictTLS endpoint NameMismatch/UntrustedRoot. DBA metadata/count chưađọcđược; không coi hồ sơ đã chốt là công khai. Source/LAN/schema/quyền không ghi; LAN cũ giữkhỏe, module mới ởloopback5192 doFR06LANschema15 chưaupgrade. Không thay nghiệmthuUAT/Production; guide `giay-huy-sql-lookup.md`.
+
+## Thanh tin mới nhất — 04/11/2026
+
+- Yêu cầu hiển thị mới **PASS LOCAL:** bỏ label/nút, tickerfullwidth với10tin, giữ hover/focuspause/reduced-motion. BuildTypeScriptPASS/browserdesktopfullwidth vàmobilekhôngtràn; các kiểm tra pausebutton bên dưới là lịch sử trước khi nút được bỏ theo yêu cầu.
+- **PASS LOCAL:** ticker dưới menu dùng10tin công khai mới nhất đúng thứ tự trangTin tức;10unique/linkedtitles, chuyển động/pause/resume/focus và mobile390/reduced-motion kiểm tra browser thậtPASS. TypeScriptbuildPASS/staticLANcập nhật; không schema/data/quyền/fullsuite/push. Không dùng kết quả này thay nghiệm thuUAT/Production.
+
+## Câu chữ giao diện — 04/11/2026
+
+- **PASS LOCAL:** bỏ banner/footer thử nghiệm/LAN, footer BA và SEO mô tả phát triển; viết gọn hướng dẫn public. BuildWeb0warning/error vàTypeScriptPASS;5route browser thật không còn nhãn demo, menu/contact/date/CAPTCHA giữ nguyên. LAN cập nhậtstatic, không đổi schema-compatibleDLL/config/data/permissions/SMTPDisabled.
+- Chỉ xác nhận thay đổi hiển thị; dữ liệu mẫu vẫn có nhãn, cảnh báo an toàn/trạng thái thiếu dữ liệu giữ nguyên. Không fullsuite/SQLshared/Production deployment/push; không chuyển nghiệm thu UAT/Production thànhPASS.
+
+## Hiển thị ô nhập ngày — 03/11/2026
+
+- **PASS LOCAL:** lớp UI chung public/admin dd/MM/yyyy, datetime giữ giờ, lịch native và ISO wire giữ nguyên; không phụ thuộc locale trình duyệt. TypeScript build và16focusedbrowserchecks cuối PASS; searchGET thật roundtrip đúng, bộ lọc văn bản cũ không bị đổi/xóa. Static LAN cập nhật không restart/schema change. Nghiệm thu từng admin form bằng BA cònNOTRUN; khôngfullsuite/SQLwrites/push.
+
+## Demo LAN 04/11 — kiểm tra 03/11/2026
+
+- **PASS LOCAL:** launcher/host PID27052 actualLANDB/hạn09Nov/SMTPDisabled;12HTTProute200, tìm kiếm có/không dấu, PDFRange206, browser gửi1InquiryDEMOprivate và tra cứu bằng receipt/email/CAPTCHA thật.0emailqueued. LAN288/290/703/570/accounts/permissions giữ nguyên,0build/backup/migration/sharedSQLaccess.
+- **Quyền PASS read-only/code:** reviewer được duyệt+publish-approved, không cầnrolePublisher; writer khôngpublish;BR16query0pending. **CHỜ BA:** tạo nháp DEMO trongCMS, Writer→Reviewer→Publish, revision/featured/dashboard theo kịch bản `DEMO_04-11.md`; chưa có phiên xác thực BA, không dùng credentialMISMATCH/reset/bypass.
+- **DATA PENDING/NOT RUN:** lịch0release,thốngkê0current,video0playable;FR06emailrevisionLAN thiếucột nên khôngdemo. Không tìm4fileBA/XD nên khôngkhẳngđịnh đã đọcslide7/đạtXD10/11/13. RemoteBAdevice/UAT/Production chưa nghiệmthu; khôngfullsuite. CHƯA PRODUCTION READY.
 
 ## Đóng gói IIS một .env — 03/11/2026
 
@@ -1609,3 +1682,18 @@ Giữ lịch sử2B PASS LOCAL. V04 tổng thể **PARTIAL về hồ sơ artifac
 |Risk/history|SQL timeout MONITORING/ROOTCAUSEUNKNOWN;V04rawsmoke2BmissingPARTIALkhônggiảtái tạo;raw2Cuniquerun+manifesthash|Giữ risk|Không đóngincident/gọiFIXED;10Devquyềncũ+newinteractionchưa cấp|
 
 Checkpoint tiếp:2C.3 hỏi đáp nâng cao rồi2C.2/2C.4/2C.5/ops cònthiếu,khôngdựnglại.2Duploadvideomáy,2E/2F/Phase3/4NOTRUN.
+## FR-17 GCN — dữ liệu thật/LAN, 05/11/2026
+
+- **PASS LAN/source SQL:** View-only reader, đúng physical/source, 4 direct-table denials, 0 quyền thừa/0 mapping khác; actual plan có thật và reconcile sau lỗi định dạng plan không lặp DDL. 6.948 unique lúc SQL đối soát; 6.955 lúc browser live (nguồn có thể thay đổi).
+- **PASS focused:** default2026/HN=3, 8 cột, Tất cả20/trang và STT21 trang2, không trùng mẫu, accent equivalent, expand/collapse, dropdown không auto-submit, mobile390/không detail/PDF. HTTP home/login/health200. SQL paging/filter/search; không copy nguồn.
+- **PASS preservation:** LAN288/290/703/570; account/role/permission digests không đổi, SMTP Disabled. Chỉ View/login/user/SELECT đã được duyệt; không schema website/import/backup/source business DML. FR06 LAN schema15 vẫn riêng BLOCKED; UAT/Production chưa nghiệm thu. Guide: `giay-huy-sql-lookup.md`.
+
+## 10/11/2026 — Banner sự kiện / VIDEO: Local verified, IIS chưa triển khai
+
+- Local 127.0.0.1:5298 dùng LandPortal_LanDemo, migration HomeEventBanner 17→18 APPLIED/VERIFIED qua công cụ guarded; backup SQL/file hash/VERIFYONLY/header PASS; dữ liệu cũ không đổi.
+- Gia hạn demo theo phê duyệt thêm 7 ngày; expiry UTC: 2026-11-17T04:01:34.0271255+00:00.
+- Hai banner LOCAL DEMO và video tổng hợp 4 giây đã công bố bằng workflow/service CMS với actor có quyền hiện hành. CRUD/bật-tắt/thay ảnh/nháp không ảnh hưởng live PASS; mapping trình bày chuyên mục 60 bị thiếu đã bổ sung đúng nguồn, không thay menu hoặc Category.
+- Defender quét thật exact anonymous hashes + FFmpeg pin; video Ready, Chromium phát 640×360 vượt 1 giây, HTTP Range 206 PASS. File gốc vẫn cách ly. Hai ảnh kiểm thử cũ ScanFailed do đối chiếu provider được giữ cách ly, không giả Clean.
+- Responsive Local 1920/1366/768/390 + slideshow/placement PASS; offline 10 checks PASS; build Web/LanDemoSetup/UatDataHandoff PASS. Không full regression. Chưa test nút CMS bằng phiên browser BA; service CMS thật đã test.
+- 288 content / 290 revision / 703 media gốc, 570 alias, 19 category và 3 tài khoản/roles/claims giữ nguyên digest; chỉ thêm dữ liệu thử riêng. SMTP Disabled, LAN5188 đã khởi động lại bằng bản cũ; bản có banner/video mới ở Local5298.
+- Xem docs/home-event-video.md để cập nhật IIS một đợt: backup/17→18/Web+5Worker/verify/rollback. Không truy cập SQL dùng chung, không deploy IIS trong lượt này.

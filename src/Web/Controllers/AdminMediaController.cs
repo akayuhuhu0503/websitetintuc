@@ -31,7 +31,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
             if (content is null || !await permissions.CanReadAsync(actor, content)) return NotFound();
         }
         var developmentException = options.DevelopmentExceptionEnabled;
-        var assets = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && (x.ScanStatus == "NotScanned" || x.ScanStatus == "Clean") && (x.Origin == "Source"
+        var assets = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && (x.ScanStatus == "NotScanned" || x.ScanStatus == "Clean"||x.ScanStatus==InternalMediaExceptionPolicy.Status&&x.Origin=="Source"&&db.AuditLogs.Any(g=>g.Action==InternalMediaExceptionPolicy.GrantAction&&g.Actor==x.Id.ToString()&&g.Detail==x.ValidationStatus+"|"+x.Sha256+"|"+x.StorageKey)) && (x.Origin == "Source"
             || x.Origin == "Uploaded" && x.ValidationStatus == "Validated" && (x.ScanStatus == "Clean" || developmentException)
             || x.Origin == "EditorialDocument" && x.MimeType == "application/pdf" && x.ValidationStatus == "Validated" && x.ScanStatus == "Clean" && db.EditorialDocuments.Any(d => d.MediaAssetId == x.Id && d.ScanState == InquiryScanState.Clean && d.ScannedSha256 == x.Sha256 && d.EngineVersion != null)));
         if (actor.CategoryIds is not null || !actor.Has(Permissions.EditAll) && !actor.Has(Permissions.ViewAll))

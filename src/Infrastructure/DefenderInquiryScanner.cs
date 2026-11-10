@@ -21,7 +21,7 @@ public static class InquiryScannerFactory
             }
             catch(Exception e) when(e is InvalidOperationException or IOException or UnauthorizedAccessException){return new UnavailableInquiryScanner();}
         }
-        return config["Scanner:Provider"] switch{null or "" or "Clamd"=>new ClamdInquiryScanner(config,maximumBytes),"DefenderTest"=>new DefenderInquiryScanner(config,environment,maximumBytes),"MicrosoftDefenderOnPrem"=>DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes),LanStatisticsSamples.Provider=>DefenderInquiryScanner.ForApprovedLanSamples(config,environment,maximumBytes),_=>throw new InvalidOperationException("Unsupported scanner provider; no automatic Clean fallback.")};
+        return config["Scanner:Provider"] switch{null or "" or "Clamd"=>new ClamdInquiryScanner(config,maximumBytes),"DefenderTest"=>new DefenderInquiryScanner(config,environment,maximumBytes),"MicrosoftDefenderOnPrem"=>DefenderInquiryScanner.ForApprovedUat(config,environment,maximumBytes),LanMediaSamples.Provider=>DefenderInquiryScanner.ForApprovedLanMediaSamples(config,environment,maximumBytes),LanStatisticsSamples.Provider=>DefenderInquiryScanner.ForApprovedLanSamples(config,environment,maximumBytes),_=>throw new InvalidOperationException("Unsupported scanner provider; no automatic Clean fallback.")};
     }
 }
 
@@ -41,6 +41,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
     private readonly HashSet<string>? approved;
     private readonly bool onPrem;
     private readonly bool lanSample;
+    private readonly bool lanMediaSample;
     private readonly string? binaryPin;
     private readonly int seconds;
     private readonly long maximumBytes;
@@ -52,12 +53,15 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
     }
     public static IInquiryScanner ForApprovedLanSamples(IConfiguration config,string environment,long maximumBytes)
     {LanStatisticsSamples.Require(config,environment);if(maximumBytes>LandStatisticsService.MaximumBytes)throw new InvalidOperationException("LAN sample scanner is limited to 10 MiB statistics workbooks.");return new DefenderInquiryScanner(config,environment,maximumBytes,false,true);}
-    private DefenderInquiryScanner(IConfiguration config,string environment,long maximumBytes,bool approvedUat,bool approvedLanSample=false)
+    public static IInquiryScanner ForApprovedLanMediaSamples(IConfiguration config,string environment,long maximumBytes)
+    {LanMediaSamples.Require(config,environment);if(maximumBytes>32L*1024*1024)throw new InvalidOperationException("Anonymous LAN media limit is 32 MiB.");return new DefenderInquiryScanner(config,environment,maximumBytes,false,false,true);}
+    private DefenderInquiryScanner(IConfiguration config,string environment,long maximumBytes,bool approvedUat,bool approvedLanSample=false,bool approvedLanMediaSample=false)
     {
         onPrem=approvedUat;
-        lanSample=approvedLanSample;
+        lanSample=approvedLanSample||approvedLanMediaSample;lanMediaSample=approvedLanMediaSample;
         if(maximumBytes<1||maximumBytes>1024L*1024*1024)throw new InvalidOperationException("Scanner byte limit is invalid.");this.maximumBytes=maximumBytes;
         var root=config["WorkspaceRoot"]??throw new InvalidOperationException("Workspace required.");var storage=StorageOptions.FromConfiguration(config);
+        storage.PortableBoundary?.EnsureValidated();
         var prefix=Path.Combine(root,".local","tests")+Path.DirectorySeparatorChar;
         if(onPrem)
         {
@@ -67,7 +71,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
         }
         else if(lanSample)
         {
-            LanStatisticsSamples.Require(config,environment);approved=LanStatisticsSamples.Hashes().ToHashSet(StringComparer.Ordinal);binaryPin=config["Scanner:DefenderBinarySha256"]!.ToLowerInvariant();
+            approved=approvedLanMediaSample?LanMediaSamples.Require(config,environment):LanStatisticsSamples.Hashes().ToHashSet(StringComparer.Ordinal);if(!approvedLanMediaSample)LanStatisticsSamples.Require(config,environment);binaryPin=config["Scanner:DefenderBinarySha256"]!.ToLowerInvariant();
         }
         else
         {
@@ -135,7 +139,7 @@ public sealed class DefenderInquiryScanner:IInquiryScanner
             var detected=Regex.Match(result.Output,@"(?m)^Threat\s*:\s*([A-Za-z0-9_:/.-]{1,120})\s*$");
             var finished=result.Output.Split('\n').Any(x=>x.Trim()=="Scan finished.");
             var state=finished&&result.Exit==0&&result.Output.Split('\n').Any(x=>x.Trim()==noThreat)&&!detected.Success?InquiryScanState.Clean:finished&&result.Exit==2&&detected.Success&&Regex.IsMatch(result.Output,"Scanning "+Regex.Escape(path)+@" found [1-9]\d* threats\.")?InquiryScanState.Infected:InquiryScanState.ScanFailed;
-            return new(state,state==InquiryScanState.Infected?detected.Groups[1].Value:state==InquiryScanState.ScanFailed?"DefenderOutputNotConclusive":"",engine){Provider=onPrem?"MicrosoftDefenderOnPrem":lanSample?LanStatisticsSamples.Provider:"MicrosoftDefender",SignatureVersion=health.Signatures,SignatureUpdatedUtc=health.Updated,OutputSha256=Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(result.Output.Replace(path,onPrem?"<private-scan>":"<anonymous-test>"))))};
+            return new(state,state==InquiryScanState.Infected?detected.Groups[1].Value:state==InquiryScanState.ScanFailed?"DefenderOutputNotConclusive":"",engine){Provider=onPrem?"MicrosoftDefenderOnPrem":lanMediaSample?LanMediaSamples.Provider:lanSample?LanStatisticsSamples.Provider:"MicrosoftDefender",SignatureVersion=health.Signatures,SignatureUpdatedUtc=health.Updated,OutputSha256=Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(result.Output.Replace(path,onPrem?"<private-scan>":"<anonymous-test>"))))};
         }
         catch(Exception e)when(e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or OperationCanceledException or JsonException){return new(InquiryScanState.ScanFailed,"DefenderUnavailableTimeoutOrFileChanged",null);}
         finally{try{if(File.Exists(path))File.Delete(path);}catch(IOException){}catch(UnauthorizedAccessException){}}

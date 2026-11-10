@@ -14,7 +14,7 @@ public sealed class UserListModel
 public sealed class CreateAccountModel
 {
     [Required, StringLength(256), Display(Name = "Tên đăng nhập")] public string UserName { get; set; } = "";
-    [Required, EmailAddress, StringLength(256), Display(Name = "Email nội bộ")] public string Email { get; set; } = "";
+    [EmailAddress, StringLength(256), Display(Name = "Email nội bộ (không bắt buộc)")] public string? Email { get; set; }
     [StringLength(200), Display(Name = "Tên hiển thị")] public string DisplayName { get; set; } = "";
 }
 public sealed class AccountDetailModel
@@ -25,7 +25,7 @@ public sealed class AccountDetailModel
     public string Id { get; set; } = "";
     public string UserName { get; set; } = "";
     public string ConcurrencyStamp { get; set; } = "";
-    [Required, EmailAddress, StringLength(256), Display(Name = "Email nội bộ")] public string Email { get; set; } = "";
+    [EmailAddress, StringLength(256), Display(Name = "Email nội bộ (không bắt buộc)")] public string? Email { get; set; }
     [StringLength(200), Display(Name = "Tên hiển thị")] public string DisplayName { get; set; } = "";
     public bool Disabled { get; set; }
     public bool MustChangePassword { get; set; }

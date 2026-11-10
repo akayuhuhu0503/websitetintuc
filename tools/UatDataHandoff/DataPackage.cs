@@ -44,16 +44,36 @@ public static class DataPackage
         for(string? node=Path.GetFullPath(path);node!=null;node=Path.GetDirectoryName(node))
             if((File.Exists(node)||Directory.Exists(node))&&(File.GetAttributes(node)&FileAttributes.ReparsePoint)!=0)throw new InvalidDataException("Reparse path refused.");
     }
-    public static async Task<(DataBundle Data,string Sha)> Load(string root)
+    public static Task<(DataBundle Data,string Sha)> Load(string root,string? copiedMediaRoot=null)=>LoadCore(root,copiedMediaRoot,false);
+    // Informational copy guidance only. Never used by SQL import or scanner
+    // verification, which both require all bytes to exist and match hashes.
+    public static Task<(DataBundle Data,string Sha)> LoadMetadata(string root)=>LoadCore(root,null,true);
+    static async Task<(DataBundle Data,string Sha)> LoadCore(string root,string? copiedMediaRoot,bool metadataOnly)
     {
         var file=PathIn(root,"manifest.json");var bytes=await File.ReadAllBytesAsync(file);var manifest=JsonSerializer.Deserialize<PackageManifest>(bytes,Json)??throw new InvalidDataException("Manifest missing.");
         if(manifest.SchemaVersion!=1||manifest.DataFile!="data.json"||manifest.Files.Count>2000||!manifest.Files.ContainsKey("data.json"))throw new InvalidDataException("Unsupported manifest.");
-        foreach(var entry in manifest.Files)if(entry.Value.Length!=64||await FileHash(PathIn(root,entry.Key))!=entry.Value)throw new InvalidDataException("Package file/hash mismatch: "+entry.Key);
-        foreach(var fileInPackage in Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories)){NoReparse(fileInPackage);var relative=Path.GetRelativePath(root,fileInPackage).Replace('\\','/');if(!manifest.Files.ContainsKey(relative)&&relative is not("manifest.json" or "manifest.sha256" or "checksums.sha256"))throw new InvalidDataException("Unlisted package file: "+relative);}
-        var data=JsonSerializer.Deserialize<DataBundle>(await File.ReadAllTextAsync(PathIn(root,manifest.DataFile)),Json)??throw new InvalidDataException("Data missing.");
+        var dataFile=PathIn(root,manifest.DataFile);
+        if(await FileHash(dataFile)!=manifest.Files[manifest.DataFile])throw new InvalidDataException("Data file hash differs.");
+        var data=JsonSerializer.Deserialize<DataBundle>(await File.ReadAllTextAsync(dataFile),Json)??throw new InvalidDataException("Data missing.");
         if(data.SchemaVersion!=1||data.PackageId!=manifest.PackageId)throw new InvalidDataException("Package binding mismatch.");
-        foreach(var m in data.Media)if(!manifest.Files.TryGetValue(m.File,out var fileSha)||fileSha!=m.Sha256||new FileInfo(PathIn(root,m.File)).Length!=m.Bytes)throw new InvalidDataException("Media descriptor/bytes mismatch.");
         var manifestSha=Hash(bytes);
+        if(copiedMediaRoot!=null||metadataOnly)Media252Scope.Require(data,manifestSha);
+        var mediaByFile=data.Media.ToDictionary(m=>m.File,StringComparer.Ordinal);
+        string Resolve(string relative)
+        {
+            var original=PathIn(root,relative); // Retain traversal/reparse checks.
+            if(copiedMediaRoot==null||!mediaByFile.TryGetValue(relative,out var m))return original;
+            var mapped=StorageOptions.ResolveWithin(Path.GetFullPath(copiedMediaRoot),Media252Scope.Key(data.PackageId,m));NoReparse(mapped);return mapped;
+        }
+        foreach(var entry in manifest.Files)
+        {
+            PathIn(root,entry.Key);
+            if(entry.Value.Length!=64||!entry.Value.All(Uri.IsHexDigit))throw new InvalidDataException("Invalid file hash.");
+            if(metadataOnly&&mediaByFile.ContainsKey(entry.Key))continue;
+            if(await FileHash(Resolve(entry.Key))!=entry.Value)throw new InvalidDataException("Package file/hash mismatch: "+entry.Key);
+        }
+        foreach(var fileInPackage in Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories)){NoReparse(fileInPackage);var relative=Path.GetRelativePath(root,fileInPackage).Replace('\\','/');if(!manifest.Files.ContainsKey(relative)&&relative is not("manifest.json" or "manifest.sha256" or "checksums.sha256"))throw new InvalidDataException("Unlisted package file: "+relative);}
+        foreach(var m in data.Media)if(!manifest.Files.TryGetValue(m.File,out var fileSha)||fileSha!=m.Sha256||(!metadataOnly&&new FileInfo(Resolve(m.File)).Length!=m.Bytes))throw new InvalidDataException("Media descriptor/bytes mismatch.");
         if((await File.ReadAllTextAsync(PathIn(root,"manifest.sha256"))).Trim()!=manifestSha+"  manifest.json")throw new InvalidDataException("Manifest checksum file differs.");
         var checksumLines=await File.ReadAllLinesAsync(PathIn(root,"checksums.sha256"));var expected=manifest.Files.Select(x=>x.Value+"  "+x.Key).Append(manifestSha+"  manifest.json").Order(StringComparer.Ordinal);
         if(!checksumLines.Order(StringComparer.Ordinal).SequenceEqual(expected,StringComparer.Ordinal))throw new InvalidDataException("Checksum listing differs.");

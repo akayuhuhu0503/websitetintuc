@@ -9,7 +9,9 @@ public static class PortalIdentityPolicy
 {
     public static void Configure(IdentityOptions options)
     {
-        options.User.RequireUniqueEmail = true;
+        // Username is the sign-in identifier. OptionalEmailUserValidator preserves
+        // format/uniqueness checks only when an email has actually been supplied.
+        options.User.RequireUniqueEmail = false;
         options.Password.RequiredLength = 8;
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;

@@ -13,7 +13,7 @@ using Microsoft.Extensions.Configuration;
 static class LanFr06Upgrade
 {
     static readonly string[] Tail=["20261027025057_AuditRecoveryLookup","20261102042625_DraftConsultationEmail"];
-    public static async Task RunAsync(string root,string configPath,IConfiguration config,PortalDbContext db,string[] args)
+    public static async Task RunAsync(string root,string configPath,IConfiguration config,PortalDbContext db,string[] args,bool homeEvent=false)
     {
         if(!OperatingSystem.IsWindows()||!LanDemoDeployment.Validate(config,"Development"))throw new InvalidOperationException("Local LAN only");
         string Option(string key){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:throw new InvalidOperationException("Missing operation argument");}
@@ -28,12 +28,16 @@ static class LanFr06Upgrade
                 cmd.CommandText="SELECT DB_NAME(),CAST(SERVERPROPERTY('MachineName') AS nvarchar(200)),CAST(SERVERPROPERTY('ServerName') AS nvarchar(200)),IS_SRVROLEMEMBER('sysadmin'),@@TRANCOUNT";
                 using var r=await cmd.ExecuteReaderAsync();if(!await r.ReadAsync()||r.GetString(0)!="LandPortal_LanDemo"||!r.GetString(1).Equals(Environment.MachineName,StringComparison.OrdinalIgnoreCase)||!r.GetString(2).Equals(Environment.MachineName+@"\SQLEXPRESS",StringComparison.OrdinalIgnoreCase)||r.GetInt32(3)!=1||r.GetInt32(4)!=0)throw new InvalidOperationException("Target/authority/transaction guard failed");
             }
-            var expected=db.Database.GetMigrations().ToArray();var applied=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-            if(expected.Length!=17||!expected.TakeLast(2).SequenceEqual(Tail)||!applied.SequenceEqual(expected.Take(applied.Length))||applied.Length is not(15 or 17))throw new InvalidOperationException("Exact history prefix required");
+            var tail=homeEvent?new[]{"20261110050000_HomeEventBanner"}:Tail;
+            var from=homeEvent?17:15;var to=homeEvent?18:17;
+            var expected=db.Database.GetMigrations().Take(to).ToArray();var applied=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
+            if(expected.Length!=to||!expected.TakeLast(tail.Length).SequenceEqual(tail)||!applied.SequenceEqual(expected.Take(applied.Length))||(applied.Length!=from&&applied.Length!=to))throw new InvalidOperationException("Exact history prefix required");
             var emailColumns=Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM sys.columns WHERE object_id IN(OBJECT_ID('dbo.DraftMetadata'),OBJECT_ID('dbo.RevisionMetadata')) AND name='ConsultationEmail' AND TYPE_NAME(user_type_id)='nvarchar' AND max_length=-1 AND is_nullable=1"));
-            if(emailColumns!=(applied.Length==17?2:0)||Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM dbo.AuditLogs WHERE DATALENGTH(Actor)>900 OR DATALENGTH(Action)>400"))!=0)throw new InvalidOperationException("Column/data bounds guard failed");
+            if(emailColumns!=(applied.Length>=17?2:0)||Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM dbo.AuditLogs WHERE DATALENGTH(Actor)>900 OR DATALENGTH(Action)>400"))!=0)throw new InvalidOperationException("Column/data bounds guard failed");
+            async Task<int> BannerColumns()=>Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID('dbo.SiteBanner') AND ((name='Description' AND TYPE_NAME(user_type_id)='nvarchar' AND max_length=1000 AND is_nullable=0) OR (name='Enabled' AND TYPE_NAME(user_type_id)='bit' AND is_nullable=0))"));
+            if(homeEvent&&await BannerColumns()!=(applied.Length==to?2:0))throw new InvalidOperationException("Banner schema prefix mismatch");
             await Write("inspect.json",new{status="EXACT_LAN_PREFIX_PASS",server=Environment.MachineName+@"\SQLEXPRESS",database="LandPortal_LanDemo",applied,pending=expected.Skip(applied.Length),emailColumns,mode,utc=DateTimeOffset.UtcNow});
-            if(mode=="Inspect"||applied.Length==17){Console.WriteLine("LAN exact schema Inspect PASS; migrations="+applied.Length+"; no Apply/backup performed");return;}
+            if(mode=="Inspect"||applied.Length==to){Console.WriteLine("LAN exact schema Inspect PASS; migrations="+applied.Length+"; no Apply/backup performed");return;}
             stage="QUIESCENCE";
             Quiescence();
             if(Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM sys.dm_tran_session_transactions t JOIN sys.dm_exec_sessions s ON s.session_id=t.session_id WHERE s.is_user_process=1 AND s.session_id<>@@SPID AND s.database_id=DB_ID()"))!=0)throw new InvalidOperationException("Open LAN transaction; reconcile");
@@ -62,16 +66,17 @@ static class LanFr06Upgrade
             stage="FRESH_GUARDS";
             Quiescence();
             if(!(await db.Database.GetAppliedMigrationsAsync()).SequenceEqual(applied)||!Same(before,await Digest()))throw new InvalidOperationException("LAN state drift before DDL");
-            stage="MIGRATE";await db.GetService<IMigrator>().MigrateAsync(Tail[^1]);
+            stage="MIGRATE";await db.GetService<IMigrator>().MigrateAsync(tail[^1]);
             stage="READBACK";var after=await Digest();await Write("after-digests.json",after);
             if(!Same(before,after)||!(await db.Database.GetAppliedMigrationsAsync()).SequenceEqual(expected)||Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM sys.columns WHERE object_id IN(OBJECT_ID('dbo.DraftMetadata'),OBJECT_ID('dbo.RevisionMetadata')) AND name='ConsultationEmail' AND TYPE_NAME(user_type_id)='nvarchar' AND max_length=-1 AND is_nullable=1"))!=2||Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.AuditLogs') AND name='IX_AuditLogs_Action_Actor'"))!=1)throw new InvalidOperationException("Readback mismatch; reconcile before retry");
-            await Write("upgrade-receipt.json",new{status="APPLIED_VERIFIED",database="LandPortal_LanDemo",from=15,to=17,migrations=Tail,preservedTables=before.Count,mismatch=0,identityAndPermissionsPreserved=true,utc=DateTimeOffset.UtcNow});
-            Console.WriteLine("LAN FR06 APPLIED/VERIFIED 15 -> 17; all existing table digests preserved; email columns=2; no bootstrap/import/grants");
+            if(homeEvent&&(await BannerColumns()!=2||Convert.ToInt32(await Scalar("SELECT COUNT(*) FROM dbo.SiteBanner WHERE Description<>N'' OR Enabled<>1"))!=0))throw new InvalidOperationException("Banner defaults readback mismatch");
+            await Write("upgrade-receipt.json",new{status="APPLIED_VERIFIED",database="LandPortal_LanDemo",from,to,migrations=tail,preservedTables=before.Count,mismatch=0,identityAndPermissionsPreserved=true,utc=DateTimeOffset.UtcNow});
+            Console.WriteLine($"LAN schema APPLIED/VERIFIED {from} -> {to}; all existing table digests preserved; no bootstrap/import/grants");
         }catch(Exception e){await Write("stopped.json",new{stage,errorType=e.GetType().Name,sqlNumber=(e.GetBaseException() as Microsoft.Data.SqlClient.SqlException)?.Number,reconcileRequired=stage is "MIGRATE" or "READBACK",utc=DateTimeOffset.UtcNow});throw;}
         async Task<Dictionary<string,DigestRow>> Digest(){
             var tables=new List<string>();using(var cmd=conn.CreateCommand()){cmd.CommandText="SELECT name FROM sys.tables WHERE schema_id=SCHEMA_ID('dbo') AND name<>'__EFMigrationsHistory' ORDER BY name";using var r=await cmd.ExecuteReaderAsync();while(await r.ReadAsync())tables.Add(r.GetString(0));}
             var result=new Dictionary<string,DigestRow>();foreach(var table in tables){
-                var columns=new List<string>();using(var cmd=conn.CreateCommand()){cmd.CommandText="SELECT name FROM sys.columns WHERE object_id=OBJECT_ID(@t) AND NOT(name='ConsultationEmail' AND @t IN('dbo.DraftMetadata','dbo.RevisionMetadata')) ORDER BY column_id";var p=cmd.CreateParameter();p.ParameterName="@t";p.Value="dbo."+table;cmd.Parameters.Add(p);using var r=await cmd.ExecuteReaderAsync();while(await r.ReadAsync())columns.Add("["+r.GetString(0).Replace("]","]]")+"]");}
+                var columns=new List<string>();using(var cmd=conn.CreateCommand()){cmd.CommandText="SELECT name FROM sys.columns WHERE object_id=OBJECT_ID(@t) AND NOT(@skipEmail=1 AND name='ConsultationEmail' AND @t IN('dbo.DraftMetadata','dbo.RevisionMetadata')) ORDER BY column_id";var p=cmd.CreateParameter();p.ParameterName="@t";p.Value="dbo."+table;cmd.Parameters.Add(p);var skip=cmd.CreateParameter();skip.ParameterName="@skipEmail";skip.Value=homeEvent?0:1;cmd.Parameters.Add(skip);using var r=await cmd.ExecuteReaderAsync();while(await r.ReadAsync()){var name=r.GetString(0);if(homeEvent&&table=="SiteBanner"&&name is "Description" or "Enabled")continue;columns.Add("["+name.Replace("]","]]")+"]");}}
                 using var q=conn.CreateCommand();q.CommandTimeout=30;q.CommandText="SELECT "+string.Join(',',columns)+" FROM dbo.["+table.Replace("]","]]")+"] FOR JSON PATH,INCLUDE_NULL_VALUES";var text=new StringBuilder();using(var r=await q.ExecuteReaderAsync())while(await r.ReadAsync())text.Append(r.GetString(0));using var doc=JsonDocument.Parse(text.Length==0?"[]":text.ToString());var rows=doc.RootElement.EnumerateArray().Select(x=>x.GetRawText()).Order(StringComparer.Ordinal).ToArray();result[table]=new(rows.Length,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',rows)))));
             }return result;
         }
@@ -79,7 +84,7 @@ static class LanFr06Upgrade
     static bool Same(Dictionary<string,DigestRow> a,Dictionary<string,DigestRow> b)=>a.Count==b.Count&&a.All(x=>b.TryGetValue(x.Key,out var v)&&v==x.Value);
     static void Quiescence(){
         // Do not rely solely on Windows CIM/.NET state enumeration, which may omit listeners.
-        foreach(var port in new[]{5188,5194}){
+        foreach(var port in new[]{5188,5194,5298}){
             var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any,port){ExclusiveAddressUse=true};
             try{listener.Start();}catch(System.Net.Sockets.SocketException){throw new InvalidOperationException("LAN/candidate port still reserved; no backup or DDL allowed");}finally{listener.Stop();}
         }

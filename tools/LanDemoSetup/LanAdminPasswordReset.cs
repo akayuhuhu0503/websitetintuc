@@ -50,7 +50,7 @@ public static class LanAdminPasswordReset
             if(!await reader.ReadAsync()||reader.GetString(0)!=LanDemoDeployment.Database||!reader.GetString(1).Equals(Environment.MachineName,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Live database identity mismatch.");
         }
         var services=new ServiceCollection();services.AddLogging();services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(StorageOptions.FromConfiguration(config).KeysRoot)).SetApplicationName("LandPortal");services.AddScoped(_=>db);
-        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();var manager=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
         var user=await manager.FindByNameAsync(expectedUserName)??throw new InvalidOperationException("Existing named LAN account missing.");
         if(user.UserName!=expectedUserName||user.IsDisabled||await manager.IsLockedOutAsync(user))throw new InvalidOperationException("Account disabled or locked; no password change.");

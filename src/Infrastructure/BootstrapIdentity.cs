@@ -8,21 +8,23 @@ public static class BootstrapIdentity
 {
     public static async Task InitializeAsync(IServiceProvider provider, IConfiguration config)
     {
-        var email = config["Bootstrap:AdminEmail"];
-        if (string.IsNullOrWhiteSpace(email)) throw new InvalidOperationException("Bootstrap cần email trong cấu hình private; chưa tạo tài khoản hoặc nhóm quyền.");
+        var email = string.IsNullOrWhiteSpace(config["Bootstrap:AdminEmail"]) ? null : config["Bootstrap:AdminEmail"]!.Trim();
+        var userName = config["Bootstrap:AdminUserName"]?.Trim();
+        if (string.IsNullOrWhiteSpace(userName)) userName = email;
+        if (string.IsNullOrWhiteSpace(userName)) throw new InvalidOperationException("Bootstrap cần tên đăng nhập trong Bootstrap:AdminUserName; email không bắt buộc.");
         using var scope = provider.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         // Reruns never reset/re-flag existing users or change their roles.
-        if(await users.FindByEmailAsync(email)!=null)return;
+        if(await users.FindByNameAsync(userName)!=null || (email is not null && await users.FindByEmailAsync(email)!=null))return;
         var password=PortalIdentityPolicy.NewTemporaryPassword();
-        var user = new PortalUser { UserName = email, Email = email, EmailConfirmed = true,LockoutEnabled=true,MustChangePassword=true };
-        var file=new TemporaryPasswordDelivery(StorageOptions.FromConfiguration(config).TempRoot).Write(user.Id,email,password);
+        var user = new PortalUser { UserName = userName, Email = email, EmailConfirmed = email is not null,LockoutEnabled=true,MustChangePassword=true };
+        var file=new TemporaryPasswordDelivery(StorageOptions.FromConfiguration(config).TempRoot).Write(user.Id,userName,password);
         var db=scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         await using var transaction=await db.Database.BeginTransactionAsync();
         // Validate before creating any role/claim. A rejected first-use password
         // must not leave a partially provisioned role set behind.
-        foreach(var validator in users.PasswordValidators)Check(await validator.ValidateAsync(users,new PortalUser{UserName=email,Email=email},password));
+        foreach(var validator in users.PasswordValidators)Check(await validator.ValidateAsync(users,user,password));
         foreach (var (role, permissions) in new[] { ("Administrator", Permissions.All), ("Editor", new[] { Permissions.EditOwn, Permissions.Submit }), ("Publisher", new[] { Permissions.EditOwn, Permissions.EditAll, Permissions.Submit, Permissions.Publish, Permissions.Review }) })
         {
             if (await roles.FindByNameAsync(role) == null)

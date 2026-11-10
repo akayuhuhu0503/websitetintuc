@@ -14,7 +14,7 @@ using Microsoft.Data.SqlClient;
 var root=PortalConfiguration.FindWorkspace();
 var home=Environment.GetEnvironmentVariable("LAN_DEMO_HOME")??throw new InvalidOperationException("Private demo home required");
 var configPath=Path.Combine(home,"config.json");
-if(args.FirstOrDefault()=="upgrade-fr06-schema"){
+if(args.FirstOrDefault() is "upgrade-fr06-schema" or "upgrade-home-event-schema"){
     configPath=Path.GetFullPath(Environment.GetEnvironmentVariable("LAN_DEMO_CONFIG")??configPath);
     if(!configPath.StartsWith(Path.GetFullPath(home)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("LAN config must stay in its private home.");
 }
@@ -23,8 +23,8 @@ if(!args.Contains("disable"))LanDemoDeployment.Validate(c,"Development");
 else if(c["Deployment:Profile"]!="LAN_DEMO"||c["Sql:ExpectedDatabase"]!=LanDemoDeployment.Database||new SqlConnectionStringBuilder(DatabaseSettings.Connection(c)).DataSource!=@".\SQLEXPRESS")throw new InvalidOperationException("Exact isolated demo target required even after demo expiry.");
 var opts=DatabaseSettings.Options(c,forMigration:true);
 await using var dest=new PortalDbContext(opts);
-if(args.FirstOrDefault()=="upgrade-fr06-schema"){
-    try{await LanFr06Upgrade.RunAsync(root,configPath,c,dest,args);}catch(Exception error){Console.Error.WriteLine("LAN FR06 stopped: "+error.GetType().Name+"; inspect private receipt/reconcile before retry; no secret logged.");Environment.ExitCode=1;}return;
+if(args.FirstOrDefault() is "upgrade-fr06-schema" or "upgrade-home-event-schema"){
+    try{await LanFr06Upgrade.RunAsync(root,configPath,c,dest,args,args[0]=="upgrade-home-event-schema");}catch(Exception error){Console.Error.WriteLine("LAN schema stopped: "+error.GetType().Name+"; inspect private receipt/reconcile before retry; no secret logged.");Environment.ExitCode=1;}return;
 }
 if(args.FirstOrDefault()=="grant-lan-reviewer-interactions"){
     if(!OperatingSystem.IsWindows())throw new InvalidOperationException("Windows ADMIN required.");
@@ -77,7 +77,7 @@ async Task<ContentActor> StoredGrants(PortalUser user)
     return new(user.Id,claims.ToHashSet(StringComparer.Ordinal)); // Inspect stored grants; do not alter the password gate.
 }
 if(args.Contains("verify")){
-    var servicesCheck=new ServiceCollection();servicesCheck.AddLogging();servicesCheck.AddDataProtection();servicesCheck.AddScoped(_=>new PortalDbContext(opts));servicesCheck.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();using var checkProvider=servicesCheck.BuildServiceProvider();using var checkScope=checkProvider.CreateScope();var manager=checkScope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+    var servicesCheck=new ServiceCollection();servicesCheck.AddLogging();servicesCheck.AddDataProtection();servicesCheck.AddScoped(_=>new PortalDbContext(opts));servicesCheck.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();using var checkProvider=servicesCheck.BuildServiceProvider();using var checkScope=checkProvider.CreateScope();var manager=checkScope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
     using var secrets=JsonDocument.Parse(await File.ReadAllBytesAsync(Environment.GetEnvironmentVariable("LAN_DEMO_CREDENTIALS")!));
     var checks=new List<object>();foreach(var entry in secrets.RootElement.GetProperty("accounts").EnumerateArray()){var name=entry.GetProperty("userName").GetString()!;var user=(await manager.FindByNameAsync(name))!;if(user==null||!await manager.CheckPasswordAsync(user,entry.GetProperty("password").GetString()!)||user.IsDisabled||!user.LockoutEnabled||!user.MustChangePassword)throw new InvalidOperationException("LAN Identity credentials/state check failed; no credentials logged");var actor=await StoredGrants(user);if(name.EndsWith("writer")&&(actor.Has(Permissions.PublishDirect)||actor.Has(Permissions.PublishApproved)||!actor.Has(Permissions.Submit)))throw new InvalidOperationException("Writer permissions differ");if(name.EndsWith("reviewer")&&(!actor.Has(Permissions.Review)||!actor.Has(Permissions.PublishApproved)||actor.Has(Permissions.ManageRoles)))throw new InvalidOperationException("Reviewer permissions differ");if(name.EndsWith("admin")&&(!actor.Has(Permissions.ManageUsers)||!actor.Has(Permissions.ManageRoles)||!actor.Has(Permissions.PublishSite)))throw new InvalidOperationException("Admin permissions differ");checks.Add(new{name,roles=await manager.GetRolesAsync(user),passwordValid=true,mustChangePassword=true,lockout=true,authentication="Password and configured CAPTCHA"});}
     var negative=0;foreach(var change in new[]{new KeyValuePair<string,string?>("Sql:ExpectedDatabase","LandPortal_Dev"),new("Mail:Transport","Smtp"),new("Media:AllowUnscannedDevelopmentUploads","true")}){try{LanDemoDeployment.Validate(new ConfigurationBuilder().AddConfiguration(c).AddInMemoryCollection([change]).Build(),"Development");throw new Exception("LAN guard bypass");}catch(InvalidOperationException){negative++;}}
@@ -92,7 +92,7 @@ if(args.Contains("disable")){
 await using(var conn=new SqlConnection(DatabaseSettings.Connection(c))){var master=new SqlConnectionStringBuilder(conn.ConnectionString){InitialCatalog="master"};await using var probe=new SqlConnection(master.ConnectionString);await probe.OpenAsync();using var cmd=probe.CreateCommand();cmd.CommandText="SELECT CAST(SERVERPROPERTY('MachineName') AS nvarchar(200)),DB_ID(N'LandPortal_LanDemo')";using var rd=await cmd.ExecuteReaderAsync();if(!await rd.ReadAsync()||!string.Equals(rd.GetString(0),Environment.MachineName,StringComparison.OrdinalIgnoreCase)||!rd.IsDBNull(1))throw new InvalidOperationException("Demo creation requires exact local instance and absent LandPortal_LanDemo; never reset/reseed existing database.");}
 await dest.Database.MigrateAsync();
 await RuntimeRoleInterceptor.ProvisionAsync(dest,c["Runtime:RolePassword"]!);
-var services=new ServiceCollection();services.AddLogging();services.AddDataProtection();services.AddScoped(_=>new PortalDbContext(opts));services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+var services=new ServiceCollection();services.AddLogging();services.AddDataProtection();services.AddScoped(_=>new PortalDbContext(opts));services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
 using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();var users=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();var roles=scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 void Ok(IdentityResult result){if(!result.Succeeded)throw new InvalidOperationException("Demo Identity operation rejected: "+string.Join(',',result.Errors.Select(x=>x.Code)));}
 var specs=new[]{("writer","Người viết",new[]{Permissions.Create,Permissions.ViewOwn,Permissions.EditOwn,Permissions.Submit,Permissions.ManageMedia}),("reviewer","Người duyệt",new[]{Permissions.ViewAll,Permissions.EditAll,Permissions.Review,Permissions.PublishApproved,Permissions.Unpublish,Permissions.ManageMedia}),("admin","Quản trị",Permissions.All)};

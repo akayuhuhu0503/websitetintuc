@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 // An executable risk-focused suite. It refuses to connect to any database except
 // LandPortal_Test; fixtures never become official-looking public production data.
 var root = PortalConfiguration.FindWorkspace();
+if(args.Contains("--home-event-video-offline")){HomeEventVideoOfflineTests.Run();return 0;}
 if(args.Contains("--iis-startup-offline")){IisStartupPolicyTests.Run();return 0;}
 if(args.Contains("--announcement-policy-offline")){AnnouncementPolicyTests.Run();return 0;}
 if(args.Contains("--ba-editor-offline")){await BaEditorOfflineTests.RunAsync();return 0;}

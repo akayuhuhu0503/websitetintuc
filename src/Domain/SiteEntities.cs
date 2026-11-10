@@ -66,6 +66,8 @@ public sealed class SiteMenuItem
 }
 public sealed class SiteBanner
 {
+    public string Description { get; set; } = "";
+    public bool Enabled { get; set; } = true;
     public Guid RevisionId { get; set; }
     public SiteConfigurationRevision Revision { get; set; } = null!;
     public Guid Id { get; set; } = Guid.NewGuid();

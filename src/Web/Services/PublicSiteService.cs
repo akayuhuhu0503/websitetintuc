@@ -7,7 +7,7 @@ namespace LandPortal.Web.Services;
 
 public sealed record SiteNavigationItem(Guid Id, Guid? ParentId, string Position, string Label, string? Url, bool NewWindow, int SortOrder);
 public sealed record SiteMenuTreeModel(IReadOnlyList<SiteNavigationItem> Items, Guid? ParentId);
-public sealed record SitePublicBanner(Guid Id, string Label, string Alt, string Position, string ImageUrl, string Url, bool NewWindow, int SortOrder);
+public sealed record SitePublicBanner(Guid Id, string Label, string Alt, string Position, string ImageUrl, string Url, bool NewWindow, int SortOrder, string Description = "");
 public sealed record SitePublicConfiguration(SiteConfigurationRevision Revision, IReadOnlyList<SiteNavigationItem> Menus, IReadOnlyList<SitePublicBanner> Banners, string? LogoUrl, bool IsPreview);
 public sealed record SiteHomeBlockResult(SiteHomeBlock Block, IReadOnlyList<ContentCard> Items, string? MoreUrl,string? ErrorReference=null);
 public sealed class ConfiguredHomeModel
@@ -50,7 +50,7 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             .Where(x => x.Url is not null || r.Menus.Any(y => y.Id == x.Id && y.TargetKind == "Group"))
             .OrderBy(x => x.SortOrder).ThenBy(x => x.Id).ToList();
         var now = Now;
-        var active = r.Banners.Where(x => (!x.StartUtc.HasValue || x.StartUtc <= now) && (!x.EndUtc.HasValue || x.EndUtc > now)).ToList();
+        var active = r.Banners.Where(x => x.Enabled && (!x.StartUtc.HasValue || x.StartUtc <= now) && (!x.EndUtc.HasValue || x.EndUtc > now)).ToList();
         var assetIds = active.Select(x => x.MediaAssetId).Concat(r.LogoAssetId.HasValue ? [r.LogoAssetId.Value] : []).Distinct().ToArray();
         var assets = assetIds.Length == 0 ? [] : await db.MediaAssets.AsNoTracking().Where(x => assetIds.Contains(x.Id)).ToListAsync();
         var validIds = assets.Where(x => mediaOptions.CanServe(x) && x.MimeType.StartsWith("image/", StringComparison.Ordinal)).Select(x => x.Id).ToHashSet();
@@ -59,7 +59,7 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
         foreach (var item in active.Where(x => validIds.Contains(x.MediaAssetId) && RouteAllowed(x.TargetKind, x.RouteKey)))
         {
             var url = Resolve(item.TargetKind, item.CategoryId, item.ContentId, item.RouteKey, item.ExternalUrl, r, urls);
-            if (url is not null) banners.Add(new(item.Id, item.Label, item.Alt, item.Position, MediaUrl(item.MediaAssetId), url, item.OpenNewWindow, item.SortOrder));
+            if (url is not null) banners.Add(new(item.Id, item.Label, item.Alt, item.Position, MediaUrl(item.MediaAssetId), url, item.OpenNewWindow, item.SortOrder, item.Description));
         }
         return new(r, menus, banners.OrderBy(x => x.SortOrder).ThenBy(x => x.Id).ToList(), r.LogoAssetId.HasValue && validIds.Contains(r.LogoAssetId.Value) ? MediaUrl(r.LogoAssetId.Value) : null, preview);
     }
@@ -74,6 +74,8 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             .ThenBy(x => x.SortOrder).ThenBy(x => x.Id).ToList();
         foreach (var block in configured)
         {
+            // Video selection and rendering are shared with fallback via HomeVideos.
+            if (block.Type == "Videos") continue;
             try
             {
             if (block.Type == "Links") { blocks.Add(new(block, [], "/so-tay")); continue; }
@@ -129,7 +131,7 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
     {
         var live = db.Set<SiteConfiguration>().Where(x => x.Id == 1).Select(x => x.LiveRevisionId);
         return await db.Set<SiteConfigurationRevision>().AnyAsync(x => live.Contains(x.Id) && x.LogoAssetId == assetId)
-            || await db.Set<SiteBanner>().AnyAsync(x => live.Contains(x.RevisionId) && x.MediaAssetId == assetId
+            || await db.Set<SiteBanner>().AnyAsync(x => live.Contains(x.RevisionId) && x.Enabled && x.MediaAssetId == assetId
                 && (x.StartUtc == null || x.StartUtc <= now) && (x.EndUtc == null || x.EndUtc > now)
                 && (x.TargetKind != "Content" || db.Contents.Any(c => c.Id == x.ContentId && c.IsPublic && !c.IsTrashed && c.PublishedRevisionId != null)));
     }

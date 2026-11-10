@@ -35,12 +35,12 @@ public static class PortableIisConfiguration
         "LAYOUT"=>"Copy nguyên gói Publish. IIS trỏ vào web; private và manifest.json phải nằm cạnh web.",
         "PRIVATE_READ"=>"Không đọc được cấu hình private hoặc đường dẫn không hợp lệ. Kiểm tra đã copy đủ gói và cấp Read cho đúng tài khoản Application Pool.",
         "PRIVATE_HASH"=>"Cấu hình private không khớp manifest. Copy lại nguyên cùng một gói Publish, không sửa JSON sau Publish.",
-        "PRIVATE_ACL"=>"Quyền private quá rộng hoặc không đọc được ACL. Chỉ cấp quyền đọc cho người vận hành và tài khoản pool cụ thể; không cấp Everyone, Users hoặc IIS_IUSRS.",
         "PROFILE"=>"Cấu hình gói phải dùng profile UAT.",
         "IDENTITY"=>"Pool phải chạy bằng ApplicationPoolIdentity hoặc tài khoản dịch vụ ít quyền; không chạy bằng Administrator hay SYSTEM.",
         "HTTPS"=>"Chưa xác định được URL HTTPS duy nhất. Kiểm tra binding HTTPS; nếu IIS không cung cấp metadata, Developer điền Public__BaseUrl và Deployment__ExpectedHost thực tế trước khi Publish.",
         "DATA_HOME"=>"Kho dữ liệu phải dùng đường dẫn tuyệt đối, private và nằm ngoài thư mục web.",
         "STORE_WRITE"=>"Tài khoản pool không tạo/ghi được kho dữ liệu. Cấp Modify cho media, snapshots, temp và keys; giữ file cấu hình chỉ đọc.",
+        "STORAGE_BOUNDARY"=>"Kho private chưa khớp manifest hoặc ranh giới IIS webroot. IIS chỉ được trỏ vào web; không ánh xạ private.",
         _=>"Cấu hình kỹ thuật SQL/TLS hoặc kho dữ liệu không hợp lệ. Developer kiểm tra đầu vào; không tắt guard để khởi động."
     };
 
@@ -48,7 +48,7 @@ public static class PortableIisConfiguration
     {
         var stage="ENV";
         try{return LoadCore(ref stage);}
-        catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException)
+        catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException or MediaUploadException)
         {throw new IisConfigurationException("IIS-CONFIG-003-"+stage,StartupHint(stage));}
     }
     private static IConfigurationRoot LoadCore(ref string stage)
@@ -64,12 +64,6 @@ public static class PortableIisConfiguration
         using(var manifest=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(package.FullName,"manifest.json")))){
             if(!manifest.RootElement.TryGetProperty("privateConfiguration",out var binding)||!binding.TryGetProperty("path",out var boundPath)||boundPath.GetString()!="private/uat.json"||!binding.TryGetProperty("confidential",out var confidential)||!confidential.GetBoolean()||!binding.TryGetProperty("sha256",out var sha))throw new InvalidOperationException("Private package binding missing.");
             using var bytes=File.OpenRead(file);stage="PRIVATE_HASH";if(!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)),sha.GetString(),StringComparison.Ordinal))throw new InvalidOperationException("Private config changed after Publish; republish from the approved .env.");
-        }
-        stage="PRIVATE_ACL";
-        if(OperatingSystem.IsWindows()){
-            var broad=new[]{"S-1-1-0","S-1-5-11","S-1-5-32-545","S-1-5-32-568"};
-            var rules=new FileInfo(file).GetAccessControl().GetAccessRules(true,true,typeof(SecurityIdentifier));
-            foreach(FileSystemAccessRule rule in rules)if(rule.AccessControlType==AccessControlType.Allow&&broad.Contains(rule.IdentityReference.Value))throw new InvalidOperationException("Private config ACL permits broad access; grant only the allocated operator/service account.");
         }
         stage="PRIVATE_READ";
         var config=new ConfigurationBuilder().AddJsonFile(file,false,false).AddEnvironmentVariables().Build();
@@ -101,6 +95,21 @@ public static class PortableIisConfiguration
         if(Uri.TryCreate(config["Public:BaseUrl"],UriKind.Absolute,out var url)&&string.IsNullOrWhiteSpace(config["Deployment:ExpectedHost"]))config["Deployment:ExpectedHost"]=url.IdnHost;
         if(!Uri.TryCreate(config["Public:BaseUrl"],UriKind.Absolute,out var origin)||origin.Scheme!="https"||!string.Equals(origin.IdnHost,config["Deployment:ExpectedHost"],StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Exact HTTPS origin required.");
         stage="TECHNICAL";
+        ResolveScannerDefaults(config);
+        stage="STORAGE_BOUNDARY";
+        StorageOptions.FromConfiguration(config).PortableBoundary?.EnsureValidated();
+        stage="TECHNICAL";
+        // Technical target/TLS guards remain mandatory; unavailable scanning blocks file operations.
+        UatDeployment.Validate(config,"Staging");
+        stage="STORE_WRITE";
+        foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})Directory.CreateDirectory(config["Storage:"+name]!);
+        return config;
+    }
+
+    // Shared measured process/binary defaults for portable Web and media tools.
+    // Resolving these values is not a scanner health check or a Clean result.
+    public static void ResolveScannerDefaults(IConfiguration config)
+    {
         if(OperatingSystem.IsWindows()&&string.IsNullOrWhiteSpace(config["Scanner:DefenderServiceIdentity"]))config["Scanner:DefenderServiceIdentity"]=WindowsIdentity.GetCurrent().Name;
         if(config["Scanner:Provider"]=="MicrosoftDefenderOnPrem"&&string.IsNullOrWhiteSpace(config["Scanner:DefenderBinarySha256"])){
             var platform=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"Microsoft","Windows Defender","Platform");
@@ -109,10 +118,5 @@ public static class PortableIisConfiguration
             try{if(File.Exists(binary)){using var stream=File.OpenRead(binary);config["Scanner:DefenderBinarySha256"]=Convert.ToHexStringLower(SHA256.HashData(stream));}}
             catch(Exception e) when(e is IOException or UnauthorizedAccessException){/* Upload scanner stays unavailable; reading the site remains enabled. */}
         }
-        // Technical target/TLS guards remain mandatory; unavailable scanning blocks file operations.
-        UatDeployment.Validate(config,"Staging");
-        stage="STORE_WRITE";
-        foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})Directory.CreateDirectory(config["Storage:"+name]!);
-        return config;
     }
 }

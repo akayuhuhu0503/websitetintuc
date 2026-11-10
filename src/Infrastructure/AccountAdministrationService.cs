@@ -25,15 +25,15 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
         permission.StartsWith("site.", StringComparison.Ordinal) || permission.StartsWith("schedule.", StringComparison.Ordinal) ||
         permission == Permissions.PublishDirect || permission == Permissions.PublishApproved || permission == Permissions.Schedule;
 
-    public async Task<TemporaryPasswordReceipt> CreateUserAsync(string actorId, string userName, string email, string displayName)
+    public async Task<TemporaryPasswordReceipt> CreateUserAsync(string actorId, string userName, string? email, string displayName)
     {
         return await Mutate(actorId, Permissions.ManageUsers, async actor =>
         {
             displayName??="";
-            ValidateText(userName, 256, "Tên đăng nhập", true); ValidateText(email, 256, "Email", true);
+            ValidateText(userName, 256, "Tên đăng nhập", true); ValidateText(email ?? "", 256, "Email", false);
             ValidateText(displayName, 200, "Tên hiển thị", false);
-            var user = new PortalUser { UserName = userName.Trim(), Email = email.Trim(), DisplayName = displayName.Trim(),
-                EmailConfirmed = true, LockoutEnabled = true, MustChangePassword = true };
+            var user = new PortalUser { UserName = userName.Trim(), Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(), DisplayName = displayName.Trim(),
+                EmailConfirmed = !string.IsNullOrWhiteSpace(email), LockoutEnabled = true, MustChangePassword = true };
             var temporaryPassword=PortalIdentityPolicy.NewTemporaryPassword();
             var file=(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa tạo tài khoản.")).Write(user.Id,user.UserName!,temporaryPassword);
             Check(await users.CreateAsync(user, temporaryPassword));
@@ -57,14 +57,15 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
             return new TemporaryPasswordReceipt(user.Id,file);
         });
 
-    public async Task UpdateProfileAsync(string actorId, string targetId, string concurrencyStamp, string email, string displayName)
+    public async Task UpdateProfileAsync(string actorId, string targetId, string concurrencyStamp, string? email, string displayName)
     {
         await Mutate(actorId, Permissions.ManageUsers, async actor =>
         {
             var user = await User(targetId, concurrencyStamp); await ProtectTarget(actor, user);
-            ValidateText(email, 256, "Email", true); ValidateText(displayName, 200, "Tên hiển thị", false);
+            ValidateText(email ?? "", 256, "Email", false); ValidateText(displayName, 200, "Tên hiển thị", false);
             var before = new { user.Id, user.Email, user.DisplayName };
-            user.Email = email.Trim(); user.DisplayName = displayName.Trim();
+            user.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(); user.DisplayName = displayName.Trim();
+            if (user.Email is null) user.EmailConfirmed = false;
             Check(await users.UpdateAsync(user));
             Audit(actorId, "AccountProfileUpdated", new { before, after = new { user.Id, user.Email, user.DisplayName } });
             return true;

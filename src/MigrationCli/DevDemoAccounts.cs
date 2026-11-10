@@ -26,7 +26,7 @@ public static class DevDemoAccounts
         // Explicit operator command: retain real Windows SQL authority for target/backup guards.
         // The Web application role is deliberately not used to bootstrap identities.
         services.AddScoped<PortalDbContext>(_=>new PortalDbContext(DatabaseSettings.Options(config,forMigration:true)));
-        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+        services.AddIdentity<PortalUser,IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();
         var db=scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         await SchemaManager.VerifyLocalProjectAsync(db,database);

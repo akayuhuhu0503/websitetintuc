@@ -24,7 +24,8 @@ public sealed class MediaUploadOptions
     public bool VerifiedSourceAllowed => IsDevelopmentLoopback || IsIsolatedLanDemo;
     public bool DevelopmentExceptionEnabled => IsDevelopmentLoopback && AllowUnscannedDevelopmentUploads;
     public bool NativeUatUploads { get; init; }
-    public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads;
+    public bool NativeLanSampleUploads { get; init; }
+    public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads||NativeLanSampleUploads;
 
     public static MediaUploadOptions FromConfiguration(IConfiguration configuration, string environmentName)
     {
@@ -50,17 +51,18 @@ public sealed class MediaUploadOptions
             IsDevelopmentLoopback = string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) && loopback
             ,IsIsolatedLanDemo=LanDemoDeployment.Validate(configuration,environmentName)
             ,NativeUatUploads=UatDeployment.Validate(configuration,environmentName)
+            ,NativeLanSampleUploads=configuration["Scanner:Provider"]==LanMediaSamples.Provider&&LanMediaSamples.Require(configuration,environmentName).Count>0
         };
     }
 
-    public bool CanServe(MediaAsset asset) => asset.ValidationStatus == BatchMediaProof.Validation
+    public bool CanServe(MediaAsset asset) => InternalMediaExceptionPolicy.Candidate(asset) || (asset.ValidationStatus == BatchMediaProof.Validation
         ? VerifiedSourceAllowed && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
         : asset.Origin == "EditorialDocument"
         ? !asset.IsQuarantined && asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" && OfficeDocumentPolicy.IsDocument(asset.MimeType)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")
         && (asset.ScanStatus is "NotScanned" or "Clean")
         && (asset.Origin != "Uploaded" || asset.ValidationStatus == "Validated")
-        && (asset.ScanStatus == "Clean" || (asset.Origin == "Source" && IsDevelopmentLoopback) || (asset.Origin == "Uploaded" && DevelopmentExceptionEnabled));
+        && (asset.ScanStatus == "Clean" || (asset.Origin == "Source" && IsDevelopmentLoopback) || (asset.Origin == "Uploaded" && DevelopmentExceptionEnabled)));
 }
 
 public sealed class MediaUploadException(string message, int statusCode = 400) : Exception(message)
@@ -90,19 +92,19 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         await RequireUploadScannerAsync(cancellationToken);
         if (!options.UploadEnabled)
             throw new MediaUploadException("Chưa có máy quét mã độc. Upload chỉ mở khi bật ngoại lệ rõ ràng ở Development trên loopback; production vẫn bị chặn.", 503);
-        ValidatePrivateStorageRoot(storage.MediaRoot);
-        ValidatePrivateStorageRoot(storage.TempRoot);
+        ValidatePrivateStorageRoot(storage.MediaRoot,storage);
+        ValidatePrivateStorageRoot(storage.TempRoot,storage);
         var name = SafeDisplayName(originalName);
         var extension = Path.GetExtension(name);
         if (!AllowedExtensions.TryGetValue(extension, out var expectedMime))
             throw new MediaUploadException("Chỉ nhận JPEG, PNG, GIF, WebP hoặc PDF; không nhận video, SVG, HTML hay tệp thực thi.");
-        if(options.NativeUatUploads&&expectedMime=="application/pdf")throw new MediaUploadException("PDF dùng mục Tài liệu của bài để lưu cách ly và quét bằng worker.");
+        if((options.NativeUatUploads||options.NativeLanSampleUploads)&&expectedMime=="application/pdf")throw new MediaUploadException("PDF dùng mục Tài liệu của bài để lưu cách ly và quét bằng worker.");
         var claimed = declaredMimeType.Split(';', 2)[0].Trim().ToLowerInvariant();
         if (claimed != expectedMime && claimed != "application/octet-stream")
             throw new MediaUploadException("MIME của tệp không khớp loại được phép.");
         var maximum = expectedMime == "application/pdf" ? options.MaxPdfBytes : options.MaxImageBytes;
         var incomingRoot = StorageOptions.ResolveWithin(storage.TempRoot, "media-incoming");
-        ValidatePrivateStorageRoot(incomingRoot);
+        ValidatePrivateStorageRoot(incomingRoot,storage);
         Directory.CreateDirectory(incomingRoot);
         var temporaryPath = Path.Combine(incomingRoot, Guid.NewGuid().ToString("N") + ".upload");
         string? finalPath = null;
@@ -147,10 +149,10 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
                 ValidationStatus = "Validated", ScanStatus = "NotScanned", IsQuarantined = false
             };
             InquiryScanResult? scan=null;
-            if(options.NativeUatUploads)
+            if(options.NativeUatUploads||options.NativeLanSampleUploads)
             {
-                if(configuration==null||!UatDeployment.Validate(configuration,"Staging"))throw new MediaUploadException("Thiếu profile UAT được kiểm chứng.",503);
-                var scanner=InquiryScannerFactory.Create(configuration,"Staging",maximum);
+                if(configuration==null||!(options.NativeLanSampleUploads?LanMediaSamples.Require(configuration,"Development").Count>0:UatDeployment.Validate(configuration,"Staging")))throw new MediaUploadException("Thiếu profile UAT được kiểm chứng.",503);
+                var scanner=InquiryScannerFactory.Create(configuration,options.NativeLanSampleUploads?"Development":"Staging",maximum);
                 if(!(await scanner.HealthAsync(cancellationToken)).Ready)throw new MediaUploadException("Bộ quét virus chưa sẵn sàng. Vui lòng thử tải tệp sau.",503);
                 await using var scanning=new FileStream(temporaryPath,FileMode.Open,FileAccess.Read,FileShare.Read);
                 scan=await scanner.ScanAsync(scanning,cancellationToken);scanning.Position=0;
@@ -292,10 +294,17 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         return name;
     }
 
-    private static void ValidatePrivateStorageRoot(string root)
+    public static void ValidateStorage(StorageOptions storage)
+    {
+        ValidatePrivateStorageRoot(storage.MediaRoot,storage);
+        ValidatePrivateStorageRoot(storage.TempRoot,storage);
+    }
+
+    private static void ValidatePrivateStorageRoot(string root,StorageOptions storage)
     {
         var segments = Path.GetFullPath(root).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Any(x => x.Equals("wwwroot", StringComparison.OrdinalIgnoreCase) || x.Equals("publish", StringComparison.OrdinalIgnoreCase)))
+        if (segments.Any(x => x.Equals("wwwroot", StringComparison.OrdinalIgnoreCase)) ||
+            segments.Any(x => x.Equals("publish", StringComparison.OrdinalIgnoreCase)) && storage.PortableBoundary?.Allows(root)!=true)
             throw new MediaUploadException("Kho upload/temp phải nằm ngoài wwwroot và thư mục publish.", 503);
         // Do not follow a pre-existing reparse point into an unrelated or publicly served tree.
         for (var directory = new DirectoryInfo(Path.GetFullPath(root)); directory is not null; directory = directory.Parent)
@@ -306,7 +315,8 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
     public static string ResolveMediaPath(StorageOptions storage, string key)
     {
         var path = storage.ResolveMedia(key);
-        ValidatePrivateStorageRoot(Path.GetDirectoryName(path)!);
+        ValidatePrivateStorageRoot(Path.GetDirectoryName(path)!,storage);
+        storage.PortableBoundary?.ValidateFile(path);
         if (System.IO.File.Exists(path) && (System.IO.File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
             throw new MediaUploadException("Tệp media không được là reparse point.", 503);
         return path;

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
 public static class VideoReadiness
 {
-    public static bool HasProof(VideoFile v,bool development)=>v.State==VideoState.Ready&&v.Original.Origin=="VideoUpload"&&v.Original.ScanStatus=="Clean"&&v.Original.ValidationStatus=="VideoValidated"&&v.ScannedSha256==v.Original.Sha256&&v.ScannedUtc!=null&&!string.IsNullOrWhiteSpace(v.ScannerVersion)&&v.ReadyUtc!=null&&v.VideoCodec=="h264"&&v.AudioCodec is null or "aac"&&v.Mp4Bytes>0&&v.PosterBytes>0&&VideoUploadService.IsHash(v.Mp4Sha256)&&VideoUploadService.IsHash(v.PosterSha256)&&(v.ScannerProvider!="MicrosoftDefender"||development);
+    public static bool HasProof(VideoFile v,bool development)=>v.State==VideoState.Ready&&v.Original.Origin=="VideoUpload"&&v.Original.ScanStatus=="Clean"&&v.Original.ValidationStatus=="VideoValidated"&&v.ScannedSha256==v.Original.Sha256&&v.ScannedUtc!=null&&!string.IsNullOrWhiteSpace(v.ScannerVersion)&&v.ReadyUtc!=null&&v.VideoCodec=="h264"&&v.AudioCodec is null or "aac"&&v.Mp4Bytes>0&&v.PosterBytes>0&&VideoUploadService.IsHash(v.Mp4Sha256)&&VideoUploadService.IsHash(v.PosterSha256)&&(development||v.ScannerProvider is not ("MicrosoftDefender" or LanMediaSamples.Provider or LanStatisticsSamples.Provider));
     public static async Task<bool> ReadyAsync(PortalDbContext db,StorageOptions storage,MediaAsset original,bool development,CancellationToken ct=default)
     {
         var v=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==original.Id,ct);

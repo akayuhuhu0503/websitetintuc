@@ -34,7 +34,7 @@ public static class AdminLabels
         ["Uploading"]="Đang tải tệp",["Finalizing"]="Đang xác nhận tệp",["Uploaded"]="Đã tải đủ tệp",["Processing"]="Đang xử lý",["Queued"]="Đã vào hàng đợi",["Expired"]="Đã hết hạn",["RejectedFile"]="Tệp bị từ chối",
         ["Accepted"]="Máy chủ thư đã tiếp nhận",["Uncertain"]="Chưa rõ kết quả gửi",["Leased"]="Đang gửi",["Answered"]="Đã trả lời",["Closed"]="Đã đóng",
         ["Article"]="Bài viết",["Announcement"]="Thông báo",["StaticPage"]="Trang thông tin",["LegalDocument"]="Văn bản pháp luật",["DraftDocument"]="Văn bản dự thảo",["Video"]="Video",
-        ["main"]="Menu chính",["footer"]="Chân trang",["links"]="Liên kết website",["supplementary"]="Thông tin bổ sung",["header"]="Đầu trang",["home"]="Trang chủ",["sidebar"]="Cột bên",
+        ["main"]="Menu chính",["footer"]="Chân trang",["links"]="Liên kết website",["supplementary"]="Thông tin bổ sung",["header"]="Đầu trang",["home"]="Trang chủ",["sidebar"]="Cột bên",["home_event_strip"]="Dải sự kiện sau Tin mới cập nhật",
         ["Route"]="Trang hệ thống",["Category"]="Chuyên mục",["Content"]="Nội dung công khai",["External"]="Liên kết ngoài",["Group"]="Nhóm menu",
         ["Featured"]="Tin nổi bật",["Recent"]="Tin mới",["Announcements"]="Thông báo",["LegalDocuments"]="Văn bản pháp luật",["DraftDocuments"]="Văn bản dự thảo",["Videos"]="Video",["Links"]="Liên kết website",
         ["Authority"]="Cơ quan ban hành",["Type"]="Loại văn bản",["Field"]="Lĩnh vực",["Inline"]="Trong nội dung",["Attachment"]="Tệp đính kèm",["Cover"]="Ảnh đại diện",["Thumbnail"]="Ảnh thu nhỏ",["Subtitle"]="Phụ đề"

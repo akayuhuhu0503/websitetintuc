@@ -24,7 +24,7 @@ public static class BaPasswordOfflineTests
         void Check(bool ok,string name){if(!ok)throw new InvalidOperationException(name);checks.Add(name);}
         var services=new ServiceCollection();services.AddLogging();services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
         var store=new MemoryUsers();services.AddSingleton<IUserStore<PortalUser>>(store);
-        services.AddIdentityCore<PortalUser>(PortalIdentityPolicy.Configure).AddDefaultTokenProviders();
+        services.AddIdentityCore<PortalUser>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddDefaultTokenProviders();
         using var provider=services.BuildServiceProvider();using var scope=provider.CreateScope();
         var users=scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
         Check(users.Options.Password.RequiredLength==8&&users.Options.Password.RequireUppercase&&users.Options.Password.RequireLowercase&&users.Options.Password.RequireDigit&&users.Options.Password.RequireNonAlphanumeric,"BA policy uses 8 and all four groups");
@@ -41,8 +41,19 @@ public static class BaPasswordOfflineTests
         Check(passwords.Distinct().Count()==passwords.Length&&passwords.All(x=>x.Length==24),"Temporary passwords are independently random and 24 characters");
         foreach(var password in passwords)foreach(var validator in users.PasswordValidators)if(!(await validator.ValidateAsync(users,new(),password)).Succeeded)throw new InvalidOperationException("Generated password violates Identity policy");
         Check(true,"Generated passwords satisfy every configured Identity validator");
+        var noEmail=new PortalUser{UserName="no-email",MustChangePassword=true};
+        Check((await users.CreateAsync(noEmail,passwords[0])).Succeeded&&noEmail.Email is null,"Account can be created without inventing an email");
+        Check((await users.CreateAsync(new PortalUser{UserName="no-email-2"},passwords[1])).Succeeded,"Multiple accounts may have no email");
+        Check((await users.ChangePasswordAsync(noEmail,passwords[0],passwords[2])).Succeeded,"First-login password change succeeds without email");
+        noEmail.MustChangePassword=false;
+        Check((await users.UpdateAsync(noEmail)).Succeeded&&!noEmail.MustChangePassword,"No-email account can complete required password change");
+        Check((await users.CreateAsync(new PortalUser{UserName="no-email"},passwords[3])).Errors.Any(x=>x.Code=="DuplicateUserName"),"Duplicate username still rejected without email");
+        Check((await users.CreateAsync(new PortalUser{UserName="bad-email",Email="invalid"},passwords[3])).Errors.Any(x=>x.Code=="InvalidEmail"),"Supplied invalid email remains rejected");
+        var modelWithoutEmail=new CreateAccountModel{UserName="no-email-form"};var emailValidation=new List<ValidationResult>();
+        Check(Validator.TryValidateObject(modelWithoutEmail,new ValidationContext(modelWithoutEmail),emailValidation,true),"CMS create form accepts omitted email");
         var user=new PortalUser{UserName="offline-unit",Email="offline-unit@example.invalid",SecurityStamp=Guid.NewGuid().ToString(),MustChangePassword=true};
         Check((await users.CreateAsync(user,"StartA1!")).Succeeded,"Identity accepts exactly eight compliant characters");
+        Check((await users.CreateAsync(new PortalUser{UserName="duplicate-email",Email="OFFLINE-UNIT@example.invalid"},passwords[3])).Errors.Any(x=>x.Code=="DuplicateEmail"),"Supplied duplicate email remains rejected ignoring case");
         var oldStamp=user.SecurityStamp;
         Check(!(await users.ChangePasswordAsync(user,"incorrect","NextAb1!")).Succeeded&&user.MustChangePassword,"Wrong current password cannot clear first-login state");
         Check((await users.ChangePasswordAsync(user,"StartA1!","NextAb1!")).Succeeded&&user.SecurityStamp!=oldStamp,"Identity password change rotates security stamp");

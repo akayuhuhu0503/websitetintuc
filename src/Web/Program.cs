@@ -38,7 +38,7 @@ builder.Services.AddSingleton(publicUrls);
 builder.Services.AddSingleton(storage);
 builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => DatabaseSettings.Options(builder.Configuration));
 builder.Services.AddScoped<PortalDbContext>();
-builder.Services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders().AddSignInManager<PasswordOnlySignInManager>();
+builder.Services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders().AddSignInManager<PasswordOnlySignInManager>();
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/admin/login";
@@ -166,7 +166,7 @@ app.UseExceptionHandler("/loi");
 if(uat){app.UseHsts();app.UseHttpsRedirection();}
 app.Use(async (context, next) =>
 {
-    if(lan&&(DateTimeOffset.Parse(builder.Configuration["LanDemo:ExpiresUtc"]!)<=DateTimeOffset.UtcNow||context.Request.Host.Host!=publicUri.Host||context.Connection.RemoteIpAddress is not{} remote||!LanDemoDeployment.PrivateV4(remote.MapToIPv4()))){context.Response.StatusCode=403;return;}
+    if(lan&&(DateTimeOffset.Parse(builder.Configuration["LanDemo:ExpiresUtc"]!)<=DateTimeOffset.UtcNow||context.Request.Host.Host!=publicUri.Host||context.Connection.RemoteIpAddress is not{} remote||!(builder.Configuration["LanDemo:LoopbackOnly"]=="true"?System.Net.IPAddress.IsLoopback(remote):LanDemoDeployment.PrivateV4(remote.MapToIPv4())))){context.Response.StatusCode=403;return;}
     if(!publicUrls.AllowsHost(context.Request.Host.Host)||context.Request.Path.Value?.StartsWith("//",StringComparison.Ordinal)==true||context.Request.Path.Value?.Contains('\\')==true){context.Response.StatusCode=400;return;}
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";

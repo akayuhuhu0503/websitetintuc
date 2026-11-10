@@ -45,6 +45,9 @@
     @if (isBanner)
     {
         <label asp-for="Banner.MediaAssetId">Ảnh banner trong kho riêng</label><select asp-for="Banner.MediaAssetId" class="site-image-select" required><option value="">Chọn ảnh</option>@foreach (var image in Model.Images) { <option value="@image.Value">@image.Label</option> }</select>
+        <label class="checkbox-label"><input asp-for="Banner.Enabled" /> Bật banner</label>
+        <label asp-for="Banner.Description">Mô tả ngắn</label><textarea asp-for="Banner.Description" maxlength="500" rows="2"></textarea>
+        <p class="field-hint">Dải sự kiện: ảnh khuyến nghị 1600 × 220 px; ảnh hiển thị đầy đủ, không cắt chữ. <a href="/admin/media">Tải/thay ảnh trong kho media</a>, sau đó chọn ảnh đã kiểm tra tại đây. Lưu nháp → Xem trước → Áp dụng công khai.</p>
         <label asp-for="Banner.Alt">Nội dung thay thế ảnh</label><input asp-for="Banner.Alt" maxlength="500" required />
         <div class="site-form-grid"><div><label asp-for="Banner.StartVietnam">Bắt đầu (giờ Việt Nam UTC+7)</label><input asp-for="Banner.StartVietnam" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" /></div><div><label asp-for="Banner.EndVietnam">Kết thúc (không bao gồm mốc này, giờ Việt Nam)</label><input asp-for="Banner.EndVietnam" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" /></div></div><p class="field-hint">Có thể bỏ trống mốc. Banner hết hạn sẽ ngừng hiển thị và không còn quyền truy cập tệp riêng, kể cả tác vụ nền tắt.</p>
     }

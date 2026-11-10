@@ -16,6 +16,9 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         Response.Headers.Pragma = "no-cache";
         var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && !x.IsQuarantined);
         if (asset is null || !mediaOptions.CanServe(asset)) return NotFound();
+        var internalException=InternalMediaExceptionPolicy.Candidate(asset);
+        if(internalException&&!await InternalMediaExceptionPolicy.HasGrantAsync(db,asset))return NotFound();
+        if(internalException)Response.Headers["X-Media-Scan-Status"]="ScannerSkipped";
         if (asset.MimeType == "application/pdf" && asset.Origin is not ("Source" or "EditorialDocument")) return NotFound();
         if (asset.Origin == "EditorialDocument")
         {
@@ -44,13 +47,13 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         catch (InvalidOperationException) { return NotFound(); }
         catch (MediaUploadException) { return NotFound(); }
         if (!System.IO.File.Exists(path)) return NotFound();
-        if (asset.ValidationStatus == "Phase3BValidated")
+        if (asset.ValidationStatus == "Phase3BValidated" || internalException)
         {
             // Batch scan proof binds the original bytes, also after materialization.
             try
             {
                 var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if (asset.ScanStatus != "Clean" || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
+                if ((!internalException && asset.ScanStatus != "Clean") || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
                 if (!await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) && !await PublicSiteService.HasPublicAssetGrantAsync(db,id,DateTimeOffset.UtcNow)) { await input.DisposeAsync(); return NotFound(); }
                 input.Position = 0;
                 Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -59,6 +62,7 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
                 return base.File(input, asset.MimeType, download ? Path.GetFileName(asset.OriginalName) : null, enableRangeProcessing: true);
             }
             catch (IOException) { return NotFound(); }
+            catch (UnauthorizedAccessException) { return NotFound(); }
         }
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (asset.MimeType == "application/pdf") {Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'; frame-ancestors "+(asset.ScanStatus=="Clean"?"'self'":"'none'");if(asset.ScanStatus=="Clean")Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}

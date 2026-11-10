@@ -20,6 +20,7 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
         var thumbnails=db.MediaAssets.AsNoTracking().Where(m=>!m.IsQuarantined
             && (m.MimeType=="image/jpeg"||m.MimeType=="image/png"||m.MimeType=="image/gif"||m.MimeType=="image/webp")
             && (m.Origin=="Source"&&(m.ScanStatus=="Clean"||legacy&&m.ScanStatus=="NotScanned")&&(m.ValidationStatus!=BatchMediaProof.Validation||verifiedSource&&m.ScanStatus=="Clean")
+                ||m.Origin=="Source"&&m.ScanStatus==InternalMediaExceptionPolicy.Status&&m.StorageKey.StartsWith(InternalMediaExceptionPolicy.StoragePrefix)&&m.ValidationStatus.StartsWith(InternalMediaExceptionPolicy.Prefix)&&m.ValidationStatus.Length==76&&db.AuditLogs.Any(g=>g.Action==InternalMediaExceptionPolicy.GrantAction&&g.Actor==m.Id.ToString()&&g.Detail==m.ValidationStatus+"|"+m.Sha256+"|"+m.StorageKey)
                 ||m.Origin=="Uploaded"&&m.ValidationStatus=="Validated"&&(m.ScanStatus=="Clean"||uploaded&&m.ScanStatus=="NotScanned")))
             .Select(m=>(Guid?)m.Id);
         return

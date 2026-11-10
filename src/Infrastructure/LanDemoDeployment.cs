@@ -20,7 +20,7 @@ public static class LanDemoDeployment
            !DateTimeOffset.TryParse(c["LanDemo:ExpiresUtc"],out var expires)||expires<=DateTimeOffset.UtcNow||expires>DateTimeOffset.UtcNow.AddDays(15))
             throw new InvalidOperationException("LAN demo requires isolated local database, Development, live expiry, disabled mail and unscanned bypass.");
         if(!Uri.TryCreate(c["Public:BaseUrl"],UriKind.Absolute,out var uri)||uri.Scheme is not("http" or "https")||uri.AbsolutePath!="/"||uri.UserInfo!=""||uri.Query!=""||uri.Fragment!=""||
-           !IPAddress.TryParse(uri.Host,out var ip)||!PrivateV4(ip)||!NetworkInterface.GetAllNetworkInterfaces().Any(n=>n.OperationalStatus==OperationalStatus.Up&&n.GetIPProperties().UnicastAddresses.Any(a=>a.Address.Equals(ip))))
+           !IPAddress.TryParse(uri.Host,out var ip)||!(c["LanDemo:LoopbackOnly"]=="true"&&ip.Equals(IPAddress.Loopback)&&uri.Port==5298 || PrivateV4(ip)&&NetworkInterface.GetAllNetworkInterfaces().Any(n=>n.OperationalStatus==OperationalStatus.Up&&n.GetIPProperties().UnicastAddresses.Any(a=>a.Address.Equals(ip)))))
             throw new InvalidOperationException("LAN demo requires an exact currently assigned RFC1918 IPv4 origin.");
         var root=Path.GetFullPath(c["WorkspaceRoot"]??throw new InvalidOperationException("Private demo home required"));
         var prefix=root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;

@@ -4,8 +4,10 @@ Website trên LAN được cấp: `http://192.168.0.122:5188/`; quản trị `/a
 Đây là demo hạn chế trên máy phát triển, chưa phải UAT/Production. Không dùng dữ liệu cá nhân thật.
 Tài khoản và mật khẩu cấp riêng ngoài Git; không đăng thông tin đăng nhập, tệp cấu hình lên repository.
 
-Đăng nhập bằng tài khoản riêng → đổi mật khẩu lần đầu nếu được yêu cầu → vào quản trị theo quyền. Mật khẩu tối thiểu 7 ký tự, không yêu cầu độ phức tạp.
+Đăng nhập bằng tài khoản riêng → đổi mật khẩu lần đầu nếu được yêu cầu → vào quản trị theo quyền. Theo cập nhật BA, mật khẩu mới tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt; không ép tài khoản cũ đổi lại chỉ vì nâng code. Không bắt buộc MFA.
 Không reset tài khoản khi nâng code. Người viết gửi duyệt; người duyệt xuất bản đúng revision; quản trị quản lý cấu hình theo quyền.
+
+Kịch bản demo 04/11/2026: [DEMO_04-11.md](../DEMO_04-11.md). Người duyệt có quyền xuất bản phiên bản đã duyệt: bấm **Duyệt phiên bản này**, sau đó **Xuất bản phiên bản đã duyệt**; không cần thêm role Publisher. Bản chạy LAN phải được BA tự xác nhận workflow bằng tài khoản hiện hành, không dùng credential cũ đã MISMATCH.
 
 ## FR-14: thử Excel thống kê
 

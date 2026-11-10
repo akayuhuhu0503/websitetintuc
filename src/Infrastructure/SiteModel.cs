@@ -43,6 +43,8 @@ public static class SiteModel
         b.Entity<SiteBanner>().HasOne<MediaAsset>().WithMany().HasForeignKey(x => x.MediaAssetId).OnDelete(DeleteBehavior.NoAction);
         b.Entity<SiteBanner>().Property(x => x.Label).HasMaxLength(300);
         b.Entity<SiteBanner>().Property(x => x.Alt).HasMaxLength(500);
+        b.Entity<SiteBanner>().Property(x => x.Description).HasMaxLength(500).HasDefaultValue("");
+        b.Entity<SiteBanner>().Property(x => x.Enabled).HasDefaultValue(true);
         b.Entity<SiteBanner>().Property(x => x.Position).HasMaxLength(20);
         b.Entity<SiteBanner>().Property(x => x.TargetKind).HasMaxLength(20);
         b.Entity<SiteBanner>().Property(x => x.RouteKey).HasMaxLength(80);

@@ -11,6 +11,7 @@
 @if(Model.Site.IsPreview){<div class="warning-message" role="status">Xem trước cấu hình nháp · chưa áp dụng công khai. Nội dung bài vẫn lấy bản đã xuất bản.</div>}
 @if(news.Any(x=>x.Block.Type=="Featured")){<partial name="_HomeNewsCluster" model="topItems" />}
 else if(topItems.Length>0){<section class="home-latest"><div class="section-heading"><h2>@news[0].Block.Title</h2><a href="/tin-tuc">Xem tất cả →</a></div><div class="home-news-strip">@foreach(var item in topItems){<partial name="_Card" model="item" />}</div></section>}
+<partial name="_HomeEventStrip" model="Model.Site" />
 <div class="category-sections">
 @foreach(var group in blocks.Where(x=>x.Block.Type=="Category"))
 {
@@ -18,7 +19,7 @@ else if(topItems.Length>0){<section class="home-latest"><div class="section-head
 }
 </div>
 <div class="home-support-modules">
-@foreach(var group in blocks.Where(x=>x.Block.Type is not ("Featured" or "Recent" or "Category")).OrderBy(x=>x.Block.Type switch { "LegalDocuments" => 0, "Announcements" => 1, _ => 2 }))
+@foreach(var group in blocks.Where(x=>x.Block.Type is not ("Featured" or "Recent" or "Category" or "Videos")).OrderBy(x=>x.Block.Type switch { "LegalDocuments" => 0, "Announcements" => 1, _ => 2 }))
 {
     <section class="configured-home-block @(group.Block.Type switch { "Announcements" => "home-notices", "LegalDocuments" => "document-preview", _ => "" })" data-block-type="@group.Block.Type">
         <div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div>
@@ -34,3 +35,4 @@ else if(topItems.Length>0){<section class="home-latest"><div class="section-head
 @foreach(var banner in Model.Site.Banners.Where(x=>x.Position=="sidebar")){<a class="site-banner" href="@banner.Url" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" /></a>}
 @await Component.InvokeAsync("PopularArticles")
 @await Component.InvokeAsync("LandStatistics")
+@await Component.InvokeAsync("HomeVideos", new { site = Model.Site })

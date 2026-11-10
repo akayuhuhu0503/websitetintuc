@@ -10,6 +10,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 try
 {
     var command = args.FirstOrDefault() ?? "help";
+    if(command=="bootstrap-editorial")return await InitialCmsAccountsCommand.ExecuteAsync(args);
     if(command=="uat-sql-probe")return await UatSqlProbe.ExecuteAsync(args);
     if(command=="uat-sql-runtime-probe")return await UatSqlRuntimeProbe.ExecuteAsync(args);
     var workspace = PortalConfiguration.FindWorkspace();
@@ -82,7 +83,7 @@ try
     {
         var services = new ServiceCollection(); services.AddLogging(); services.AddDataProtection();
         services.AddScoped<PortalDbContext>(_ => new PortalDbContext(DatabaseSettings.Options(config)));
-        services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
+        services.AddIdentity<PortalUser, IdentityRole>(PortalIdentityPolicy.Configure).AddUserValidator<OptionalEmailUserValidator>().AddEntityFrameworkStores<PortalDbContext>().AddDefaultTokenProviders();
         using var provider = services.BuildServiceProvider(); await BootstrapIdentity.InitializeAsync(provider, config);
         Console.WriteLine("Explicit Identity bootstrap completed; no credentials logged."); return 0;
     }

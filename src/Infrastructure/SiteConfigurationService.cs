@@ -64,7 +64,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
     }
     public static readonly string[] BlockTypes = ["Featured", "Recent", "Announcements", "Category", "LegalDocuments", "DraftDocuments", "Videos", "Links"];
     public static readonly string[] MenuPositions = ["main", "footer", "links", "supplementary"];
-    public static readonly string[] BannerPositions = ["header", "home", "sidebar"];
+    public static readonly string[] BannerPositions = ["header", "home", "home_event_strip", "sidebar"];
     public static readonly string[] VocabularyKinds = ["Authority", "Type", "Field"];
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
 
@@ -256,7 +256,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         }
         foreach (var item in revision.Banners)
         {
-            Text(item.Label, 300, true); Text(item.Alt, 500, true);
+            Text(item.Label, 300, true); Text(item.Alt, 500, true); Text(item.Description, 500);
             if (!BannerPositions.Contains(item.Position) || item.StartUtc.HasValue && item.EndUtc.HasValue && item.StartUtc >= item.EndUtc) throw new SiteConfigurationException("Vị trí/khoảng hiển thị banner không hợp lệ.");
             await TargetAsync(item.TargetKind, item.CategoryId, item.ContentId, item.RouteKey, item.ExternalUrl, revision, publishing, false);
         }
@@ -328,7 +328,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         ContactAddress = source.ContactAddress, ContactPhone = source.ContactPhone, ContactHotline = source.ContactHotline, ContactEmail = source.ContactEmail, LogoAssetId = source.LogoAssetId,
         Categories = source.Categories.Select(x => new SiteCategoryConfiguration { CategoryId = x.CategoryId, DisplayName = x.DisplayName, Slug = x.Slug, Description = x.Description, ParentCategoryId = x.ParentCategoryId, SortOrder = x.SortOrder, ShowInNavigation = x.ShowInNavigation }).ToList(),
         Menus = source.Menus.Select(x => new SiteMenuItem { Id = x.Id, ParentId = x.ParentId, Position = x.Position, Label = x.Label, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, SystemProtected = x.SystemProtected, Enabled=x.Enabled }).ToList(),
-        Banners = source.Banners.Select(x => new SiteBanner { Id = x.Id, MediaAssetId = x.MediaAssetId, Label = x.Label, Alt = x.Alt, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, StartUtc = x.StartUtc, EndUtc = x.EndUtc }).ToList(),
+        Banners = source.Banners.Select(x => new SiteBanner { Id = x.Id, MediaAssetId = x.MediaAssetId, Label = x.Label, Alt = x.Alt, Description = x.Description, Enabled = x.Enabled, Position = x.Position, TargetKind = x.TargetKind, CategoryId = x.CategoryId, ContentId = x.ContentId, RouteKey = x.RouteKey, ExternalUrl = x.ExternalUrl, OpenNewWindow = x.OpenNewWindow, SortOrder = x.SortOrder, StartUtc = x.StartUtc, EndUtc = x.EndUtc }).ToList(),
         Blocks = source.Blocks.Select(x => new SiteHomeBlock { Id = x.Id, Type = x.Type, Title = x.Title, Limit = x.Limit, CategoryId = x.CategoryId, SortOrder = x.SortOrder, Enabled = x.Enabled }).ToList(),
         Pins = source.Pins.Select(x => new SiteHomePin { BlockId = x.BlockId, ContentId = x.ContentId, SortOrder = x.SortOrder }).ToList(),
         Vocabularies = source.Vocabularies.Select(x => new SiteVocabulary { Id = x.Id, Kind = x.Kind, Label = x.Label, SortOrder = x.SortOrder, Active = x.Active }).ToList()
@@ -336,6 +336,8 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
     public static string Hash(SiteConfigurationRevision r)
     {
         var old=LegacyHash(r);
+        // Preserve hashes of every existing revision after the additive migration.
+        if(r.Banners.Any(x=>!x.Enabled||x.Description.Length>0))old=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(old+"\nEventBanner.v1\n"+JsonSerializer.Serialize(r.Banners.Where(x=>!x.Enabled||x.Description.Length>0).OrderBy(x=>x.Id).Select(x=>new{x.Id,x.Enabled,x.Description})))));
         if(r.Menus.Any(x=>!x.Enabled))old=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(old+"\nSRS1.2.MenuEnabled.v1\n"+JsonSerializer.Serialize(r.Menus.Where(x=>!x.Enabled).Select(x=>x.Id).Order()))));
         if(new[]{r.EnglishName,r.SupervisingAgency,r.ResponsiblePerson,r.LicenseNumber,r.SeoDescription}.All(x=>x is null))return old;
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(old+"\nSRS1.1.Presentation.v1\n"+JsonSerializer.Serialize(new{r.EnglishName,r.SupervisingAgency,r.ResponsiblePerson,r.LicenseNumber,r.SeoDescription}))));

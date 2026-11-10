@@ -89,6 +89,7 @@ public static class DatabaseSettings
 }
 public sealed class StorageOptions
 {
+    internal PortableStorageBoundary? PortableBoundary { get; init; }
     public required string MediaRoot { get; init; }
     public required string SnapshotRoot { get; init; }
     public required string TempRoot { get; init; }
@@ -101,7 +102,8 @@ public sealed class StorageOptions
             if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("Thiếu Storage__" + key);
             return Path.GetFullPath(path, c["WorkspaceRoot"] ?? PortalConfiguration.FindWorkspace());
         }
-        return new() { MediaRoot = Read("MediaRoot"), SnapshotRoot = Read("SnapshotRoot"), TempRoot = Read("TempRoot"), KeysRoot = Read("KeysRoot") };
+        var roots=new[]{Read("MediaRoot"),Read("SnapshotRoot"),Read("TempRoot"),Read("KeysRoot")};
+        return new() { MediaRoot = roots[0], SnapshotRoot = roots[1], TempRoot = roots[2], KeysRoot = roots[3], PortableBoundary=PortableStorageBoundary.Create(c,roots) };
     }
     public string ResolveMedia(string key) => ResolveWithin(MediaRoot, key);
     public string ResolveSnapshot(string key) => ResolveWithin(SnapshotRoot, key);

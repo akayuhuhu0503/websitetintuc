@@ -80,6 +80,7 @@ public class SiteMenuInput
 }
 public sealed class SiteBannerInput : SiteMenuInput
 {
+    [StringLength(500)] public string Description { get; set; } = "";
     public Guid? MediaAssetId { get; set; }
     [StringLength(500)] public string Alt { get; set; } = "";
     public DateTime? StartVietnam { get; set; }

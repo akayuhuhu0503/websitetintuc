@@ -13,14 +13,36 @@ using Microsoft.Extensions.Configuration;
 namespace LandPortal.UatData;
 public static class PackageExport
 {
-    public static async Task RunAsync(string output,IConfiguration config)
+    public static async Task RunAsync(string output,IConfiguration config,bool fromLan=false)
     {
-        if(new SqlConnectionStringBuilder(DatabaseSettings.Connection(config)).InitialCatalog!="LandPortal_Dev")throw new InvalidOperationException("Read-only export requires exactly LandPortal_Dev.");
-        if(!Path.GetFullPath(output).StartsWith(Path.Combine(PortalConfiguration.FindWorkspace(),".local","handoff")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Private project handoff directory required; never webroot/Git.");
+        var sourceSql=new SqlConnectionStringBuilder(DatabaseSettings.Connection(config));
+        var sourceDatabase=fromLan?"LandPortal_LanDemo":"LandPortal_Dev";
+        if(sourceSql.InitialCatalog!=sourceDatabase)throw new InvalidOperationException("Read-only export source database mismatch.");
+        var repo=PortalConfiguration.FindWorkspace();
+        if(fromLan)
+        {
+            if(sourceSql.DataSource!=@".\SQLEXPRESS"||!sourceSql.IntegratedSecurity||config["Deployment:Profile"]!="LAN_DEMO"||!LanDemoDeployment.Validate(config,"Development"))throw new InvalidOperationException("LAN export requires the existing isolated local Windows-authenticated LAN profile.");
+            var folder=new DirectoryInfo(Directory.GetCurrentDirectory());
+            while(folder!=null&&!File.Exists(Path.Combine(folder.FullName,"tools","UatDataHandoff","UatDataHandoff.csproj")))folder=folder.Parent;
+            repo=folder?.FullName??throw new InvalidOperationException("Run LAN export from the source checkout.");
+        }
+        if(!Path.GetFullPath(output).StartsWith(Path.Combine(repo,".local","handoff")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Private project handoff directory required; never webroot/Git.");
         if(Directory.Exists(output)||File.Exists(output))throw new InvalidOperationException("Unique output directory required; no overwrite.");
         DataPackage.NoReparse(output);Directory.CreateDirectory(output);
         var storage=StorageOptions.FromConfiguration(config);await using var db=new PortalDbContext(DatabaseSettings.Options(config,forMigration:true));
-        await SchemaManager.VerifyLocalProjectAsync(db,"LandPortal_Dev");
+        if(fromLan)
+        {
+            await db.Database.OpenConnectionAsync();
+            try
+            {
+                await using var guard=db.Database.GetDbConnection().CreateCommand();guard.CommandTimeout=20;
+                guard.CommandText="SELECT DB_NAME(),CONVERT(nvarchar(128),SERVERPROPERTY('MachineName'))";
+                await using var reader=await guard.ExecuteReaderAsync();
+                if(!await reader.ReadAsync()||reader.GetString(0)!=sourceDatabase||!string.Equals(reader.GetString(1),Environment.MachineName,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Actual LAN source identity mismatch.");
+            }
+            finally{await db.Database.CloseConnectionAsync();}
+        }
+        else await SchemaManager.VerifyLocalProjectAsync(db,sourceDatabase);
         var data=new DataBundle();
         List<Content> contents;List<ContentRevision> revisions;List<ContentAsset> links;List<RevisionCategory> categories;List<SourceRecord> sources;List<SourceUrlAlias> aliases;List<MediaAsset> media;List<LegalDocument> legal;List<DraftDocument> drafts;
         await using(var snapshot=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable))
@@ -94,11 +116,15 @@ public static class PackageExport
         }
         foreach(var item in denied)data.Excluded.Add(new("Media",item.Key.ToString(),[item.Value]));
         data.Media=candidateMedia.Values.OrderBy(x=>x.Id).ToList();
+        // Only the catalogue required by selected real source revisions and ancestors.
+        var needed=data.Ready.Concat(data.PendingReview).SelectMany(x=>x.CategoryIds.Concat(x.Revision.PrimaryCategoryId is int category?[category]:Array.Empty<int>())).ToHashSet();
+        bool added;do{added=false;foreach(var category in data.Categories.Where(x=>needed.Contains(x.Id)))if(category.ParentId is int parent&&needed.Add(parent))added=true;}while(added);
+        data.Categories=data.Categories.Where(x=>needed.Contains(x.Id)).ToList();
         var git=new ProcessStartInfo("rtk"){UseShellExecute=false,RedirectStandardOutput=true};foreach(var argument in new[]{"proxy","git","rev-parse","HEAD"})git.ArgumentList.Add(argument);using(var p=Process.Start(git)!){data.SourceCommit=(await p.StandardOutput.ReadToEndAsync()).Trim();await p.WaitForExitAsync();}
         DataPackage.Validate(data);
         await DataPackage.Write(Path.Combine(output,"data.json"),data);files["data.json"]=await DataPackage.FileHash(Path.Combine(output,"data.json"));
         await DataPackage.Write(Path.Combine(output,"exclusions.json"),data.Excluded);files["exclusions.json"]=await DataPackage.FileHash(Path.Combine(output,"exclusions.json"));
-        var repo=PortalConfiguration.FindWorkspace();var ops=Path.Combine(output,"ops","source");Directory.CreateDirectory(ops);
+        var ops=Path.Combine(output,"ops","source");Directory.CreateDirectory(ops);
         foreach(var f in Directory.GetFiles(Path.Combine(repo,"tools","UatDataHandoff")).Where(x=>Path.GetExtension(x) is ".cs" or ".csproj"||Path.GetFileName(x)=="packages.lock.json")){var rel="ops/source/"+Path.GetFileName(f);File.Copy(f,DataPackage.PathIn(output,rel));files[rel]=await DataPackage.FileHash(DataPackage.PathIn(output,rel));}
         foreach(var name in new[]{"uat-data.ps1","uat-data-runbook.md","uat-config.example.json","uat-operator-steps.md"}){var rel="ops/"+name;var source=name=="uat-data-runbook.md"?Path.Combine(repo,"docs","uat-data-handoff.md"):Path.Combine(repo,"scripts",name);File.Copy(source,DataPackage.PathIn(output,rel));files[rel]=await DataPackage.FileHash(DataPackage.PathIn(output,rel));}
         await DataPackage.Write(Path.Combine(output,"manifest.json"),new PackageManifest(1,data.PackageId,DateTimeOffset.UtcNow,"data.json",files,"ready excludes Development-only/NotScanned media; pending requires exact signed target approval and native target scan before import"));
