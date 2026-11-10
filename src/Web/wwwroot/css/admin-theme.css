@@ -1,0 +1,75 @@
+/* CMS brand palette only. Do not recolor stored article content or status messages. */
+.admin-body {
+    --brand-primary: #8B2E2E;
+    --brand-hover: #702424;
+    --brand-soft: #F7EEEE;
+    --brand-border: #e4d6d6;
+    --navy: var(--brand-primary);
+    --navy-dark: var(--brand-hover);
+    --green: var(--brand-primary);
+    --admin-navy: var(--brand-primary);
+    --admin-green: var(--brand-primary);
+    --admin-accent: var(--brand-primary);
+    --admin-line: var(--brand-border);
+    --line: var(--brand-border);
+    --ink: #302727;
+    --text: #382f2f;
+    --muted: #706565;
+    --surface: #faf6f6;
+    --shadow: 0 3px 12px #5020200d;
+    background: #f8f6f6;
+    color: var(--text);
+}
+.admin-body .admin-header { background: var(--brand-primary); }
+.admin-body .admin-account > span { color: #f5dddd; }
+.admin-body .admin-header :is(a, .link-button) { color: #fff; }
+.admin-body .admin-header :focus-visible { outline-color: #fff; }
+.admin-body .admin-sidebar > a:hover,
+.admin-body .admin-sidebar > a.active { background: var(--brand-soft); color: var(--brand-hover); }
+.admin-body .admin-sidebar > a.active { box-shadow: inset 3px 0 var(--brand-primary); }
+.admin-body .admin-main > h1,
+.admin-body .page-heading h1,
+.admin-body .interaction-panel h1 { color: var(--brand-primary); }
+.admin-body .admin-main table th { background: var(--brand-soft); color: var(--brand-hover); }
+.admin-body .admin-main table tbody tr:hover { background: #fcf8f8; }
+.admin-body .admin-main > .pagination a,
+.admin-body .interaction-records summary { color: var(--brand-primary); }
+.admin-body .editor-save-help,
+.admin-body .scope-note { background: var(--brand-soft); border-color: var(--brand-border); color: var(--text); }
+.admin-body .scope-note { border-left-color: var(--brand-primary); }
+.admin-body .editor-save-help strong { color: var(--brand-hover); }
+.admin-body .editor-layout :is(.form-help, label small),
+.admin-body .interaction-panel dt { color: var(--muted); }
+.admin-body .interaction-panel dd { border-bottom-color: var(--line); }
+.admin-body .button.publish,
+.admin-body :is(.site-admin-form, .site-actions, .site-admin-panel) .primary-button {
+    background: var(--brand-primary); border-color: var(--brand-primary); color: #fff;
+}
+.admin-body .button:not(.secondary):not(.danger):hover,
+.admin-body :is(.site-admin-form, .site-actions, .site-admin-panel) .primary-button:hover {
+    background: var(--brand-hover); border-color: var(--brand-hover); color: #fff;
+}
+.admin-body .button.secondary,
+.admin-body .outline-link { border-color: var(--brand-border); color: var(--brand-primary); }
+.admin-body :is(.button.secondary, .outline-link, .media-item):hover {
+    border-color: var(--brand-primary); background: var(--brand-soft);
+}
+.admin-body .site-admin-tabs { border-color: var(--line); }
+.admin-body .site-admin-tabs a { border-color: var(--line); color: var(--brand-primary); }
+.admin-body .site-admin-tabs a:hover { background: var(--brand-soft); }
+.admin-body .site-admin-tabs [aria-current=page] { background: var(--brand-primary); color: #fff; }
+.admin-body :is(.site-admin-form, .site-admin-panel, .site-target-fields) { border-color: var(--line); }
+.admin-body .admin-main :is(input, select, textarea),
+.admin-body .editor-main fieldset :is(input:not([type=hidden]), select, textarea) { border-color: #baa8a8; }
+.admin-body .admin-main input[type=file]::file-selector-button {
+    background: var(--brand-soft); color: var(--brand-hover); border-color: var(--brand-border);
+}
+.admin-body :is(input[type=checkbox], input[type=radio], progress) { accent-color: var(--brand-primary); }
+.admin-body :focus-visible,
+.admin-body .admin-main :is(input, select, textarea):focus-visible,
+.admin-body .site-admin-form :is(input, select, textarea):focus {
+    outline-color: var(--brand-primary);
+}
+.admin-body .vietnamese-date-control > .vietnamese-date-button {
+    background: var(--brand-soft); color: var(--brand-primary); border-color: var(--brand-border);
+}
