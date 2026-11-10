@@ -36,9 +36,11 @@ public static class UatDeployment
             ((string.Equals(environment,"Staging",StringComparison.OrdinalIgnoreCase) || Enabled(c) || c["Deployment:SqlTlsExceptionApproved"] == "true") && !TemporaryCertificateTrustApproved(c, sql, environment)))
             throw new InvalidOperationException("Temporary SQL certificate trust requires the approved exact UAT target and Staging environment; Production is forbidden.");
     }
+    public const int RuntimeMigrationCount = 18;
+    public const string RuntimeLatestMigration = "20261110050000_HomeEventBanner";
     public static bool TemporaryRuntimeIdentityMatches(string server,string database,string login,string role,int tables,int migrations,string latest) =>
         server=="WIN-S1IBJB84OOO"&&database=="website_tin_tuc"&&login=="website_tin_tuc_app"&&role=="LandPortalRuntime"&&
-        tables==70&&migrations==17&&latest=="20261102042625_DraftConsultationEmail";
+        tables==70&&migrations==RuntimeMigrationCount&&latest==RuntimeLatestMigration;
     public static bool AuthenticationMatches(IConfiguration c, SqlConnectionStringBuilder sql)
     {
         var mode=c["Deployment:SqlAuthentication"]??"Windows";

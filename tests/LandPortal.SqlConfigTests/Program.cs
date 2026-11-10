@@ -78,8 +78,10 @@ if(args.Contains("--uat-tls-only"))
     void TlsCheck(bool pass,string name){if(!pass)throw new Exception("FAIL "+name);count++;Console.WriteLine("PASS "+name);}
     bool TlsDenied(Action action){try{action();return false;}catch(InvalidOperationException){return true;}}
     TlsCheck(UatDeployment.Validate(TlsConfig(),"Staging"),"Explicit exact-target UAT certificate exception accepted");
-    TlsCheck(UatDeployment.TemporaryRuntimeIdentityMatches("WIN-S1IBJB84OOO","website_tin_tuc","website_tin_tuc_app","LandPortalRuntime",70,17,"20261102042625_DraftConsultationEmail"),"Actual SQL runtime identity contract accepted");
-    for(var field=0;field<7;field++)TlsCheck(!UatDeployment.TemporaryRuntimeIdentityMatches(field==0?"OTHER":"WIN-S1IBJB84OOO",field==1?"OTHER":"website_tin_tuc",field==2?"sa":"website_tin_tuc_app",field==3?"dbo":"LandPortalRuntime",field==4?71:70,field==5?18:17,field==6?"OTHER":"20261102042625_DraftConsultationEmail"),"Actual runtime identity field "+field+" mismatch denied");
+    TlsCheck(UatDeployment.TemporaryRuntimeIdentityMatches("WIN-S1IBJB84OOO","website_tin_tuc","website_tin_tuc_app","LandPortalRuntime",70,18,"20261110050000_HomeEventBanner"),"Actual SQL runtime identity contract accepted");
+    for(var field=0;field<7;field++)TlsCheck(!UatDeployment.TemporaryRuntimeIdentityMatches(field==0?"OTHER":"WIN-S1IBJB84OOO",field==1?"OTHER":"website_tin_tuc",field==2?"sa":"website_tin_tuc_app",field==3?"dbo":"LandPortalRuntime",field==4?71:70,field==5?17:18,field==6?"OTHER":"20261110050000_HomeEventBanner"),"Actual runtime identity field "+field+" mismatch denied");
+    TlsCheck(!UatDeployment.TemporaryRuntimeIdentityMatches("WIN-S1IBJB84OOO","website_tin_tuc","website_tin_tuc_app","LandPortalRuntime",70,19,"20261110050000_HomeEventBanner"),"Unexpected future schema denied");
+    TlsCheck(!UatDeployment.TemporaryRuntimeIdentityMatches("WIN-S1IBJB84OOO","website_tin_tuc","website_tin_tuc_app","LandPortalRuntime",70,17,"20261102042625_DraftConsultationEmail"),"Old schema17 denied by schema18 binary");
     var denyCases=new (string Key,string? Value)[]{
         ("Deployment:SqlTlsExceptionApproved","false"),("Deployment:SqlTlsExceptionReference",null),
         ("Deployment:SqlTlsExceptionReference","invalid\nref"),("Deployment:ExpectedSqlServer","other.invalid,1433"),

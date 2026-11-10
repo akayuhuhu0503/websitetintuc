@@ -46,28 +46,30 @@ SELECT CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),DB_NAME(),ORIGINAL_LO
  COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),'DATABASE','ALTER'),0),
  COALESCE(HAS_PERMS_BY_NAME(N'dbo.AuditLogs',N'OBJECT',N'UPDATE'),0),
  (SELECT COUNT(*) FROM sys.columns WHERE object_id IN(OBJECT_ID(N'dbo.DraftMetadata'),OBJECT_ID(N'dbo.RevisionMetadata'))
- AND name=N'ConsultationEmail' AND system_type_id=231 AND max_length=-1 AND is_nullable=1);
+ AND name=N'ConsultationEmail' AND system_type_id=231 AND max_length=-1 AND is_nullable=1),
+ (SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.SiteBanner') AND is_nullable=0
+ AND ((name=N'Description' AND system_type_id=231 AND max_length=1000) OR (name=N'Enabled' AND system_type_id=104 AND max_length=1)));
 """;
                 await using(var reader=await command.ExecuteReaderAsync())
                 {
                     if(!await reader.ReadAsync()||reader.GetString(0)!="WIN-S1IBJB84OOO"||reader.GetString(1)!="website_tin_tuc"||
                         reader.GetString(2)!="website_tin_tuc_app"||reader.GetString(3)!="LandPortalRuntime"||reader.GetInt32(4)!=70||
-                        reader.GetInt32(5)!=0||reader.GetInt32(6)!=0||reader.GetInt32(7)!=2)
+                        reader.GetInt32(5)!=0||reader.GetInt32(6)!=0||reader.GetInt32(7)!=2||reader.GetInt32(8)!=2)
                         throw new InvalidOperationException("Runtime identity/schema/effective permission readback differs.");
                 }
                 command.CommandText="SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;";
                 var actual=new List<string>();
                 await using(var reader=await command.ExecuteReaderAsync())while(await reader.ReadAsync())actual.Add(reader.GetString(0));
                 var expected=db.Database.GetMigrations().ToArray();
-                if(expected.Length!=17||!actual.SequenceEqual(expected,StringComparer.Ordinal))throw new InvalidOperationException("Exact17 migration history differs.");
+                if(expected.Length!=UatDeployment.RuntimeMigrationCount||expected[^1]!=UatDeployment.RuntimeLatestMigration||!actual.SequenceEqual(expected,StringComparer.Ordinal))throw new InvalidOperationException("Approved runtime migration history differs.");
                 await using var output=new FileStream(report,FileMode.CreateNew);
                 await JsonSerializer.SerializeAsync(output,new{
                     status="UAT_SQL_RUNTIME_PROBE_PASS",endpoint=sql.DataSource,physicalServer="WIN-S1IBJB84OOO",database=sql.InitialCatalog,
-                    originalLogin="website_tin_tuc_app",runtimeRole="LandPortalRuntime",privateSecret="MATCH",tables=70,migrations=17,exactHistory=true,
+                    originalLogin="website_tin_tuc_app",runtimeRole="LandPortalRuntime",privateSecret="MATCH",tables=70,migrations=actual.Count,latestMigration=actual[^1],exactHistory=true,bannerColumns=true,
                     encryption="Mandatory",certificateTrust=sql.TrustServerCertificate?"EXPLICIT_APPROVED_UAT_EXCEPTION":"CA_VALIDATION",
                     approvalReference=c["Deployment:SqlTlsExceptionReference"],writes=0,provisioning=false,fullIisPreflight="NOT_RUN_MISSING_INFRASTRUCTURE",
                     utc=DateTimeOffset.UtcNow},new JsonSerializerOptions{WriteIndented=true});
-                Console.WriteLine("UAT_SQL_RUNTIME_PROBE_PASS; exact app/role/physical target/70tables/17migrations; 0 writes; IIS preflight NOT RUN.");
+                Console.WriteLine($"UAT_SQL_RUNTIME_PROBE_PASS; exact app/role/physical target/70tables/{actual.Count}migrations; 0 writes; IIS preflight NOT RUN.");
                 return 0;
             }
             finally{await db.Database.CloseConnectionAsync();}
