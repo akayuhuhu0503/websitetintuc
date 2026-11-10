@@ -149,7 +149,8 @@
 .portal-public.is-home :is(.category-support,.popular-grid) .card-summary { display: none; }
 .portal-public.is-home .home-support-modules { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 32px; align-items: start; margin-top: 36px; }
 .portal-public.is-home .home-support-modules:empty,.portal-public.is-home .category-sections:empty { display: none; }
-.portal-public.is-home .home-support-modules .configured-home-block { grid-column: auto; }
+/* Reset legacy notice span so documents and notices share one row. */
+.portal-public.is-home .home-support-modules > section { grid-column: auto; min-width: 0; }
 .portal-public.is-home .home-utilities { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--line); }
 .portal-public.is-home .home-utilities .quick-links { margin: 0; }
 .portal-public.is-home .home-utilities .supplementary-links { margin-top: 16px; }

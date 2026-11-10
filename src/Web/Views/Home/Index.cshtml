@@ -11,8 +11,8 @@ else{<div class="empty-state"><h2>Chưa có tin tức công khai</h2><p>Tin tứ
 }
 </div>
 <div class="home-support-modules">
-@if(Model.Announcements.Count>0){<section class="home-notices"><div class="section-heading"><h2>Thông báo</h2><a href="/thong-bao">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_NoticeList" model="Model.Announcements" /></section>}
 @if(Model.Documents.Count>0){<section class="document-preview"><div class="section-heading"><h2>Văn bản mới cập nhật</h2><a href="/van-ban">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="document-card-grid">@foreach(var item in Model.Documents){<partial name="_HomeDocumentCard" model="item" />}</div></section>}
+@if(Model.Announcements.Count>0){<section class="home-notices"><div class="section-heading"><h2>Thông báo</h2><a href="/thong-bao">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_NoticeList" model="Model.Announcements" /></section>}
 @if(Model.Videos.Count>0){<section><div class="section-heading"><h2>Video</h2><a href="/video">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="configured-story-grid">@foreach(var item in Model.Videos){<partial name="_Card" model="item" />}</div></section>}
 </div>
 <section class="home-utilities" aria-labelledby="home-utilities-title"><div class="section-heading"><h2 id="home-utilities-title">Tra cứu và tiện ích</h2></div><partial name="_QuickAccess" /></section>

@@ -18,9 +18,9 @@ else if(topItems.Length>0){<section class="home-latest"><div class="section-head
 }
 </div>
 <div class="home-support-modules">
-@foreach(var group in blocks.Where(x=>x.Block.Type is not ("Featured" or "Recent" or "Category")))
+@foreach(var group in blocks.Where(x=>x.Block.Type is not ("Featured" or "Recent" or "Category")).OrderBy(x=>x.Block.Type switch { "LegalDocuments" => 0, "Announcements" => 1, _ => 2 }))
 {
-    <section class="configured-home-block @(group.Block.Type=="Announcements"?"home-notices":"")" data-block-type="@group.Block.Type">
+    <section class="configured-home-block @(group.Block.Type switch { "Announcements" => "home-notices", "LegalDocuments" => "document-preview", _ => "" })" data-block-type="@group.Block.Type">
         <div class="section-heading"><h2>@group.Block.Title</h2>@if(group.MoreUrl is not null){<a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a>}</div>
         @if(group.Block.Type=="Links"){<nav class="site-link-grid" aria-label="@group.Block.Title">@foreach(var link in Model.Site.Menus.Where(x=>x.Position=="links"&&x.Url is not null).Take(group.Block.Limit)){<a href="@link.Url" target="@(link.NewWindow?"_blank":null)" rel="@(link.NewWindow?"noopener noreferrer":null)">@link.Label <span aria-hidden="true">↗</span></a>}</nav>}
         else{<partial name="_HomeContentBlock" model="group" />}
