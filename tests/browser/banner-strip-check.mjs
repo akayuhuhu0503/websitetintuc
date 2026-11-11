@@ -46,10 +46,11 @@ async function render(count) {
 async function measure() {
     const result=await page.evaluate(()=>{
         const e=document.querySelector('.home-event-strip'),r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();
+        const style=getComputedStyle(p),parentInnerWidth=p.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
         const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect();
-        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,overflow:document.documentElement.scrollWidth>innerWidth};
+        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,overflow:document.documentElement.scrollWidth>innerWidth};
     });
-    assert(result.w<=1170.1&&result.h<=100.1,JSON.stringify(result));
+    assert(Math.abs(result.w-result.parentInnerWidth)<0.5,JSON.stringify(result));
     assert(Math.abs(result.h-result.w*10/117)<0.1,JSON.stringify(result));
     assert(Math.abs(result.center-result.parentCenter)<0.1);
     assert(Math.abs(result.iw-result.w)<0.1&&Math.abs(result.ih-result.h)<0.1);
