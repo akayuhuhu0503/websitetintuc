@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 [Authorize(Policy = "EditorAccess")]
-public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser> signIn, WorkflowService workflow, HtmlPolicy htmlPolicy, CurrentPermissionService permissions, PublicCaptchaService captcha, StorageOptions storage, IWebHostEnvironment environment) : Controller
+public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser> signIn, WorkflowService workflow, HtmlPolicy htmlPolicy, CurrentPermissionService permissions, PublicCaptchaService captcha, StorageOptions storage, IWebHostEnvironment environment, MediaUploadOptions mediaOptions) : Controller
 {
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException();
     private Task<ContentActor> Actor() => permissions.GetAsync(UserId);
@@ -138,12 +138,11 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
             var document = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.ContentId == id && x.MediaAssetId == documentId);
             var asset = document == null ? null : await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == documentId);
             if (asset == null) return NotFound();
-            await using var original = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment());
-            if (original == null) return StatusCode(423, "Chưa có kết luận Clean đúng byte; không đọc bản xem trước.");
+            await using var original = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment(), policy: mediaOptions);
+            if (original == null) return StatusCode(423, "Tài liệu chưa đủ điều kiện dùng trong bản xem trước.");
             model.AttachmentIds = model.AttachmentIds.Append(asset.Id).Distinct().ToArray();
-            if (asset.MimeType == OfficeDocumentPolicy.Docx)
+            if (asset.MimeType == OfficeDocumentPolicy.Docx && model.Metadata.WeeklyYear is int year && model.Metadata.WeeklyWeek is int week)
             {
-                if (model.Metadata.WeeklyYear is not int year || model.Metadata.WeeklyWeek is not int week) return BadRequest("Tệp Word chỉ nhập vào mẫu lịch tuần có năm/tuần hợp lệ.");
                 model.Metadata.WeeklyOriginalAssetId = asset.Id; model.Metadata.WeeklyOriginalReviewEvidence = null;
                 try
                 {
@@ -151,9 +150,9 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
                     model.Metadata.WeeklyRowsJson = System.Text.Json.JsonSerializer.Serialize(preview.Rows);
                     model.DocumentWarnings = preview.Warnings.ToList();
                 }
-                catch (InvalidOperationException error) { model.DocumentWarnings = [error.Message, "Tệp gốc Clean vẫn được giữ; nhập hoặc sửa các dòng bên dưới. Chưa lưu nháp, chưa thay lịch công khai."]; }
+                catch (InvalidOperationException error) { model.DocumentWarnings = [error.Message, "Tệp gốc vẫn được giữ; nhập hoặc sửa các dòng bên dưới. Chưa lưu nháp, chưa thay lịch công khai."]; }
             }
-            else model.DocumentWarnings = ["Tài liệu Clean được chọn trong bản xem trước; bấm Lưu bản nháp để tạo phiên bản. Chưa cấp quyền công khai."];
+            else model.DocumentWarnings = ["Tài liệu đã được chọn trong bản xem trước theo chính sách hiện hành; bấm Lưu bản nháp để tạo phiên bản. Chưa cấp quyền công khai."];
         }
         return View(await Populate(model, actor, content));
     }

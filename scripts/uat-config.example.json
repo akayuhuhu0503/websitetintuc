@@ -35,6 +35,8 @@
     "RolePassword": ""
   },
   "Media": {
+    "AllowManagedImageWithoutAv": "false",
+    "AllowManagedDocumentsWithoutAv": "false",
     "AllowUnscannedDevelopmentUploads": "false"
   },
   "Scanner": {

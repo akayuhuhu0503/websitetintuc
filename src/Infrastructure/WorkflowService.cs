@@ -146,8 +146,8 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
                 if (asset.MediaAsset.Origin == "EditorialDocument")
                 {
                     if (storage == null) throw new InvalidOperationException("Chưa có kho tài liệu.");
-                    await using var verified = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset.MediaAsset, (mediaOptions ?? new MediaUploadOptions()).IsDevelopmentLoopback);
-                    if (verified == null || asset.MediaAsset.MimeType == OfficeDocumentPolicy.Docx && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.MediaAssetId && x.ContentId == c.Id)) throw new InvalidOperationException("Tài liệu chưa Clean đúng byte hoặc Word không thuộc hồ sơ này.");
+                    await using var verified = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset.MediaAsset, (mediaOptions ?? new MediaUploadOptions()).IsDevelopmentLoopback, policy: mediaOptions);
+                    if (verified == null || asset.MediaAsset.MimeType == OfficeDocumentPolicy.Docx && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.MediaAssetId && x.ContentId == c.Id)) throw new InvalidOperationException("Tài liệu chưa đạt chính sách kiểm định/đối chiếu byte hoặc Word không thuộc hồ sơ này.");
                 }
                 if(asset.Usage=="Subtitle")
                 {
@@ -375,8 +375,8 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         if (assets.Count != selections.Count) throw new InvalidOperationException("Tài nguyên chưa tồn tại trong kho.");
         foreach (var asset in assets)
         {
-            if (asset.Origin == "EditorialDocument" && (!await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id) || asset.MimeType == OfficeDocumentPolicy.Docx && (input.Metadata.WeeklyYear == null || !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id))))
-                throw new InvalidOperationException("Tài liệu chỉ dùng trong đúng hồ sơ; Word chỉ thuộc lịch tuần.");
+            if (asset.Origin == "EditorialDocument" && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id))
+                throw new InvalidOperationException("Tài liệu chỉ dùng trong đúng hồ sơ.");
             if(selections[asset.Id].Usage=="Subtitle")
             {
                 Require(actor,Permissions.ManageVideos);Require(actor,Permissions.ManageMedia);
@@ -390,7 +390,10 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             }
             else
             {
-            if (asset.IsQuarantined || asset.ValidationStatus is not ("Validated" or "SourceValidated" or BatchMediaProof.Validation)) throw new InvalidOperationException("Tài nguyên chưa được xác minh định dạng.");
+            var managedPolicy = mediaOptions ?? new MediaUploadOptions();
+            if (asset.IsQuarantined || asset.ValidationStatus is not ("Validated" or "SourceValidated" or BatchMediaProof.Validation)
+                && !(managedPolicy.IsManagedImage(asset) || managedPolicy.IsManagedDocument(asset)))
+                throw new InvalidOperationException("Tài nguyên chưa được xác minh định dạng.");
             if(asset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset,(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed)))throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
             if (!AllowedMime(asset.MimeType)) throw new InvalidOperationException("Chỉ được chọn ảnh JPEG/PNG/GIF/WebP hoặc PDF.");
             }
@@ -508,7 +511,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             if (!AnnouncementTemplatePolicy.IsPdfCandidate(asset, options)) continue;
             if (asset.Origin == "EditorialDocument")
             {
-                await using var verified = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, options.IsDevelopmentLoopback);
+                await using var verified = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, options.IsDevelopmentLoopback, policy: options);
                 if (verified != null) return true;
                 continue;
             }

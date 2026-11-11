@@ -4,7 +4,7 @@ using System.Xml.Linq;
 
 namespace LandPortal.Infrastructure;
 
-// Format checks follow the malware conclusion. Never execute Office or fetch relationships.
+// Format checks are independent of any malware conclusion. Never execute Office or fetch relationships.
 public static class OfficeDocumentPolicy
 {
     public const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -12,7 +12,7 @@ public static class OfficeDocumentPolicy
     public static bool IsDocument(string mime) => mime is "application/pdf" or Docx or Xlsx;
     public static string Mime(string filename) => Path.GetExtension(filename).ToLowerInvariant() switch
     { ".pdf" => "application/pdf", ".docx" => Docx, ".xlsx" => Xlsx, _ => throw new InvalidOperationException("Chỉ nhận PDF, Word DOCX, Excel XLSX (không nhận DOC/XLS cũ hoặc macro).") };
-    public static void Validate(string path, string mime, MediaService media)
+    public static void Validate(string path, string mime, MediaService media, bool managedWithoutAv = false)
     {
         if (mime == "application/pdf") { media.ValidateContent(path, mime, CancellationToken.None); return; }
         using var input = File.OpenRead(path); using var zip = new ZipArchive(input, ZipArchiveMode.Read);
@@ -33,6 +33,25 @@ public static class OfficeDocumentPolicy
         var types = zip.GetEntry("[Content_Types].xml") ?? throw new InvalidDataException("Thiếu Content Types.");
         using var typeReader = XmlReader.Create(types.Open(), new() { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2 * 1024 * 1024 });
         var expected = mime == Docx ? Docx + ".main+xml" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
-        if (zip.GetEntry(main) == null || !XDocument.Load(typeReader).Descendants().Any(x => x.Attribute("ContentType")?.Value == expected)) throw new InvalidDataException("Nội dung Office không khớp đuôi/MIME.");
+        if (!managedWithoutAv)
+        {
+            if (zip.GetEntry(main) == null || !XDocument.Load(typeReader).Descendants().Any(x => x.Attribute("ContentType")?.Value == expected)) throw new InvalidDataException("Nội dung Office không khớp đuôi/MIME.");
+            return;
+        }
+        var typesDocument = XDocument.Load(typeReader);
+        if (zip.GetEntry(main) == null || !typesDocument.Descendants().Any(x => x.Name.LocalName == "Override"
+            && x.Attribute("PartName")?.Value == "/" + main && x.Attribute("ContentType")?.Value == expected))
+            throw new InvalidDataException("Nội dung Office không khớp đuôi/MIME.");
+        using var mainReader = XmlReader.Create(zip.GetEntry(main)!.Open(), new() { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2 * 1024 * 1024 });
+        var root = XDocument.Load(mainReader).Root;
+        var expectedRoot = mime == Docx
+            ? XName.Get("document", "http://schemas.openxmlformats.org/wordprocessingml/2006/main")
+            : XName.Get("workbook", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+        if (root?.Name != expectedRoot) throw new InvalidDataException("Cấu trúc tài liệu Office không hợp lệ.");
+        var relationships = zip.GetEntry("_rels/.rels") ?? throw new InvalidDataException("Thiếu quan hệ gói Office.");
+        using var relReader = XmlReader.Create(relationships.Open(), new() { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2 * 1024 * 1024 });
+        if (!XDocument.Load(relReader).Descendants().Any(x => x.Name.LocalName == "Relationship"
+            && x.Attribute("Type")?.Value == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
+            && x.Attribute("Target")?.Value.TrimStart('/') == main)) throw new InvalidDataException("Quan hệ Office không khớp tài liệu.");
     }
 }

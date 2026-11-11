@@ -32,7 +32,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         }
         var developmentException = options.DevelopmentExceptionEnabled;
         var assets = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && (x.ScanStatus == "NotScanned" || x.ScanStatus == "Clean"||x.ScanStatus==InternalMediaExceptionPolicy.Status&&x.Origin=="Source"&&db.AuditLogs.Any(g=>g.Action==InternalMediaExceptionPolicy.GrantAction&&g.Actor==x.Id.ToString()&&g.Detail==x.ValidationStatus+"|"+x.Sha256+"|"+x.StorageKey)) && (x.Origin == "Source"
-            || x.Origin == "Uploaded" && x.ValidationStatus == "Validated" && (x.ScanStatus == "Clean" || developmentException)
+            || x.Origin == "Uploaded" && ((x.ValidationStatus == "Validated" && (x.ScanStatus == "Clean" || developmentException)) || (options.ApprovedManagedImageWithoutAv && x.ValidationStatus == MediaUploadOptions.ManagedImageNoAvValidation && x.ScanStatus == "NotScanned" && (x.MimeType == "image/jpeg" || x.MimeType == "image/png")))
             || x.Origin == "EditorialDocument" && x.MimeType == "application/pdf" && x.ValidationStatus == "Validated" && x.ScanStatus == "Clean" && db.EditorialDocuments.Any(d => d.MediaAssetId == x.Id && d.ScanState == InquiryScanState.Clean && d.ScannedSha256 == x.Sha256 && d.EngineVersion != null)));
         if (actor.CategoryIds is not null || !actor.Has(Permissions.EditAll) && !actor.Has(Permissions.ViewAll))
         {
@@ -52,7 +52,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         var rows = await assets.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return Json(new { items = rows.Select(x => Describe(x, contentId)), page, total, pageSize,
             uploadAvailable = options.UploadEnabled && actor.Has(Permissions.ManageMedia),
-            notice = options.NativeUatUploads?"UAT: ảnh được quét Clamd trước khi cấp quyền dùng; PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp tải lên được kiểm tra định dạng, chưa quét mã độc." : "Tải lên chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
+            notice = options.ApprovedManagedImageWithoutAv?"Ảnh JPG/PNG của quản trị được kiểm tra, chuẩn hóa và ghi nhận chưa quét antivirus; các loại tệp khác vẫn yêu cầu scanner.":options.NativeUatUploads?"UAT: ảnh được quét Clamd trước khi cấp quyền dùng; PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp tải lên được kiểm tra định dạng, chưa quét mã độc." : "Tải lên chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
     }
 
     [HttpPost("admin/media/upload"), RequireUploadAntiforgeryHeader, DisableUploadFormValueModelBinding, RequestSizeLimit(67_174_400)]
@@ -99,7 +99,7 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
                 result.Asset.Id, result.Asset.OriginalName, result.Asset.MimeType, result.Asset.ByteLength,
                 result.Asset.Width, result.Asset.Height, result.Asset.ScanStatus, result.Asset.ValidationStatus,
                 url = "/media/" + result.Asset.Id, previewUrl = PreviewUrl(result.Asset.Id, contentId), result.Reused,
-                notice = options.NativeUatUploads?"Đã kiểm định và quét Clamd, lưu tệp Clean vào SQL/kho riêng. Chỉ công khai theo phiên bản được xuất bản.":"Đã lưu vào SQL và kho riêng; kiểm tra định dạng đạt. Chưa quét mã độc (ngoại lệ Development), chưa cấp quyền công khai."
+                notice = result.Asset.ValidationStatus == MediaUploadOptions.ManagedImageNoAvValidation?"Ảnh JPG/PNG đã chuẩn hóa và kiểm định định dạng, KHÔNG quét antivirus. Chỉ công khai theo quyền xuất bản.":options.NativeUatUploads?"Đã kiểm định và quét bằng scanner được cấu hình, lưu tệp Clean vào SQL/kho riêng. Chỉ công khai theo phiên bản được xuất bản.":"Đã lưu vào SQL và kho riêng; kiểm tra định dạng đạt. Chưa quét mã độc (ngoại lệ Development), chưa cấp quyền công khai."
             });
         }
         catch (MediaUploadException error) { return StatusCode(error.StatusCode, new { error = error.Message }); }
@@ -139,6 +139,20 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         catch (MediaUploadException) { return NotFound(); }
         if (!System.IO.File.Exists(path)) return NotFound();
         if(asset.ValidationStatus==BatchMediaProof.Validation&&!await BatchMediaProof.ValidAsync(storage,asset,options.VerifiedSourceAllowed))return NotFound();
+        if (options.IsManagedImage(asset))
+        {
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            try
+            {
+                if (stream.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stream)) != asset.Sha256)
+                { await stream.DisposeAsync(); return NotFound(); }
+                stream.Position = 0;
+                Response.Headers["X-Content-Type-Options"] = "nosniff";
+                Response.Headers["X-Media-Scan-Status"] = "NotScanned";
+                return File(stream, asset.MimeType, download ? asset.OriginalName : null, enableRangeProcessing: true);
+            }
+            catch { await stream.DisposeAsync(); throw; }
+        }
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         if (asset.MimeType == "application/pdf") Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
         Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");

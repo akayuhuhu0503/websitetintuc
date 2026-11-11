@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 public sealed record EditorialDocumentRow(MediaAsset Asset, EditorialDocument Proof);
-public sealed record EditorialDocumentsPage(Guid ContentId, string Title, bool CanUpload, IReadOnlyList<EditorialDocumentRow> Files, IReadOnlyList<MediaAsset> LegacyPdfs);
+public sealed record EditorialDocumentsPage(Guid ContentId, string Title, bool CanUpload, IReadOnlyList<EditorialDocumentRow> Files, IReadOnlyList<MediaAsset> LegacyPdfs, bool ManagedNoAvEnabled);
 
 [Authorize, ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPermissionService rights, EditorialDocumentService documents,
-    StorageOptions storage, IWebHostEnvironment environment, IConfiguration config) : Controller
+    StorageOptions storage, IWebHostEnvironment environment, IConfiguration config, MediaUploadOptions options) : Controller
 {
     private Task<ContentActor> Actor() => rights.GetAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet("admin/documents/{id:guid}")]
@@ -25,7 +25,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         var legacy = await db.MediaAssets.AsNoTracking().Where(a => a.Origin == "Uploaded" && a.MimeType == "application/pdf" && a.ScanStatus == "NotScanned" && !a.IsQuarantined && a.ValidationStatus == "Validated" && a.ByteLength <= EditorialDocumentService.Maximum
             && (db.DraftAssets.Any(x => x.ContentId == id && x.MediaAssetId == a.Id) || db.ContentAssets.Any(x => x.Revision.ContentId == id && x.MediaAssetId == a.Id))
             && !db.DraftAssets.Any(x => x.ContentId != id && x.MediaAssetId == a.Id) && !db.ContentAssets.Any(x => x.Revision.ContentId != id && x.MediaAssetId == a.Id)).Take(100).ToListAsync();
-        return View(new EditorialDocumentsPage(id, content.CurrentRevisionId == null ? "Bản nháp" : await db.Revisions.Where(x => x.Id == content.CurrentRevisionId).Select(x => x.Title).SingleAsync(), actor.Has(Permissions.ManageMedia) && await rights.CanEditAsync(actor, content), files, legacy));
+        return View(new EditorialDocumentsPage(id, content.CurrentRevisionId == null ? "Bản nháp" : await db.Revisions.Where(x => x.Id == content.CurrentRevisionId).Select(x => x.Title).SingleAsync(), actor.Has(Permissions.ManageMedia) && await rights.CanEditAsync(actor, content), files, legacy, options.ApprovedManagedDocumentsWithoutAv));
     }
     [HttpPost("admin/documents/{id:guid}/enqueue/{assetId:guid}")]
     public async Task<IActionResult> Enqueue(Guid id, Guid assetId, CancellationToken ct)
@@ -42,11 +42,16 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
             if (file == null || file.Length is < 1 or > EditorialDocumentService.Maximum || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu tối đa 10 MiB.");
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
-            TempData["Success"] = "Đã lưu SQL và kho cách ly, trạng thái chưa quét an toàn. Chạy tác vụ nền quét thật trước khi đọc hoặc dùng tài liệu.";
+            TempData["Success"] = asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
+                ? "Đã lưu tài liệu và kiểm định định dạng (CHƯA quét antivirus). Chỉ phát hành theo quyền duyệt bài."
+                : "Đã lưu SQL và kho cách ly, trạng thái chưa quét an toàn. Chạy tác vụ nền quét thật trước khi đọc hoặc dùng tài liệu.";
             return Redirect("/admin/documents/" + id);
         }
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (InvalidOperationException error) { Response.StatusCode = 400; return Content(error.Message); }
+        catch (InvalidDataException) { return BadRequest("Tài liệu không đạt kiểm tra định dạng hoặc chứa thành phần không được phép."); }
+        catch (System.Xml.XmlException) { return BadRequest("Cấu trúc tệp Office không hợp lệ."); }
+        catch (MediaUploadException error) { return StatusCode(error.StatusCode,error.Message); }
         catch (DbUpdateException) { return StatusCode(503, "SQL chưa xác nhận lưu tài liệu. Kiểm tra trước khi gửi lại."); }
     }
     [HttpGet("admin/documents/file/{id:guid}"), HttpHead("admin/documents/file/{id:guid}")]
@@ -66,8 +71,8 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         }
         if (!await Allowed()) return NotFound();
         var asset = await db.MediaAssets.AsNoTracking().SingleAsync(x => x.Id == id);
-        var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment());
-        if (stream == null) return StatusCode(423, "Tài liệu chưa Clean đúng byte, đang cách ly hoặc không có bằng chứng quét hợp lệ.");
+        var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment(), policy: options);
+        if (stream == null) return StatusCode(423, "Tài liệu chưa đủ điều kiện xem hoặc tải theo chính sách kiểm định hiện hành.");
         if (!await Allowed()) { await stream.DisposeAsync(); return NotFound(); }
         Response.Headers["X-Content-Type-Options"] = "nosniff"; Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
         Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");

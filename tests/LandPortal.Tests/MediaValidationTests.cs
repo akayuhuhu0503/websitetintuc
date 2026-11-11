@@ -85,6 +85,43 @@ public static class MediaValidationTests
                 await Rejected(() => new MediaService(db, storage, production).UploadAsync(input, "test.png", "image/png", owner, false), 503);
             });
 
+            await Case("Managed CMS image opt-in is image-only and does not fake antivirus Clean", () =>
+            {
+                var managed = new MediaUploadOptions { ApprovedManagedImageWithoutAv = true };
+                var image = new MediaAsset { Origin = "Uploaded", MimeType = "image/png",
+                    ScanStatus = "NotScanned", ValidationStatus = MediaUploadOptions.ManagedImageNoAvValidation, IsQuarantined = false };
+                Check(managed.UploadEnabled && managed.CanServe(image), "Approved decoded image rejected.");
+                Check(!(new MediaUploadOptions()).CanServe(image), "Default policy served an unscanned managed image.");
+                image.MimeType = "application/pdf";
+                Check(!managed.CanServe(image), "Non-image upload bypassed scanner.");
+                image.MimeType = "image/png";
+                image.IsQuarantined = true;
+                Check(!managed.CanServe(image), "Quarantined image bypassed policy.");
+                return Task.CompletedTask;
+            });
+
+            await Case("PDF DOCX XLSX admin no-AV policy is opt-in, scoped and never calls an asset Clean", () =>
+            {
+                var approved = new MediaUploadOptions { ApprovedManagedDocumentsWithoutAv = true };
+                var disabled = new MediaUploadOptions();
+                foreach (var mime in new[] { "application/pdf", OfficeDocumentPolicy.Docx, OfficeDocumentPolicy.Xlsx })
+                {
+                    var doc = new MediaAsset { Origin="EditorialDocument", MimeType=mime, ScanStatus="NotScanned",
+                        ValidationStatus=MediaUploadOptions.ManagedDocumentNoAvValidation, IsQuarantined=false };
+                    Check(approved.CanServe(doc), "Approved document policy rejected: " + mime);
+                    Check(!disabled.CanServe(doc), "Default policy allowed unscanned document: " + mime);
+                    doc.IsQuarantined=true;
+                    Check(!approved.CanServe(doc), "Quarantined document allowed.");
+                    doc.IsQuarantined=false;
+                    doc.Origin="Uploaded";
+                    Check(!approved.CanServe(doc), "Generic uploaded file bypassed document policy.");
+                }
+                var unknown = new MediaAsset { Origin="EditorialDocument", MimeType="application/x-msdownload",
+                    ScanStatus="NotScanned", ValidationStatus=MediaUploadOptions.ManagedDocumentNoAvValidation };
+                Check(!approved.CanServe(unknown), "Executable passed editorial document policy.");
+                return Task.CompletedTask;
+            });
+
             await Case("Real PNG pixels decode and SQL/file preserve truthful NotScanned state and dimensions", async () =>
             {
                 using var input = new MemoryStream(png, false);

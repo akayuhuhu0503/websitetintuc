@@ -17,24 +17,33 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && !x.IsQuarantined);
         if (asset is null || !mediaOptions.CanServe(asset)) return NotFound();
         var internalException=InternalMediaExceptionPolicy.Candidate(asset);
+        var managedImageNoAv=mediaOptions.ApprovedManagedImageWithoutAv
+            && asset.Origin=="Uploaded" && asset.ValidationStatus==MediaUploadOptions.ManagedImageNoAvValidation
+            && asset.ScanStatus=="NotScanned" && asset.MimeType is ("image/jpeg" or "image/png");
         if(internalException&&!await InternalMediaExceptionPolicy.HasGrantAsync(db,asset))return NotFound();
         if(internalException)Response.Headers["X-Media-Scan-Status"]="ScannerSkipped";
+        if(managedImageNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
         if (asset.MimeType == "application/pdf" && asset.Origin is not ("Source" or "EditorialDocument")) return NotFound();
         if (asset.Origin == "EditorialDocument")
         {
             async Task<bool> Grant() => asset.MimeType == OfficeDocumentPolicy.Docx && await WeeklySchedulePublication.HasOriginalGrantAsync(db,id) || await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && a.Usage == "Attachment"
                 && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)
                 && db.Revisions.Any(r => r.Id == a.RevisionId && (r.Metadata.DisclosureGroupId == null || db.DisclosureGroups.Any(g => g.Id == r.Metadata.DisclosureGroupId && g.Status == "NameApproved"))
-                    && (asset.MimeType != OfficeDocumentPolicy.Docx || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
+                    && (asset.MimeType != OfficeDocumentPolicy.Docx
+                        || r.Metadata.WeeklyYear == null && mediaOptions.IsManagedDocument(asset)
+                        || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
             if (!await Grant()) return NotFound();
-            var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, mediaOptions.IsDevelopmentLoopback);
+            var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, mediaOptions.IsDevelopmentLoopback, policy: mediaOptions);
             if (stream == null) return NotFound();
             if (!await Grant()) { await stream.DisposeAsync(); return NotFound(); }
             Response.Headers["X-Content-Type-Options"] = "nosniff";
             Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+            var managedDocumentNoAv=mediaOptions.ApprovedManagedDocumentsWithoutAv
+                && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation && asset.ScanStatus=="NotScanned";
+            if(managedDocumentNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
             if(asset.MimeType=="application/pdf"){Response.Headers["Content-Security-Policy"]="sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
             Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
-            return base.File(stream, asset.MimeType, download || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
+            return base.File(stream, asset.MimeType, download || managedDocumentNoAv || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
         }
         var isPublished = await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id
             && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId));
@@ -47,13 +56,13 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         catch (InvalidOperationException) { return NotFound(); }
         catch (MediaUploadException) { return NotFound(); }
         if (!System.IO.File.Exists(path)) return NotFound();
-        if (asset.ValidationStatus == "Phase3BValidated" || internalException)
+        if (asset.ValidationStatus == "Phase3BValidated" || internalException || managedImageNoAv)
         {
             // Batch scan proof binds the original bytes, also after materialization.
             try
             {
                 var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if ((!internalException && asset.ScanStatus != "Clean") || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
+                if ((!internalException && !managedImageNoAv && asset.ScanStatus != "Clean") || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
                 if (!await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) && !await PublicSiteService.HasPublicAssetGrantAsync(db,id,DateTimeOffset.UtcNow)) { await input.DisposeAsync(); return NotFound(); }
                 input.Position = 0;
                 Response.Headers["X-Content-Type-Options"] = "nosniff";
