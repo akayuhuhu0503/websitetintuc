@@ -1,14 +1,14 @@
 ﻿[CmdletBinding()]
-param([switch]$Replace,
+param([switch]$Replace=$true,
  [string]$EnvFile,
- [ValidateSet('Portable','Auto','Transfer','Local')][string]$PrivateMode='Portable',
+ [ValidateSet('WebBundle','Portable','Auto','Transfer','Local')][string]$PrivateMode='WebBundle',
  [ValidatePattern('^TTDL-IIS(?:-[A-Za-z0-9][A-Za-z0-9-]{0,63})?$')][string]$OutputName='TTDL-IIS')
 # Build only: parses private .env as data; never sources it or starts an application/SQL tool.
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 $repo=Split-Path -Parent $PSScriptRoot
 $base=[IO.Path]::GetFullPath((Join-Path $repo '.local/publish'))
-$output=Join-Path $base $OutputName;$staging=Join-Path $base ($OutputName+'-building');$previous=Join-Path $base ($OutputName+'.previous')
+$output=Join-Path $base $OutputName;$staging=Join-Path $base ($OutputName+'-building');$previous=Join-Path $base ($OutputName+'.previous-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
 foreach($path in @($base,$output,$staging,$previous)){
  for($node=$path;$node;$node=[IO.Path]::GetDirectoryName($node)){
   if((Test-Path -LiteralPath $node)-and ((Get-Item -LiteralPath $node).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Reparse publish path refused'}
@@ -73,7 +73,7 @@ try{
   Invoke-BuildCommand $npm @('run','build')
  }finally{Pop-Location}
  # Reuse the existing publisher, but do not generate/run schema or application code.
- & (Join-Path $PSScriptRoot 'package-uat.ps1') -RunId ($OutputName+'-building') -SkipSchemaGeneration -AllowAdditionalPackage:($OutputName -cne 'TTDL-IIS') -PortableConfiguration:($PrivateMode -eq 'Portable')
+ & (Join-Path $PSScriptRoot 'package-uat.ps1') -RunId ($OutputName+'-building') -SkipSchemaGeneration -AllowAdditionalPackage:($OutputName -cne 'TTDL-IIS') -PortableConfiguration:($PrivateMode -in @('Portable','WebBundle'))
  if(-not(Test-Path -LiteralPath (Join-Path $staging 'manifest.json'))){throw 'Publisher did not complete'}
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'START.md')
  Copy-Item -LiteralPath (Join-Path $repo 'docs/TTDL-GITHUB-IIS-HANDOFF.md') -Destination (Join-Path $staging 'TTDL-GITHUB-IIS-HANDOFF.md')
@@ -85,7 +85,7 @@ try{
  $config=Join-Path $staging 'web/web.config'
  [xml]$xml=Get-Content -LiteralPath $config -Raw -Encoding UTF8
  if((Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash -cne $envSha){throw 'Input .env changed during build; configuration not released'}
- if($PrivateMode -ne 'Portable'){
+ if($PrivateMode -notin @('Portable','WebBundle')){
  if(-not(Test-Path -LiteralPath $privateHome -PathType Container)){
   $acl=New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true,$false)
@@ -95,7 +95,7 @@ try{
  & (Join-Path $PSScriptRoot 'prepare-iis-config.ps1') -EnvFile $EnvFile -DataHome $privateHome -PublishRoot $staging -ForPublish -DeferTarget
  Copy-Item -LiteralPath (Join-Path $privateHome 'iis.web.config') -Destination $config
  }
- if($PrivateMode -eq 'Portable'){
+ if($PrivateMode -in @('Portable','WebBundle')){
   # Confidential sibling travels with the whole package; IIS serves web/ only.
   $portableHome=Join-Path $staging 'private'
   $security=New-Object Security.AccessControl.DirectorySecurity;$security.SetAccessRuleProtection($true,$false)
@@ -142,20 +142,26 @@ try{
   @{path=$f.FullName.Substring($staging.Length+1).Replace('\','/');bytes=$f.Length;sha256=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
  }})
  $encoding=[Text.UTF8Encoding]::new($false)
- foreach($name in @('START.md','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')+$(if($PrivateMode -eq 'Portable'){@()}else{@('CAU-HINH-IIS.cmd')})){$records+=@{path=$name;bytes=(Get-Item -LiteralPath (Join-Path $staging $name)).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging $name) -Algorithm SHA256).Hash.ToLowerInvariant()}}
- if($PrivateMode -eq 'Portable'){$records+=@{path='web.config';bytes=(Get-Item (Join-Path $staging 'web.config')).Length;sha256=(Get-FileHash (Join-Path $staging 'web.config')).Hash.ToLowerInvariant()}}
+ foreach($name in @('START.md','TTDL-GITHUB-IIS-HANDOFF.md','iis-one-command.md')+$(if($PrivateMode -in @('Portable','WebBundle')){@()}else{@('CAU-HINH-IIS.cmd')})){$records+=@{path=$name;bytes=(Get-Item -LiteralPath (Join-Path $staging $name)).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $staging $name) -Algorithm SHA256).Hash.ToLowerInvariant()}}
+ if($PrivateMode -in @('Portable','WebBundle')){$records+=@{path='web.config';bytes=(Get-Item (Join-Path $staging 'web.config')).Length;sha256=(Get-FileHash (Join-Path $staging 'web.config')).Hash.ToLowerInvariant()}}
  $manifest=@{schema=1;runId=$OutputName;utc=[DateTimeOffset]::UtcNow.ToString('O');status='PUBLISHED_CONFIG_PREPARED_NOT_DEPLOYED';privateMode=$PrivateMode;environment='Staging';schemaIncluded=$false;sqlExecuted=$false;servicesInstalled=0;workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail');files=$records;productionReady=$false}
- if($PrivateMode -eq 'Portable'){$manifest.privateConfiguration=@{path='private/uat.json';sha256=(Get-FileHash (Join-Path $staging 'private/uat.json')).Hash.ToLowerInvariant();confidential=$true}}
+ if($PrivateMode -in @('Portable','WebBundle')){$manifest.privateConfiguration=@{path='private/uat.json';sha256=(Get-FileHash (Join-Path $staging 'private/uat.json')).Hash.ToLowerInvariant();confidential=$true}}
  [IO.File]::WriteAllText((Join-Path $staging 'manifest.json'),($manifest|ConvertTo-Json -Depth 8),$encoding)
  [IO.File]::WriteAllText((Join-Path $staging 'build-only.json'),(@{kind='TTDL-IIS-BUILD-ONLY';sealed=$false;manifestSha256=(Get-FileHash -LiteralPath (Join-Path $staging 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()}|ConvertTo-Json),$encoding)
+ if($PrivateMode -eq 'WebBundle'){. (Join-Path $PSScriptRoot 'iis-web-bundle.ps1');ConvertTo-IisWebBundle $staging}
  if(Test-Path -LiteralPath $output){Move-Item -LiteralPath $output -Destination $previous}
  Move-Item -LiteralPath $staging -Destination $output
  Write-Output ('PUBLISH PASS: '+$output)
+ if($PrivateMode -eq 'WebBundle'){Write-Output ('COPY ONLY: '+(Join-Path $output 'web')+'; confidential .runtime included. Keep existing sibling private data and tools. Restart IIS and Workers.')}else{
  Write-Output ('Copy whole Publish folder to IIS: '+$output+'; IIS Physical Path: web/')
- if($PrivateMode -eq 'Portable'){Write-Output ('PRIVATE CONFIG (confidential, outside webroot): '+(Join-Path $output 'private/uat.json'))}else{Write-Output ('PRIVATE CONFIG (not in publish): '+(Join-Path $privateHome 'uat.json'))}
- if($PrivateMode -ne 'Portable'){Write-Output 'Target paths/HTTPS/Defender are discovered by ops/configure-iis-uat.ps1 on IIS; activation remains gated. No SQL was contacted.'}
+ if($PrivateMode -in @('Portable','WebBundle')){Write-Output ('PRIVATE CONFIG (confidential, outside webroot): '+(Join-Path $output 'private/uat.json'))}else{Write-Output ('PRIVATE CONFIG (not in publish): '+(Join-Path $privateHome 'uat.json'))}
+ if($PrivateMode -notin @('Portable','WebBundle')){Write-Output 'Target paths/HTTPS/Defender are discovered by ops/configure-iis-uat.ps1 on IIS; activation remains gated. No SQL was contacted.'}
+ }
  Write-Output 'Web + Worker (5 modes) + tools + ops ready. SQL/IIS/deployment NOT RUN. Read START.md.'
- if($PrivateMode -eq 'Portable'){
+ if($PrivateMode -eq 'WebBundle'){
+  Write-Output 'GÓI WEB CHỨA CẤU HÌNH BÍ MẬT: chuyển nguyên web qua kênh riêng, gồm .runtime; không đưa lên Git hoặc URL tải công khai.'
+  Write-Output 'Dữ liệu vẫn ở sibling private. Lần chuyển đầu đổi launcher Worker theo web/.runtime/README.md; những lần sau chỉ thay web và restart.'
+ }elseif($PrivateMode -eq 'Portable'){
   Write-Output 'GÓI CHỨA CẤU HÌNH BÍ MẬT: chuyển cả thư mục Publish bằng kênh riêng; IIS chỉ trỏ web/. Không đưa gói lên Git hoặc URL tải công khai.'
   Write-Output 'Không cần tên máy/site hoặc script cấu hình bổ sung. Runtime tự tìm private/uat.json và thông tin IIS; thiếu quyền/HTTPS thì báo503; scanner chưa sẵn sàng chỉ chặn upload cần quét.'
  }

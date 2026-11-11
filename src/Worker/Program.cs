@@ -4,6 +4,19 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 // Explicit independent modes: scheduler, mail, inquiry scanner, or video; never crawl.
+if(args.Length==1&&args[0]=="--verify-package")
+{
+    // Offline packaging check only: exits before SQL, queues, scanner, or writing storage.
+    var bundle=PortablePackageLayout.Resolve(AppContext.BaseDirectory);
+    if(!bundle.WebBundle)throw new InvalidOperationException("WebBundle required for offline inspection.");
+    var settings=bundle.LoadBoundSettings();bundle.SetRuntimeLocations(settings);
+    PortableIisConfiguration.ValidateExternalStores(settings,bundle.WebRoot);
+    UatDeployment.Validate(settings,"Staging");
+    var videoSettings=VideoOptions.FromConfiguration(settings,"Staging");
+    var mediaSettings=MediaUploadOptions.FromConfiguration(settings,"Staging");
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{mode="OFFLINE_PACKAGE_CHECK_ONLY",sqlOpened=false,workerStarted=false,video=videoSettings.Enabled,managedVideo=videoSettings.ApprovedManagedVideoWithoutAv,managedImage=mediaSettings.ApprovedManagedImageWithoutAv,managedDocuments=mediaSettings.ApprovedManagedDocumentsWithoutAv}));
+    return 0;
+}
 var config = PortalConfiguration.Load();
 var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
 var expected = config["Sql:ExpectedDatabase"];

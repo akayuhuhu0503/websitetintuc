@@ -20,6 +20,7 @@ public static class IisStartupNotice
         var stage=code.StartsWith("IIS-CONFIG-003-",StringComparison.Ordinal)?code[15..]:"TECHNICAL";
         var hint=LandPortal.Infrastructure.PortableIisConfiguration.StartupHint(stage);
         Console.Error.WriteLine(code+": "+hint);
+        app.UsePrivateRuntimeProtection();
         app.Run(async context=>{
             context.Response.StatusCode=StatusCodes.Status503ServiceUnavailable;
             context.Response.ContentType="text/html; charset=utf-8";

@@ -19,9 +19,7 @@ public static class PortableIisConfiguration
     public static bool Detected {
         get {
             if(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")!="Staging")return false;
-            var dir=new DirectoryInfo(AppContext.BaseDirectory);var root=dir.Name=="uat-data"?dir.Parent?.Parent:dir.Parent;
-            if(root==null||dir.Name is not("web" or "worker" or "tools" or "uat-data"))return false;
-            try{using var m=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root.FullName,"manifest.json")));return m.RootElement.TryGetProperty("privateMode",out var mode)&&mode.GetString()=="Portable";}catch{return false;}
+            try{var layout=PortablePackageLayout.Resolve(AppContext.BaseDirectory);using var m=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(layout.Manifest));return m.RootElement.GetProperty("privateMode").GetString()==(layout.WebBundle?"WebBundle":"Portable");}catch{return false;}
         }
     }
     public static bool IsServiceIdentityAllowed(string name,bool system,bool administrator) =>
@@ -32,7 +30,7 @@ public static class PortableIisConfiguration
     public static string StartupHint(string stage)=>stage switch
     {
         "ENV"=>"Gói IIS này cần môi trường Staging/UAT; không dùng cấu hình Production.",
-        "LAYOUT"=>"Copy nguyên gói Publish. IIS trỏ vào web; private và manifest.json phải nằm cạnh web.",
+        "LAYOUT"=>"Gói mới: copy nguyên thư mục web gồm .runtime. Gói cũ: giữ đủ web/private/manifest.",
         "PRIVATE_READ"=>"Không đọc được cấu hình private hoặc đường dẫn không hợp lệ. Kiểm tra đã copy đủ gói và cấp Read cho đúng tài khoản Application Pool.",
         "PRIVATE_HASH"=>"Cấu hình private không khớp manifest. Copy lại nguyên cùng một gói Publish, không sửa JSON sau Publish.",
         "PROFILE"=>"Cấu hình gói phải dùng profile UAT.",
@@ -48,25 +46,19 @@ public static class PortableIisConfiguration
     {
         var stage="ENV";
         try{return LoadCore(ref stage);}
-        catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException or MediaUploadException)
+        catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException or MediaUploadException or KeyNotFoundException)
         {throw new IisConfigurationException("IIS-CONFIG-003-"+stage,StartupHint(stage));}
     }
     private static IConfigurationRoot LoadCore(ref string stage)
     {
         if(!(Enabled||Detected)||Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")!="Staging"||Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Staging")throw new InvalidOperationException("Portable configuration is UAT/Staging only.");
         stage="LAYOUT";
-        var component=new DirectoryInfo(AppContext.BaseDirectory);
-        var package=component.Name=="uat-data"?component.Parent?.Parent:component.Parent;
-        if(package==null||component.Name is not("web" or "worker" or "tools" or "uat-data")||!File.Exists(Path.Combine(package.FullName,"manifest.json")))throw new InvalidOperationException("Published package layout required.");
-        var home=Path.Combine(package.FullName,"private");var file=Path.Combine(home,"uat.json");
-        stage="PRIVATE_READ";
-        for(string? p=file;p!=null;p=Path.GetDirectoryName(p))if((File.Exists(p)||Directory.Exists(p))&&(File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new InvalidOperationException("Reparse private configuration refused.");
-        using(var manifest=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(package.FullName,"manifest.json")))){
-            if(!manifest.RootElement.TryGetProperty("privateConfiguration",out var binding)||!binding.TryGetProperty("path",out var boundPath)||boundPath.GetString()!="private/uat.json"||!binding.TryGetProperty("confidential",out var confidential)||!confidential.GetBoolean()||!binding.TryGetProperty("sha256",out var sha))throw new InvalidOperationException("Private package binding missing.");
-            using var bytes=File.OpenRead(file);stage="PRIVATE_HASH";if(!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)),sha.GetString(),StringComparison.Ordinal))throw new InvalidOperationException("Private config changed after Publish; republish from the approved .env.");
-        }
-        stage="PRIVATE_READ";
-        var config=new ConfigurationBuilder().AddJsonFile(file,false,false).AddEnvironmentVariables().Build();
+        var layout=PortablePackageLayout.Resolve(AppContext.BaseDirectory);
+        if(Environment.GetEnvironmentVariable("LANDPORTAL_WEB_BUNDLE")=="1"&&!layout.WebBundle)throw new InvalidOperationException("Embedded runtime missing; legacy fallback refused.");
+        var component=new DirectoryInfo(layout.WebRoot);
+        var home=layout.DefaultDataHome;
+        stage="PRIVATE_HASH";
+        var config=layout.LoadBoundSettings();
         stage="PROFILE";
         if(config["Deployment:Profile"]!="UAT")throw new InvalidOperationException("Portable profile must remain UAT.");
         stage="DATA_HOME";
@@ -80,8 +72,7 @@ public static class PortableIisConfiguration
             if(!IsServiceIdentityAllowed(identity.Name,identity.IsSystem,new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)))throw new InvalidOperationException("A least-privilege application pool or service account is required.");
         }
         // These values are technical locations, not approval/credentials.
-        config["WorkspaceRoot"]=home;config["DOTNET_ENVIRONMENT"]="Staging";config["ASPNETCORE_ENVIRONMENT"]="Staging";
-        foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})if(string.IsNullOrWhiteSpace(config["Storage:"+name]))config["Storage:"+name]=Path.Combine(home,name switch{"MediaRoot"=>"media","SnapshotRoot"=>"snapshots","TempRoot"=>"temp",_=>"keys"});
+        layout.SetRuntimeLocations(config);
         stage="HTTPS";
         if(string.IsNullOrWhiteSpace(config["Public:BaseUrl"])){
             var poolFile=Environment.GetEnvironmentVariable("APP_POOL_CONFIG");
@@ -97,6 +88,7 @@ public static class PortableIisConfiguration
         stage="TECHNICAL";
         ResolveScannerDefaults(config);
         stage="STORAGE_BOUNDARY";
+        if(layout.WebBundle)ValidateExternalStores(config,layout.WebRoot);
         StorageOptions.FromConfiguration(config).PortableBoundary?.EnsureValidated();
         stage="TECHNICAL";
         // Technical target/TLS guards remain mandatory; unavailable scanning blocks file operations.
@@ -104,6 +96,18 @@ public static class PortableIisConfiguration
         stage="STORE_WRITE";
         foreach(var name in new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"})Directory.CreateDirectory(config["Storage:"+name]!);
         return config;
+    }
+
+    public static void ValidateExternalStores(IConfiguration config,string webRoot)
+    {
+        static string Full(string p)=>Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);
+        static bool Within(string a,string b)=>a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);
+        var web=Full(webRoot);
+        var stores=new[]{"MediaRoot","SnapshotRoot","TempRoot","KeysRoot"}.Select(k=>config["Storage:"+k]??"").ToArray();
+        if(stores.Any(p=>!Path.IsPathFullyQualified(p)))throw new InvalidOperationException("Absolute external storage required.");
+        stores=stores.Select(Full).ToArray();
+        if(stores.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=4||stores.Any(p=>Within(p,web)||Within(web,p)||p.Split(Path.DirectorySeparatorChar).Any(x=>x.Equals("wwwroot",StringComparison.OrdinalIgnoreCase)))||stores.Any(a=>stores.Any(b=>a!=b&&Within(a,b))))throw new InvalidOperationException("Stores must be separate and outside application.");
+        foreach(var store in stores)for(string? p=store;p!=null;p=Path.GetDirectoryName(p))if((File.Exists(p)||Directory.Exists(p))&&(File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new InvalidOperationException("Reparse storage refused.");
     }
 
     // Shared measured process/binary defaults for portable Web and media tools.

@@ -67,21 +67,21 @@ internal sealed class PortableStorageBoundary
     {
         var home=Full(c["WorkspaceRoot"]??throw new InvalidOperationException("Private workspace missing."));
         if(!Path.GetFileName(home).Equals("private",StringComparison.OrdinalIgnoreCase))Fail("đường dẫn publish chỉ được dùng trong private của gói IIS đã bind.");
-        var package=Path.GetDirectoryName(home)!;var web=Path.Combine(package,"web");var file=Path.Combine(home,"uat.json");
-        NoLinks(home);NoLinks(file);NoLinks(web);NoLinks(Path.Combine(package,"manifest.json"));
-        if(!Directory.Exists(web)||!File.Exists(file))Fail("thiếu layout web/private của gói IIS.");
-        using(var m=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(package,"manifest.json"))))
-        {
-            if(!m.RootElement.TryGetProperty("privateMode",out var mode)||mode.GetString()!="Portable")Fail("gói chưa xác định Portable.");
-            var binding=m.RootElement.GetProperty("privateConfiguration");
-            if(binding.GetProperty("path").GetString()!="private/uat.json"||!binding.GetProperty("confidential").GetBoolean()||binding.GetProperty("sha256").GetString()!=Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(file))))Fail("hash/binding cấu hình private không khớp.");
-        }
+        var bundle=c["PortableRuntime:BundleRoot"];
+        var package=Path.GetDirectoryName(home)!;
+        var web=bundle==null?Path.Combine(package,"web"):Path.GetDirectoryName(Full(bundle))!;
+        if(bundle!=null && (!Path.GetFileName(Full(bundle)).Equals(".runtime",StringComparison.Ordinal)||!home.Equals(Path.Combine(Path.GetDirectoryName(web)!,"private"),StringComparison.OrdinalIgnoreCase)))Fail("bundle/data boundary mismatch.");
+        var layout=new PortablePackageLayout(bundle??package,web,home,bundle!=null);
+        NoLinks(home);NoLinks(web);
+        if(!Directory.Exists(web))Fail("missing IIS web directory.");
+        layout.VerifyBinding();
         if(c["Deployment:Profile"]!="UAT"||c["DOTNET_ENVIRONMENT"]!="Staging"||c["ASPNETCORE_ENVIRONMENT"]!="Staging")Fail("ngoại lệ portable chỉ dành cho UAT đã xác định.");
         var roots=stores.Select(Full).ToArray();
         if(roots.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=4||roots.Any(x=>!Within(x,home)||x.Equals(home,StringComparison.OrdinalIgnoreCase)||Within(x,web)||x.Split(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar).Any(s=>s.Equals("wwwroot",StringComparison.OrdinalIgnoreCase))))Fail("kho phải tách biệt trong private, ngoài web/wwwroot.");
         if(roots.Any(a=>roots.Any(b=>a!=b&&Within(a,b))))Fail("kho private không được lồng nhau.");
         var served=IisRoots();
         if(!served.Any(x=>x.Equals(web,StringComparison.OrdinalIgnoreCase))||served.Any(x=>Within(home,x)||Within(x,home)))Fail("IIS mapping không đúng web hoặc đang phục vụ private.");
+        if(bundle!=null&&served.Any(x=>!x.Equals(web,StringComparison.OrdinalIgnoreCase)&&(Within(x,Full(bundle))||Within(Full(bundle),x))))Fail("IIS must not separately map the embedded runtime.");
         foreach(var root in roots)NoLinks(root);
         return new(home,roots);
     }

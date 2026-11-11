@@ -1,5 +1,8 @@
 # Một file .env cho IIS GDLA
 
+Cập nhật cấu trúc WebBundle: [chỉ copy web và restart](iis-web-only.md).
+Các kết quả kiểm thử bên dưới là checkpoint minimal-env trước WebBundle.
+
 Đặt file `.env` private đã được bàn giao vào gốc source có bản sửa minimal-env, rồi chạy:
 
 ```powershell

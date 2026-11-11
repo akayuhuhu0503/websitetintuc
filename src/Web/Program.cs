@@ -22,6 +22,11 @@ catch(Exception error) when(IisStartupNotice.IsUat(builder.Configuration,builder
     var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,error is IisConfigurationException setup?setup.Code:"IIS-CONFIG-003");blocked.Run();return;
 }
 builder.Configuration.AddConfiguration(config);
+if(config["PortableRuntime:BundleRoot"] is {Length:>0} &&
+    !string.Equals(Path.GetFullPath(builder.Environment.WebRootPath??Path.Combine(builder.Environment.ContentRootPath,"wwwroot")).TrimEnd(Path.DirectorySeparatorChar),Path.Combine(AppContext.BaseDirectory,"wwwroot").TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase))
+{
+    var blocked=builder.Build();IisStartupNotice.MapBlocked(blocked,"IIS-CONFIG-003-LAYOUT");blocked.Run();return;
+}
 var connection = DatabaseSettings.Connection(builder.Configuration);
 var storage = StorageOptions.FromConfiguration(builder.Configuration);
 var baseUrl = builder.Configuration["Public:BaseUrl"] ?? "http://127.0.0.1:5188";
@@ -145,6 +150,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SiteConfigurationService>();
 builder.Services.AddScoped<PublicSiteService>();
 var app = builder.Build();
+app.UsePrivateRuntimeProtection();
 if(LandPortal.Domain.PortalBuildCapabilities.LegacyLanSchema15)
 {
     using var scope=app.Services.CreateScope();var legacyDb=scope.ServiceProvider.GetRequiredService<PortalDbContext>();

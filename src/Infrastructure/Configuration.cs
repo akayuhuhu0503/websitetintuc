@@ -7,7 +7,7 @@ public static class PortalConfiguration
 {
     public static string FindWorkspace()
     {
-        if(PortableIisConfiguration.Enabled||PortableIisConfiguration.Detected){var d=new DirectoryInfo(AppContext.BaseDirectory);return Path.Combine((d.Name=="uat-data"?d.Parent?.Parent:d.Parent)!.FullName,"private");}
+        if(PortableIisConfiguration.Enabled||PortableIisConfiguration.Detected)return PortablePackageLayout.Resolve(AppContext.BaseDirectory).DefaultDataHome;
         if (Environment.GetEnvironmentVariable("LANDPORTAL_CONFIG") is { Length: > 0 } && Environment.GetEnvironmentVariable("LANDPORTAL_HOME") is { Length: > 0 } home)
         {
             if (!Path.IsPathFullyQualified(home)) throw new InvalidOperationException("Absolute LANDPORTAL_HOME required.");
