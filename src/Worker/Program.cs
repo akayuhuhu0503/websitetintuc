@@ -35,11 +35,49 @@ if(args.Contains("--video"))
 {
     var video=VideoOptions.FromConfiguration(config,environment);if(!video.Enabled)throw new InvalidOperationException("Video worker requires Video enabled and a validated environment.");
     var scanner=InquiryScannerFactory.Create(config,environment,video.MaxFileBytes);var processor=new VideoProcessor(video,storage);var health=await processor.HealthAsync();Console.WriteLine("Video processor: "+health.Code+"; ready="+health.Ready+". Original source videos are never selected automatically.");
-    if(args.Contains("--health")){var scanHealth=await scanner.HealthAsync();await using var check=new PortalDbContext(DatabaseSettings.Options(config));var queue=await check.Set<LandPortal.Domain.VideoFile>().GroupBy(x=>x.State).Select(x=>new{state=x.Key.ToString(),count=x.Count()}).ToListAsync();var subtitles=await check.Set<LandPortal.Domain.VideoSubtitle>().GroupBy(x=>x.State).Select(x=>new{state=x.Key.ToString(),count=x.Count()}).ToListAsync();var stale=await check.Set<LandPortal.Domain.VideoFile>().CountAsync(x=>(x.State==LandPortal.Domain.VideoState.Processing||x.State==LandPortal.Domain.VideoState.Scanning)&&x.LeaseUntilUtc<DateTimeOffset.UtcNow);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{utc=DateTimeOffset.UtcNow,processor=new{health.Ready,health.Code},scanner=new{scanHealth.Ready,scanHealth.Code},managedVideoWithoutAv=video.ApprovedManagedVideoWithoutAv,subtitlesRequireScanner=true,queue,subtitles,expiredLeases=stale}));return health.Ready&&(scanHealth.Ready||video.ApprovedManagedVideoWithoutAv)?0:2;}
+    if(args.Contains("--health")){var scanHealth=await scanner.HealthAsync();await using var check=new PortalDbContext(DatabaseSettings.Options(config));var queue=await check.Set<LandPortal.Domain.VideoFile>().GroupBy(x=>x.State).Select(x=>new{state=x.Key.ToString(),count=x.Count()}).ToListAsync();var subtitles=await check.Set<LandPortal.Domain.VideoSubtitle>().GroupBy(x=>x.State).Select(x=>new{state=x.Key.ToString(),count=x.Count()}).ToListAsync();var stale=await check.Set<LandPortal.Domain.VideoFile>().CountAsync(x=>(x.State==LandPortal.Domain.VideoState.Processing||x.State==LandPortal.Domain.VideoState.Scanning)&&x.LeaseUntilUtc<DateTimeOffset.UtcNow);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{utc=DateTimeOffset.UtcNow,processor=health,scanner=new{scanHealth.Ready,scanHealth.Code},managedVideoWithoutAv=video.ApprovedManagedVideoWithoutAv,subtitlesRequireScanner=true,queue,subtitles,expiredLeases=stale}));return health.Ready&&(scanHealth.Ready||video.ApprovedManagedVideoWithoutAv)?0:2;}
     if(args.Contains("--gc")){await using var cleanup=new PortalDbContext(DatabaseSettings.Options(config));await new VideoUploadService(cleanup,storage,video,new(cleanup)).SweepAsync();Console.WriteLine("Bounded video TTL cleanup completed; committed originals and revisions retained.");return 0;}
     Guid? only=null;var at=Array.IndexOf(args,"--asset");if(at>=0){if(at+1>=args.Length||!Guid.TryParse(args[at+1],out var id))throw new InvalidOperationException("Invalid Test video asset ID.");only=id;}
     using var stop=new CancellationTokenSource();Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;stop.Cancel();};
-    do{try{await using var db=new PortalDbContext(DatabaseSettings.Options(config));var rights=new CurrentPermissionService(db);await new VideoUploadService(db,storage,video,rights).SweepAsync(stop.Token);await new VideoWorker(db,storage,video,scanner,processor,rights).RunOnceAsync(only,stop.Token);await new VideoSubtitleService(db,storage,video,rights).ScanOnceAsync(scanner,only,stop.Token);}catch(OperationCanceledException)when(stop.IsCancellationRequested){break;}catch(Exception e){Console.Error.WriteLine("Video worker error: "+e.GetType().Name+"; durable lease retained.");if(args.Contains("--once"))return 1;}if(args.Contains("--once"))break;try{await Task.Delay(TimeSpan.FromSeconds(5),stop.Token);}catch(OperationCanceledException){break;}}while(!stop.IsCancellationRequested);
+    var lastCheck=DateTimeOffset.MinValue;
+    var scannerReady=false;
+    void Observe(string state)
+    {
+        try{VideoWorkerStatus.Write(storage,processor.LastHealth??health,scannerReady,video.ApprovedManagedVideoWithoutAv,state);}
+        catch(Exception e)when(e is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or VideoProcessingException)
+        {Console.Error.WriteLine("Video worker diagnostic storage unavailable: "+e.GetType().Name);}
+    }
+    try
+    {
+        do
+        {
+            try
+            {
+                if(DateTimeOffset.UtcNow-lastCheck>TimeSpan.FromSeconds(30))
+                {
+                    var prior=VideoWorkerStatus.Read(storage);
+                    health=await processor.HealthAsync(stop.Token);
+                    scannerReady=(await scanner.HealthAsync(stop.Token)).Ready;
+                    lastCheck=DateTimeOffset.UtcNow;
+                    if(prior?.Tools.FfmpegSha256!=health.FfmpegSha256||prior?.Tools.FfprobeSha256!=health.FfprobeSha256)
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{action="video.tools.observed",utc=lastCheck,
+                            previousFfmpegSha256=prior?.Tools.FfmpegSha256,previousFfprobeSha256=prior?.Tools.FfprobeSha256,tools=health,
+                            note="Observed hashes are not publisher authentication"}));
+                }
+                Observe("Running");
+                await using var db=new PortalDbContext(DatabaseSettings.Options(config));var rights=new CurrentPermissionService(db);
+                await new VideoUploadService(db,storage,video,rights).SweepAsync(stop.Token);
+                await new VideoWorker(db,storage,video,scanner,processor,rights).RunOnceAsync(only,stop.Token);
+                await new VideoSubtitleService(db,storage,video,rights).ScanOnceAsync(scanner,only,stop.Token);
+                Observe("Running");
+            }
+            catch(OperationCanceledException)when(stop.IsCancellationRequested){break;}
+            catch(Exception e){Observe("Faulted");Console.Error.WriteLine("Video worker error: "+e.GetType().Name+"; durable lease retained.");if(args.Contains("--once"))return 1;}
+            if(args.Contains("--once"))break;
+            try{await Task.Delay(TimeSpan.FromSeconds(5),stop.Token);}catch(OperationCanceledException){break;}
+        }while(!stop.IsCancellationRequested);
+    }
+    finally{Observe("Stopped");}
     return 0;
 }
 if(args.Contains("--scan"))
