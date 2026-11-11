@@ -31,14 +31,17 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
                 && db.Revisions.Any(r => r.Id == a.RevisionId && (r.Metadata.DisclosureGroupId == null || db.DisclosureGroups.Any(g => g.Id == r.Metadata.DisclosureGroupId && g.Status == "NameApproved"))
                     && (asset.MimeType != OfficeDocumentPolicy.Docx || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
             if (!await Grant()) return NotFound();
-            var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, mediaOptions.IsDevelopmentLoopback);
+            var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, mediaOptions.IsDevelopmentLoopback, policy: mediaOptions);
             if (stream == null) return NotFound();
             if (!await Grant()) { await stream.DisposeAsync(); return NotFound(); }
             Response.Headers["X-Content-Type-Options"] = "nosniff";
             Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+            var managedDocumentNoAv=mediaOptions.ApprovedManagedDocumentsWithoutAv
+                && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation && asset.ScanStatus=="NotScanned";
+            if(managedDocumentNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
             if(asset.MimeType=="application/pdf"){Response.Headers["Content-Security-Policy"]="sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
             Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
-            return base.File(stream, asset.MimeType, download || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
+            return base.File(stream, asset.MimeType, download || managedDocumentNoAv || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
         }
         var isPublished = await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id
             && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId));
