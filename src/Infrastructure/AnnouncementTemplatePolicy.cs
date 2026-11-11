@@ -9,8 +9,9 @@ public static class AnnouncementTemplatePolicy
 
     public static bool IsPdfCandidate(MediaAsset asset, MediaUploadOptions options) =>
         asset.MimeType == "application/pdf" && asset.ByteLength > 0 &&
-        asset.ScanStatus == "Clean" && !asset.IsQuarantined &&
-        asset.Origin is "Source" or "EditorialDocument" && options.CanServe(asset);
+        !asset.IsQuarantined && asset.Origin is "Source" or "EditorialDocument" && options.CanServe(asset) &&
+        (asset.ScanStatus=="Clean" || options.ApprovedManagedDocumentsWithoutAv && asset.Origin=="EditorialDocument"
+            && asset.ScanStatus=="NotScanned" && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation);
 
     // The boolean must come from the persisted attachment and byte/proof checks,
     // never a posted form field or the count of selected media.
