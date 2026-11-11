@@ -1,6 +1,6 @@
 # Upload tài liệu PDF/DOCX/XLSX của biên tập viên (nhánh review)
 
-Trạng thái: **ĐÃ CHỈNH CODE TRÊN NHÁNH RIÊNG — CHƯA BUILD, CHƯA TRIỂN KHAI IIS, CHƯA BẬT CẤU HÌNH**.
+Trạng thái 11/11/2026: **Build Release PASS; kiểm thử service/controller cô lập PASS; chưa nghiệm thu HTTP/SQL Server workflow, chưa merge, chưa triển khai IIS hoặc bật cấu hình**. Xem `managed-upload-iis-handoff.md`.
 
 ## Phạm vi
 

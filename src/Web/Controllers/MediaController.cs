@@ -29,7 +29,9 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
             async Task<bool> Grant() => asset.MimeType == OfficeDocumentPolicy.Docx && await WeeklySchedulePublication.HasOriginalGrantAsync(db,id) || await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && a.Usage == "Attachment"
                 && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)
                 && db.Revisions.Any(r => r.Id == a.RevisionId && (r.Metadata.DisclosureGroupId == null || db.DisclosureGroups.Any(g => g.Id == r.Metadata.DisclosureGroupId && g.Status == "NameApproved"))
-                    && (asset.MimeType != OfficeDocumentPolicy.Docx || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
+                    && (asset.MimeType != OfficeDocumentPolicy.Docx
+                        || r.Metadata.WeeklyYear == null && mediaOptions.IsManagedDocument(asset)
+                        || r.Metadata.WeeklyOriginalAssetId == id && r.Metadata.WeeklyOriginalReviewEvidence != null && r.Metadata.WeeklyOriginalReviewEvidence != "")));
             if (!await Grant()) return NotFound();
             var stream = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, mediaOptions.IsDevelopmentLoopback, policy: mediaOptions);
             if (stream == null) return NotFound();

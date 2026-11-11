@@ -75,7 +75,8 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (noAv)
             {
                 // Format validation only, not malware scanning. Does not execute PDF/Office content.
-                OfficeDocumentPolicy.Validate(path,mime,media);
+                OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv: true);
+                if (mime == "application/pdf") ManagedPdfPolicy.Validate(path);
             }
             if (await db.MediaAssets.AnyAsync(x => x.Sha256 == asset.Sha256, ct)) throw new InvalidOperationException("Tệp trùng đã có trong kho. Không cấp quyền bằng cách tải lại byte giống nhau.");
             // Fresh resource/category permission immediately before persistence.
@@ -107,7 +108,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             && asset.ScanStatus=="NotScanned" && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
             && proof.ScanState==InquiryScanState.NotScanned && proof.Attempts==0
             && proof.ScannedSha256==null && proof.ScannedUtc==null && proof.EngineVersion==null;
-        if (asset.Origin != "EditorialDocument" || !OfficeDocumentPolicy.IsDocument(asset.MimeType) || asset.IsQuarantined
+        if (proof is null || asset.Origin != "EditorialDocument" || !OfficeDocumentPolicy.IsDocument(asset.MimeType) || asset.IsQuarantined
             || (!validScan && !managedNoAv)) return null;
         FileStream? file = null;
         try

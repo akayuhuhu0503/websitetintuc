@@ -30,6 +30,12 @@ public sealed class MediaUploadOptions
     public const string ManagedDocumentNoAvValidation = "OfficeValidatedNoAv";
     public bool ApprovedManagedImageWithoutAv { get; init; }
     public bool ApprovedManagedDocumentsWithoutAv { get; init; }
+    public bool IsManagedImage(MediaAsset asset) => ApprovedManagedImageWithoutAv && !asset.IsQuarantined
+        && asset.Origin == "Uploaded" && asset.ScanStatus == "NotScanned"
+        && asset.ValidationStatus == ManagedImageNoAvValidation && asset.MimeType is ("image/jpeg" or "image/png");
+    public bool IsManagedDocument(MediaAsset asset) => ApprovedManagedDocumentsWithoutAv && !asset.IsQuarantined
+        && asset.Origin == "EditorialDocument" && asset.ScanStatus == "NotScanned"
+        && asset.ValidationStatus == ManagedDocumentNoAvValidation && OfficeDocumentPolicy.IsDocument(asset.MimeType);
     public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads||NativeLanSampleUploads||ApprovedManagedImageWithoutAv;
 
     public static MediaUploadOptions FromConfiguration(IConfiguration configuration, string environmentName)
