@@ -14,7 +14,7 @@ public sealed record VideoProbe(string Codec,string? Audio,int Width,int Height,
     public bool UsedRateFallback {get;init;}
 }
 public sealed record VideoOutput(string Mp4,string Mp4Hash,long Mp4Bytes,string Poster,string PosterHash,long PosterBytes,VideoProbe Probe,VideoProbe OriginalProbe){public bool Reused {get;init;} public double NativeCpuMilliseconds {get;init;}}
-// Uses operator-installed, license-approved tools. Observed hashes detect change, not provenance.
+// Uses operator-installed tools. Observed hashes detect change, not provenance or licensing.
 public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,VideoToolLocator? locator=null)
 {
     private double nativeCpuMilliseconds;
@@ -51,11 +51,10 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
         var status=new VideoToolHealth(false,"VIDEO_PROCESSOR_NOT_AVAILABLE");
         try
         {
+            if(!options.Enabled)return LastHealth=status with{Code="VIDEO_DISABLED"};
             var found=(locator??new VideoToolLocator()).Find(options);
             status=status with{FfmpegFound=found.Ffmpeg!=null,FfprobeFound=found.Ffprobe!=null};
             if(found.Ffmpeg==null || found.Ffprobe==null)return LastHealth=status;
-            if(!options.ProcessorApproved||string.IsNullOrWhiteSpace(options.LicenseReference))
-                return LastHealth=status with{Code="VIDEO_PROCESSOR_NOT_APPROVED"};
             foreach(var binary in new[]{found.Ffmpeg,found.Ffprobe})
                 foreach(var root in new[]{storage.MediaRoot,storage.TempRoot,storage.KeysRoot,storage.SnapshotRoot})
                     if(binary.StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))

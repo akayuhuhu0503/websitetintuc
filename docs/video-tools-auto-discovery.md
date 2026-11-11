@@ -19,7 +19,7 @@ Không có binary thì trang quản trị báo chưa tìm thấy; website không
 
 ## Chính sách giữ nguyên
 
-- `Video__Enabled`, ba cờ no-AV và phê duyệt `Video__ProcessorApproved`/`Video__LicenseReference` giữ nguyên, mặc định tắt. Chỉ chạy native tools khi có phê duyệt bộ xử lý và tham chiếu sử dụng thật; không tự điền phê duyệt.
+- `Video__Enabled` và ba cờ no-AV là lựa chọn vận hành, mặc định tắt; no-AV vẫn chỉ hợp lệ trong Staging/UAT. Không còn yêu cầu `Video__ProcessorApproved`/`Video__LicenseReference`: hai chuỗi này không xác minh nguồn hay giấy phép. Video tắt thì không thực thi bộ xử lý. Vận hành vẫn phải cài bản FFmpeg từ nguồn tin cậy, tuân thủ giấy phép/phân phối của bản đó; không có mã xác nhận nội bộ hay cơ chế tự phê duyệt thay thế.
 - Phiên bản FFmpeg/FFprobe được kiểm tra bằng thực thi `-version`; encoder phải có đúng `libx264`, `aac`, `mjpeg`. Thực thi thử theo tài khoản tiến trình hiện tại, không nâng quyền. Worker `--video` kiểm tra lại định kỳ và trước xử lý.
 - SHA256 được tự tính; kiểm tra lại và giữ file handle chống thay byte trong mỗi lần thực thi Windows. Thay byte giữa các lệnh của một lượt xử lý sẽ bị từ chối. Lượt kiểm tra mới có thể nhận binary đã cập nhật sau kiểm tra phiên bản/encoder; hash cũ/mới được ghi nhận. Đây không phải chữ ký hay chứng minh nguồn gốc.
 - Cache MP4/poster gắn hash binary thực tế, không dùng hash rỗng trong cấu hình. Pipeline/quota/chunk/timeout/codec/SHA/duyệt/xuất bản và trạng thái NotScanned không thay đổi. Không sửa SQL/migration, video cũ hoặc 703 media.
@@ -42,4 +42,4 @@ Chạy dưới đúng tài khoản Worker. Dịch vụ dùng cùng lệnh với 
 
 Build/publish đầy đủ Web/Worker bằng quy trình `scripts/build-for-iis.ps1` hiện có. Chưa deploy tự động. Backup bộ binary/config/manifest trước cập nhật; giữ bộ công cụ và dữ liệu tại chỗ. Rollback đồng bộ binary/config/manifest. Nếu quay về binary trước cơ chế tự tìm, dùng lại cấu hình đường dẫn/hash đã backup của bản cũ; không phục hồi SQL hoặc xóa media.
 
-Kiểm thử tập trung: `dotnet run --project tests/LandPortal.VideoToolTests -c Release -- <repo-root>`. Cần bộ công cụ đã được duyệt cho test trong `.local/video-tools.json`; chỉ tạo cây file riêng dưới `.local/tests`, không kết nối SQL/IIS. Bao gồm discovery, approval, phiên bản/encoder thật, một chuyển mã MP4/poster, cache, hash drift và heartbeat. Không chạy lại 48/60 E2E.
+Kiểm thử tập trung: `dotnet run --project tests/LandPortal.VideoToolTests -c Release -- <repo-root>`. Cần bộ công cụ đã được duyệt cho test trong `.local/video-tools.json`; chỉ tạo cây file riêng dưới `.local/tests`, không kết nối SQL/IIS. Bao gồm discovery, trạng thái bật/tắt, phiên bản/encoder thật, một chuyển mã MP4/poster, cache, hash drift và heartbeat. Không chạy lại 48/60 E2E.

@@ -42,7 +42,7 @@ public static class AdminLabels
         ["VIDEO_WORKER_READY"]="Worker đang hoạt động, bộ xử lý sẵn sàng",
         ["VIDEO_WORKER_BLOCKED"]="Worker đang hoạt động nhưng chưa đủ điều kiện xử lý",
         ["VIDEO_PROCESSOR_NOT_AVAILABLE"]="Chưa tìm thấy FFmpeg/FFprobe trong tools/ffmpeg hoặc PATH của tiến trình",
-        ["VIDEO_PROCESSOR_NOT_APPROVED"]="Bộ xử lý chưa có xác nhận sử dụng và tham chiếu giấy phép",
+        ["VIDEO_DISABLED"]="Chức năng video chưa được bật trong môi trường hợp lệ",
         ["VIDEO_PROCESSOR_HASH_MISMATCH"]="SHA256 FFmpeg/FFprobe không khớp cấu hình",
         ["VIDEO_ENCODER_NOT_AVAILABLE"]="FFmpeg thiếu encoder H.264 libx264, AAC hoặc JPEG mjpeg",
         ["VIDEO_PROCESSOR_START_FAILED"]="Không khởi chạy được FFmpeg/FFprobe",

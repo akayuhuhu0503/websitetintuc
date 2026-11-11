@@ -54,7 +54,7 @@ try {
  }
  stage="start-real-http";
  var tools=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,".local","video-tools.json"))).RootElement;
- var videoOptions=new VideoOptions { Enabled=true,ApprovedManagedVideoWithoutAv=true,ProcessorApproved=true,LicenseReference="Isolated synthetic fixture",MaxFileBytes=10*1024*1024,
+ var videoOptions=new VideoOptions { Enabled=true,ApprovedManagedVideoWithoutAv=true,MaxFileBytes=10*1024*1024,
  FfmpegPath=tools.GetProperty("ffmpegPath").GetString()!,FfprobePath=tools.GetProperty("ffprobePath").GetString()!,
  FfmpegSha256=tools.GetProperty("ffmpegSha256").GetString()!,FfprobeSha256=tools.GetProperty("ffprobeSha256").GetString()! };
 
