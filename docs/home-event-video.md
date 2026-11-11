@@ -10,9 +10,13 @@ revision cũ; không sửa bài, media, menu, quyền hoặc tài khoản.
 - CMS → Cấu hình website → Banner: tải ảnh qua kho media hiện có, chọn ảnh đã
   kiểm tra, chọn “Dải sự kiện sau Tin mới cập nhật”, nhập nhãn/tiêu đề, mô tả,
   liên kết, lịch bắt đầu/kết thúc, bật/tắt. Lưu nháp → Xem trước → Áp dụng.
-  Thay ảnh bằng bộ chọn, xóa bằng nút Bỏ. Ảnh khuyến nghị 1600 × 220, không crop.
+  Thay ảnh bằng bộ chọn, xóa bằng nút Bỏ. Ảnh khuyến nghị 1170 × 100 hoặc cùng
+  tỉ lệ 117:10. Khung căn giữa, rộng tối đa 1170px, cao tối đa 100px; mobile co
+  theo cùng tỉ lệ. Ảnh dùng cover, crop ở giữa. CMS cảnh báo nếu phần ảnh bị
+  cắt dự kiến vượt 10%; cảnh báo không chặn lưu và chỉ dành cho home_event_strip.
 - Chưa có banner hợp lệ: trang công khai không chiếm chỗ; trang xem trước hiện
-  vị trí hướng dẫn. Nhiều banner dùng nút trước/sau, không tự chạy. Vị trí `home`
+  vị trí hướng dẫn. Nhiều banner tự chuyển mỗi 5 giây, có dots và tạm dừng khi
+  tương tác; một banner không autoplay/dots. Vị trí `home`
   tiếp tục là slider hoạt động, không tái sử dụng cho sự kiện.
 - CMS → Trang chủ → khối Video: bật, đặt số lượng 3, ghim video đã công bố nếu
   cần. Không ghim thì dùng video mới nhất. Một khu vực VIDEO duy nhất cuối trang;

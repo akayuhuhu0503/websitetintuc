@@ -9,7 +9,7 @@
         var banner=banners[i];
         <article class="event-slide" data-event-slide hidden="@(i>0)" role="group" aria-roledescription="banner" aria-label="@(i+1) / @banners.Length">
             <a href="@banner.Url" aria-label="@banner.Label" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)">
-                <img src="@banner.ImageUrl" alt="@banner.Alt" width="1600" height="220" loading="lazy" decoding="async" />
+                <img src="@banner.ImageUrl" alt="@banner.Alt" width="1170" height="100" loading="lazy" decoding="async" />
             </a>
         </article>
     }
@@ -19,5 +19,5 @@
 }
 else if(Model.IsPreview)
 {
-<aside class="event-preview-placeholder"><strong>Vị trí banner sự kiện</strong><p>Sau Tin mới cập nhật, trước các chuyên mục. Chọn vị trí “Dải sự kiện sau Tin mới cập nhật” trong CMS; ảnh khuyến nghị 1600 × 220 px. Vùng này chỉ xuất hiện khi xem trước, không để khoảng trống ngoài trang công khai.</p></aside>
+<aside class="event-preview-placeholder"><strong>Vị trí banner sự kiện</strong><p>Sau Tin mới cập nhật, trước các chuyên mục. Chọn vị trí “Dải sự kiện sau Tin mới cập nhật” trong CMS; ảnh khuyến nghị 1170 × 100 px hoặc cùng tỉ lệ 117:10. Ảnh khác tỉ lệ sẽ bị cắt để lấp đầy khung. Vùng này chỉ xuất hiện khi xem trước, không để khoảng trống ngoài trang công khai.</p></aside>
 }
