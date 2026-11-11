@@ -16,6 +16,10 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     {
         ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         var actor=await permissions.GetAsync(UserId);if(!actor.Has(Permissions.ManageVideos)||!new[]{Permissions.ViewOwn,Permissions.ViewAll,Permissions.EditOwn,Permissions.EditAll,Permissions.Review}.Any(actor.Has))return Forbid();if(q?.Length>200)return BadRequest();
+        ViewData["VideoTools"]=await processor.HealthAsync(HttpContext.RequestAborted);
+        var observation=processor.WorkerObservation();
+        ViewData["VideoWorkerCode"]=VideoWorkerStatus.StateCode(observation,options.ProcessSeconds);
+        ViewData["VideoWorkerObservation"]=observation;
         var contents=permissions.Scope(db.Contents.AsNoTracking(),actor).Where(x=>x.Kind==ContentKind.Video);
         if(!actor.Has(Permissions.ViewAll)&&!actor.Has(Permissions.EditAll))contents=contents.Where(x=>x.OwnerUserId==UserId||actor.Has(Permissions.Review)&&x.SubmittedRevisionId!=null);
         if(!string.IsNullOrEmpty(state)){if(!Enum.TryParse<WorkflowState>(state,out var filter)||!Enum.IsDefined(filter))return BadRequest();contents=contents.Where(x=>x.State==filter);}
@@ -28,7 +32,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
             var latest=await db.Set<VideoUploadSession>().AsNoTracking().Where(s=>ids.Contains(s.ContentId)&&s.Id==db.Set<VideoUploadSession>().Where(t=>t.ContentId==s.ContentId).OrderByDescending(t=>t.CreatedUtc).ThenBy(t=>t.Id).Select(t=>t.Id).First()).Select(s=>new{s.ContentId,s.MediaAssetId,s.State,FileState=db.Set<VideoFile>().Where(v=>v.MediaAssetId==s.MediaAssetId).Select(v=>(VideoState?)v.State).FirstOrDefault(),Uploader=db.Users.Where(u=>u.Id==s.OwnerUserId).Select(u=>u.DisplayName).FirstOrDefault()}).ToListAsync();
             items=items.Select(item=>{var file=latest.SingleOrDefault(x=>x.ContentId==item.Id);return file==null?item:item with{FileState=file.FileState?.ToString()??file.State.ToString(),AssetId=file.MediaAssetId,Uploader=file.Uploader??"Tài khoản không còn hoạt động"};}).ToList();
         }
-        return View("~/Views/VideoAdmin/Index.cshtml",new VideoIndexModel{Items=items,Query=q,State=state,Page=page,Total=total,Enabled=options.Enabled,CanCreate=actor.Has(Permissions.Create),Processor=(await processor.HealthAsync()).Code});
+        return View("~/Views/VideoAdmin/Index.cshtml",new VideoIndexModel{Items=items,Query=q,State=state,Page=page,Total=total,Enabled=options.Enabled,CanCreate=actor.Has(Permissions.Create),Processor=processor.LastHealth!.Code});
     }
     [HttpGet("admin/videos/upload/{contentId:guid}")]
     public async Task<IActionResult> Upload(Guid contentId)

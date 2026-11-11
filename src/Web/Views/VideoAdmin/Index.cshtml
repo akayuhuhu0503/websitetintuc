@@ -4,6 +4,21 @@
 <p class="scope-note">Video được lưu nháp, duyệt và xuất bản theo phiên bản. Hai video nguồn chưa có tệp phát; không dùng video thử thay cho tệp nguồn.</p>
 @if(!Model.Enabled){<p role="status" class="validation-summary">Tải video chưa được mở tại môi trường này. Cán bộ kỹ thuật cần kiểm tra cấu hình và kho tệp đã được cấp.</p>}
 <p>Bộ xử lý: <strong>@AdminLabels.State(Model.Processor)</strong>. Trạng thái tải/quét/xử lý xem tại từng nội dung; thông tin video không có nghĩa tệp đã sẵn sàng.</p>
+@if(ViewData["VideoTools"] is LandPortal.Infrastructure.VideoToolHealth tools){
+<dl class="video-panel">
+    <dt>FFmpeg (tài khoản Web)</dt><dd>@(tools.Ready?"Sẵn sàng · "+tools.FfmpegVersion:tools.FfmpegFound?"Đã tìm thấy; chưa đủ điều kiện xử lý":"Chưa tìm thấy")</dd>
+    <dt>FFprobe (tài khoản Web)</dt><dd>@(tools.FfprobeVersion!=null?"Sẵn sàng · "+tools.FfprobeVersion:tools.FfprobeFound?"Đã tìm thấy; chưa xác minh thực thi":"Chưa tìm thấy")</dd>
+    <dt>Worker video</dt><dd>@AdminLabels.State(ViewData["VideoWorkerCode"] as string ?? "VIDEO_WORKER_UNKNOWN")</dd>
+    @if(ViewData["VideoWorkerObservation"] is LandPortal.Infrastructure.VideoWorkerObservation worker){
+        <dt>Worker cập nhật lúc</dt><dd>@worker.Utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</dd>
+        <dt>Kiểm tra bằng tài khoản Worker</dt><dd>@AdminLabels.State(worker.Tools.Code)</dd>
+        <dt>Phiên bản trên Worker</dt><dd>FFmpeg: @(worker.Tools.FfmpegVersion ?? "Chưa xác nhận") · FFprobe: @(worker.Tools.FfprobeVersion ?? "Chưa xác nhận")</dd>
+        @if(!worker.ScannerReady&&!worker.ManagedVideoWithoutAv){<dt>Scanner</dt><dd>Chưa sẵn sàng; chưa có chính sách video không antivirus được bật.</dd>}
+        @if(worker.ToolsChangedUtc!=null){<dt>Thay đổi binary gần nhất</dt><dd>@worker.ToolsChangedUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") · Đã ghi nhận hash cũ/mới; không phải xác thực nguồn phát hành.</dd>}
+    }
+</dl>
+<p class="scope-note">Cài bộ xử lý đã được đơn vị vận hành duyệt vào <code>TTDL-IIS\tools\ffmpeg</code> hoặc PATH của tài khoản dịch vụ. Không cần nhập đường dẫn/SHA256; ứng dụng không tự tải công cụ. Kết quả tài khoản Web không thay thế kiểm tra thực tế của Worker.</p>
+}
 @if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới theo chính sách CMS không antivirus: kiểm định định dạng, chuyển mã và tạo poster; trạng thái vẫn là Chưa quét antivirus. Chỉ công khai sau duyệt và xuất bản.</p>}
 <form method="get"><label for="video-query">Tìm tiêu đề video</label><input id="video-query" name="q" maxlength="200" value="@Model.Query" /><label for="video-filter">Trạng thái biên tập</label><select id="video-filter" name="state"><option value="">Tất cả</option>@foreach(var value in Enum.GetValues<LandPortal.Domain.WorkflowState>()){<option value="@value" selected="@(Model.State==value.ToString())">@AdminLabels.State(value)</option>}</select><button class="button" type="submit">Tìm</button></form>
 <div class="table-scroll"><table><thead><tr><th scope="col">Poster / tiêu đề</th><th scope="col">Biên tập / công khai</th><th scope="col">Tệp</th><th scope="col">Ngày tạo / người tải</th><th scope="col">Thao tác</th></tr></thead><tbody>@foreach(var item in Model.Items){<tr><td>@if(item.AssetId!=null&&item.FileState=="Ready"){<img src="/admin/videos/media/@item.AssetId/poster?contentId=@item.Id" alt="Poster video" width="120" loading="lazy" />} @item.Title</td><td>@AdminLabels.State(item.State) / @(item.IsPublic?"Có":"Chưa")</td><td>@AdminLabels.State(item.FileState)</td><td>@item.CreatedUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")<br />@item.Uploader</td><td><a href="/admin/edit/@item.Id">Thông tin / biên tập</a>@if(Model.Enabled){<span> · </span><a href="/admin/videos/upload/@item.Id">Tải và kiểm tra tệp</a>}</td></tr>}</tbody></table></div>

@@ -98,8 +98,9 @@ function Assert-UatOptionalServices($Settings) {
  }
  if([string]$Settings.Video.Enabled -cnotin @('true','false')){throw 'Video Enabled must be true/false'}
  if([string]$Settings.Video.Enabled -ceq 'true'){
-  foreach($field in @('FfmpegPath','FfprobePath')){[void](Get-UatSafePath ([string]$Settings.Video.$field))}
-  foreach($field in @('FfmpegSha256','FfprobeSha256')){if([string]$Settings.Video.$field -cnotmatch '^[a-fA-F0-9]{64}$'){throw 'Approved video binary pins required'}}
+  # Empty values use runtime discovery. Existing explicit overrides/pins remain enforced.
+  foreach($field in @('FfmpegPath','FfprobePath')){if(-not [string]::IsNullOrWhiteSpace([string]$Settings.Video.$field)){[void](Get-UatSafePath ([string]$Settings.Video.$field))}}
+  foreach($field in @('FfmpegSha256','FfprobeSha256')){if(-not [string]::IsNullOrWhiteSpace([string]$Settings.Video.$field) -and [string]$Settings.Video.$field -cnotmatch '^[a-fA-F0-9]{64}$'){throw 'Explicit video binary pins must contain 64 hexadecimal characters'}}
   if([string]$Settings.Video.ProcessorApproved -cne 'true' -or ([string]$Settings.Video.LicenseReference).Length -lt 5){throw 'Video processor/license approval required before activation'}
  }
 }

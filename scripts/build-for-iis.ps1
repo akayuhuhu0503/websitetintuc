@@ -78,6 +78,10 @@ try{
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'START.md')
  Copy-Item -LiteralPath (Join-Path $repo 'docs/TTDL-GITHUB-IIS-HANDOFF.md') -Destination (Join-Path $staging 'TTDL-GITHUB-IIS-HANDOFF.md')
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'iis-one-command.md')
+ # Operator-installed tools survive updates; never download or execute native tools during Publish.
+ $videoTools=Join-Path $staging 'tools/ffmpeg'
+ [void][IO.Directory]::CreateDirectory($videoTools)
+ Copy-Item -LiteralPath (Join-Path $repo 'docs/video-tools-auto-discovery.md') -Destination (Join-Path $videoTools 'README.md')
  $config=Join-Path $staging 'web/web.config'
  [xml]$xml=Get-Content -LiteralPath $config -Raw -Encoding UTF8
  if((Get-FileHash -LiteralPath $EnvFile -Algorithm SHA256).Hash -cne $envSha){throw 'Input .env changed during build; configuration not released'}
