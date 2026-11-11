@@ -11,7 +11,7 @@
     <div class="editor-main">
         <p class="editor-save-help">Lưu nháp: chỉ cần tiêu đề; nếu được giới hạn chuyên mục, cần chọn chuyên mục được giao. Có thể bổ sung thông tin còn thiếu sau. <strong>* Thông tin bắt buộc khi gửi duyệt/đăng.</strong></p>
         @if(Model.DocumentWarnings.Count > 0) { <div class="editor-notice" role="status"><h2>Xem trước từ tài liệu — chưa lưu</h2><ul>@foreach(var warning in Model.DocumentWarnings){<li>@warning</li>}</ul></div> }
-        @if(Model.Id != null && Model.CanSave && Model.CanManageMedia){<p><a href="/admin/documents/@Model.Id">Tải / quét tài liệu PDF, Excel hoặc Word lịch tuần</a></p>}
+        @if(Model.Id != null && Model.CanSave && Model.CanManageMedia){<p><a href="/admin/documents/@Model.Id">Tải tài liệu PDF, Word, Excel</a></p>}
         <p class="eyebrow">Mẫu: @LandPortal.Web.Services.PublicContentQuery.KindLabel(Model.Kind)</p>
         <partial name="_TypedMetadata" model="Model" />
         <partial name="_V05Metadata" model="Model" />
