@@ -228,17 +228,18 @@
     .portal-public.is-home .home-notices .notice-list { grid-template-columns: minmax(0,1fr); }
 }
 /* Event strip and final video area: scoped to the public homepage. */
-.portal-public.is-home .home-event-strip { margin: 32px 0; position: relative; padding: 0; border: 0; border-radius: 8px; overflow: hidden; }
+.portal-public.is-home .home-event-strip { width: 100%; max-width: 1170px; aspect-ratio: 117 / 10; margin: 32px auto; position: relative; padding: 0; border: 0; border-radius: 8px; overflow: hidden; }
+.portal-public.is-home .event-slide { height: 100%; min-height: 0; }
 .portal-public.is-home .event-slide[hidden] { display: none; }
-.portal-public.is-home .event-slide > a { display: block; color: inherit; text-decoration: none; }
-.portal-public.is-home .event-slide img { display: block; width: 100%; height: auto; }
-.portal-public.is-home .event-slides { touch-action: pan-y; }
+.portal-public.is-home .event-slide > a { display: block; height: 100%; color: inherit; text-decoration: none; }
+.portal-public.is-home .event-slide img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portal-public.is-home .event-slides { height: 100%; min-height: 0; touch-action: pan-y; }
 .portal-public.is-home .event-carousel-ready .event-slides { position: relative; }
 .portal-public.is-home .event-carousel-ready .event-slide { position: absolute; top: 0; left: 0; width: 100%; min-width: 0; opacity: 0; visibility: hidden; transition: opacity 400ms ease, visibility 400ms; }
 .portal-public.is-home .event-carousel-ready .event-slide.is-active { position: relative; opacity: 1; visibility: visible; z-index: 1; }
-.portal-public.is-home .event-dots { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; justify-content: center; padding: 0; }
+.portal-public.is-home .event-dots { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; justify-content: center; height: min(44px, 100%); padding: 0; }
 .portal-public.is-home .event-dots[hidden] { display: none; }
-.portal-public.is-home .event-dots button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+.portal-public.is-home .event-dots button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .portal-public.is-home .event-dots button span { width: 8px; height: 8px; border-radius: 50%; background: #ffffffcc; box-shadow: 0 0 0 1px #0005, 0 1px 3px #0005; transition: background 200ms, transform 200ms; }
 .portal-public.is-home .event-dots button[aria-current="true"] span { background: #8B2E2E; transform: scale(1.25); }
 .portal-public.is-home .event-dots button:hover span { background: #702424; }

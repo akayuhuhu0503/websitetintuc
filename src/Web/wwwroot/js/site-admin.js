@@ -1,7 +1,18 @@
 (() => {
     const select = document.querySelector('.site-image-select');
     const image = document.getElementById('site-image-preview');
-    function preview() { if (!image || !select) return; image.hidden = !select.value; if (select.value) image.src = '/admin/site/media/' + encodeURIComponent(select.value); }
+    const cropWarning = document.getElementById('event-banner-crop-warning');
+    const bannerPosition = document.getElementById('site_position');
+    function warnCrop() {
+        if (!cropWarning) return;
+        const ratio = image?.naturalWidth / image?.naturalHeight;
+        const target = 117 / 10;
+        cropWarning.hidden = !(bannerPosition?.value === 'home_event_strip' && select?.value && image?.complete && ratio > 0 && Math.min(ratio / target, target / ratio) < 0.9);
+    }
+    image?.addEventListener('load', warnCrop);
+    image?.addEventListener('error', () => { if (cropWarning) cropWarning.hidden = true; });
+    bannerPosition?.addEventListener('change', warnCrop);
+    function preview() { if (!image || !select) return; if (cropWarning) cropWarning.hidden = true; image.hidden = !select.value; if (select.value) { image.src = '/admin/site/media/' + encodeURIComponent(select.value); if (image.complete) warnCrop(); } }
     select?.addEventListener('change', preview); preview();
     const form = document.getElementById('site-image-upload');
     if (!form) return;
