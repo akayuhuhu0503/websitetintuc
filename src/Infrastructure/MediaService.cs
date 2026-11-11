@@ -27,7 +27,9 @@ public sealed class MediaUploadOptions
     public bool NativeLanSampleUploads { get; init; }
     // Opt-in for managed CMS JPEG/PNG only; not a malware scan result.
     public const string ManagedImageNoAvValidation = "ImageDecodedNoAv";
+    public const string ManagedDocumentNoAvValidation = "OfficeValidatedNoAv";
     public bool ApprovedManagedImageWithoutAv { get; init; }
+    public bool ApprovedManagedDocumentsWithoutAv { get; init; }
     public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads||NativeLanSampleUploads||ApprovedManagedImageWithoutAv;
 
     public static MediaUploadOptions FromConfiguration(IConfiguration configuration, string environmentName)
@@ -55,6 +57,7 @@ public sealed class MediaUploadOptions
             ,IsIsolatedLanDemo=LanDemoDeployment.Validate(configuration,environmentName)
             ,NativeUatUploads=UatDeployment.Validate(configuration,environmentName)
             ,ApprovedManagedImageWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&configuration["Media:AllowManagedImageWithoutAv"]=="true"
+            ,ApprovedManagedDocumentsWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&configuration["Media:AllowManagedDocumentsWithoutAv"]=="true"
             ,NativeLanSampleUploads=configuration["Scanner:Provider"]==LanMediaSamples.Provider&&LanMediaSamples.Require(configuration,environmentName).Count>0
         };
     }
@@ -62,7 +65,9 @@ public sealed class MediaUploadOptions
     public bool CanServe(MediaAsset asset) => InternalMediaExceptionPolicy.Candidate(asset) || (asset.ValidationStatus == BatchMediaProof.Validation
         ? VerifiedSourceAllowed && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
         : asset.Origin == "EditorialDocument"
-        ? !asset.IsQuarantined && asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" && OfficeDocumentPolicy.IsDocument(asset.MimeType)
+        ? !asset.IsQuarantined && OfficeDocumentPolicy.IsDocument(asset.MimeType)
+            && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated"
+                || ApprovedManagedDocumentsWithoutAv && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == ManagedDocumentNoAvValidation)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")
         && (asset.ScanStatus is "NotScanned" or "Clean")
         && (asset.Origin != "Uploaded" || asset.ValidationStatus == "Validated" || (ApprovedManagedImageWithoutAv && asset.ValidationStatus == ManagedImageNoAvValidation))
