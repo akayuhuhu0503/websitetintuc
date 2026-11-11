@@ -71,7 +71,7 @@
 @if (Model.Section is "contact" or "banners")
 {
     <section class="site-admin-panel"><h2>Ảnh cho cấu hình</h2><img id="site-image-preview" class="site-admin-image" alt="Ảnh chọn trong cấu hình nháp" hidden />
-    @if (Model.CanUpload) { <form id="site-image-upload"><label for="site-upload-file">Tải ảnh từ máy (JPEG/PNG/GIF/WebP)</label><input id="site-upload-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" required /><button type="submit">Tải vào kho riêng</button><progress id="site-upload-progress" max="100" value="0" hidden></progress><p id="site-upload-status" role="status">Trong chế độ phát triển được cho phép: ảnh vẫn chưa quét an toàn.</p></form> } else { <p>Cần quyền quản lý tệp và cấu hình quét phù hợp để tải ảnh lên. Có thể chọn ảnh đã nhập hợp lệ; tệp chưa quét không được coi là sạch.</p> }
+    @if (Model.CanUpload) { <form id="site-image-upload"><label for="site-upload-file">Tải ảnh từ máy (JPEG/PNG/GIF/WebP)</label><input id="site-upload-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" required /><button type="submit">Tải vào kho riêng</button><progress id="site-upload-progress" max="100" value="0" hidden></progress><p id="site-upload-status" role="status">Ảnh JPG/PNG chỉ được sử dụng sau khi vượt qua chính sách kiểm định hiện hành. Nếu không có scanner, cần bật chế độ ảnh quản trị đã được phê duyệt trên IIS.</p></form> } else { <p>Cần quyền quản lý tệp và cấu hình quét phù hợp để tải ảnh lên. Có thể chọn ảnh đã nhập hợp lệ; tệp chưa quét không được coi là sạch.</p> }
     </section>
 }
 @section Scripts { <script src="~/js/site-admin.js" asp-append-version="true" defer></script> }
