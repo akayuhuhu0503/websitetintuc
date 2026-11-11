@@ -1,28 +1,40 @@
-# IIS: một file .env, một lệnh Publish
+# IIS: một file .env, một lệnh Publish, chỉ copy web
 
-## Developer chuẩn bị trước khi gửi
+Giữ `.env` private tại gốc source, pull code đã được duyệt và chạy:
 
-Hoàn thiện một `.env` theo `scripts/ttdl.env.example`, dùng ba secret hiện hành của hai SQL connection và Application Role; không tạo/reset secret. Giữ SQL website `website_tin_tuc`, role `LandPortalRuntime`, source reader `landportal_giayhuy_reader` và View đã có. Không chạy migration/import/provision lại.
+```powershell
+powershell -NoProfile -File scripts/build-for-iis.ps1
+```
 
-Không có trường mã phê duyệt triển khai/scanner bắt buộc. Thiếu scanner không chặn website: upload cần quét bị từ chối, không giả Clean. HTTPS, SQL identity/Application Role và quyền private vẫn được kiểm tra. Không cần tên máy/site. Developer điền URL HTTPS thực tế trước khi bàn giao nếu IIS không cung cấp duy nhất một binding để tự nhận.
+Gói mặc định **WebBundle**: chỉ lấy toàn bộ `.local/publish/TTDL-IIS/web`, gồm
+`.runtime`. Dừng IIS/Worker, giữ bản web cũ ngoài webroot để rollback, thay web
+và restart. IIS vẫn trỏ vào web. Không merge từng DLL hoặc chỉnh JSON/manifest.
 
-## Trưởng phòng triển khai
+Web chứa cấu hình private đã bind hash và Worker độc lập. Không có secret trong
+wwwroot; IIS và middleware chặn truy cập HTTP vào `.runtime`. Gói web có secret,
+chỉ chuyển bằng kênh riêng, không đưa lên Git hoặc URL tải công khai.
 
-1. Clone repository hoặc `git pull --ff-only origin main`.
-2. Đặt nguyên `.env` đã nhận vào gốc source, không sửa nội dung.
-3. Chạy đúng một lệnh:
+Dữ liệu mặc định giữ nguyên ở `TTDL-IIS/private/{media,snapshots,temp,keys}`,
+FFmpeg giữ ở `TTDL-IIS/tools/ffmpeg` hoặc PATH. Không xóa/copy đè các thư mục này.
+Web/Worker đọc cùng cấu hình mới sinh từ `.env`, không lấy cờ upload cũ từ
+biến môi trường ứng dụng. Staging/UAT, HTTPS, SQL identity/Runtime18, Application
+Role và kiểm định file vẫn bắt buộc. Chưa quét vẫn là NotScanned, không giả Clean.
 
-   ```powershell
-   powershell -NoProfile -File scripts/build-for-iis.ps1
-   ```
+**Chuyển đổi lần đầu:** đổi Action của trình giám sát Worker hiện có sang
+`web/.runtime/run-worker.ps1 -Mode Video` (các mode khác giữ đúng mode).
+Giữ nguyên tài khoản, lịch và quyền; không tạo Worker trùng hoặc bật Mail.
+Tài khoản pool/Worker cần đọc gói mới và ghi bốn kho dữ liệu cũ.
 
-4. Chuyển **nguyên thư mục** `.local/publish/TTDL-IIS/` lên IIS bằng kênh riêng. IIS Physical Path chỉ trỏ `web/`. Giữ nguyên thư mục `private/` bên cạnh `web/`; không mở, sửa hoặc copy riêng `uat.json`.
-5. Cấu hình IIS/HTTPS theo quy trình quen thuộc: Hosting Bundle ASP.NET Core10, pool No Managed Code/Load User Profile, ApplicationPoolIdentity của pool riêng hoặc tài khoản dịch vụ ít quyền, quyền đọc cấu hình private và ghi các kho `private/media`, `snapshots`, `temp`, `keys`. Không cấp quyền cho Everyone/Users/IIS_IUSRS vào private. Bật site khi các điều kiện kỹ thuật thực tế đã đạt. Web/Worker sử dụng cùng cấu hình; Worker/SMTP không tự bật.
+[Hướng dẫn chuyển đổi, cập nhật và rollback](iis-web-only.md).
+Trong gói chỉ-copy-web, hướng dẫn nằm tại `.runtime/README.md`.
 
-Không chạy `CAU-HINH-IIS.cmd` hoặc `configure-iis-uat.ps1`. Publish tự sinh cấu hình, Web tự tìm theo vị trí gói trên máy IIS, không mang đường dẫn máy Developer sang máy sếp. Các guard SQL, Application Role, HTTPS, scanner, quyền vẫn giữ; thiếu cấu hình SQL/HTTPS/quyền thì ứng dụng đóng với trang503 tiếng Việt, không mở admin/SQL để vượt chặn.
+Build không mở SQL, chạy migration, cấp quyền hoặc deploy. Gói build cũ chưa
+triển khai được giữ lại với tên `.previous-<timestamp>`; gói đang chạy/IIS tham
+chiếu hoặc không có build receipt hợp lệ sẽ bị từ chối ghi đè. Không cần đổi
+lệnh build mỗi lần. `-PrivateMode Portable` vẫn dành cho gói legacy đầy đủ;
+không áp dụng hướng dẫn chỉ-copy-web cho gói legacy.
 
-**Gói Publish có chứa secret trong private/.** Chỉ bàn giao cho người được phép, không đưa gói/.env/private lên Git hoặc URL tải công khai. Không trỏ IIS vào gốc Publish. `web.config` ở gốc cũng chặn HTTP vào private nếu trỏ nhầm. JSON được ràng buộc hash trong manifest; muốn thay cấu hình phải republish từ .env gốc, không sửa JSON.
-
-Publish không mở SQL, không thay dữ liệu, không cấp quyền database, không cài/bật IIS hoặc đổi DNS. Mặc định không ghi đè gói cũ đã có; Developer có thể dùng `-OutputName ("TTDL-IIS-"+(Get-Date -Format yyyyMMdd-HHmmss))` khi cần một gói mới riêng. UAT TLS exception không áp dụng Production. Publish PASS không thay nghiệm thu thực tế IIS/UAT.
-
-Nếu gặp IIS-CONFIG-003: bản mới ghi rõ hậu tố. `IDENTITY`: không dùng Administrator/SYSTEM; ApplicationPoolIdentity được hỗ trợ. `PRIVATE_READ`: kiểm tra copy đủ gói và quyền Read cho `IIS AppPool\<tên pool>`. `PRIVATE_ACL`: gỡ quyền đọc rộng trên private, giữ đúng người vận hành/pool. `PRIVATE_HASH`: copy lại nguyên cùng một gói, không chỉnh JSON. `HTTPS`: Developer điền URL/host HTTPS thực tế trong .env trước khi gửi nếu IIS không tự cung cấp metadata. `STORE_WRITE`: cấp Modify chỉ cho bốn kho dữ liệu. Không cấp quyền SQL mới hoặc tắt guard để xử lý các lỗi này.
+Nếu khởi động bị chặn, đọc mã cụ thể: `PRIVATE_HASH` có thể do trộn config/binary;
+`IDENTITY` cần tài khoản dịch vụ ít quyền; `STORAGE_BOUNDARY` cần kho nằm ngoài
+ứng dụng/IIS mappings; `HTTPS` cần đúng HTTPS origin. Không tắt guard để khởi động.
+Publish PASS không thay nghiệm thu trên IIS thật.

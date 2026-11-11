@@ -10,6 +10,10 @@ public sealed class VideoToolLocator(string? baseDirectory = null, string? searc
         get
         {
             var component = new DirectoryInfo(baseDirectory ?? AppContext.BaseDirectory);
+            try {
+                var layout=PortablePackageLayout.Resolve(component.FullName);
+                if(layout.WebBundle)return Path.Combine(Directory.GetParent(layout.WebRoot)!.FullName,"tools","ffmpeg");
+            }catch(InvalidOperationException){ /* Ordinary development layout. */ }
             var root = component.Name is "web" or "worker" ? component.Parent! : component;
             return Path.Combine(root.FullName, "tools", "ffmpeg");
         }

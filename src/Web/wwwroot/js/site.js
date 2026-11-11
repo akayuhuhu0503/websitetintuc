@@ -274,16 +274,17 @@
     });
     document.querySelectorAll('[data-event-carousel]').forEach(carousel => {
         const slides = Array.from(carousel.querySelectorAll('[data-event-slide]'));
-        if (slides.length < 2) return;
+        if (slides.length < 2)
+            return;
         const dots = Array.from(carousel.querySelectorAll('[data-event-dot]'));
         const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-        let current = 0, timer, hovering = false, touching = false, start, suppressClick = false;
+        let current = 0, timer, hovering = false, touching = false, start = null, suppressClick = false;
         const schedule = () => {
             window.clearTimeout(timer);
             if (!motion.matches && !document.hidden && !hovering && !touching && !carousel.contains(document.activeElement))
                 timer = window.setTimeout(() => show(current + 1), 5000);
         };
-        const show = next => {
+        const show = (next) => {
             current = (next + slides.length) % slides.length;
             slides.forEach((slide, i) => {
                 slide.hidden = false;
@@ -295,31 +296,49 @@
             schedule();
         };
         carousel.classList.add('event-carousel-ready');
-        slides.forEach(slide => { const img = slide.querySelector('img'); if (img) img.loading = 'eager'; });
+        slides.forEach(slide => { const img = slide.querySelector('img'); if (img)
+            img.loading = 'eager'; });
         carousel.querySelector('[data-event-dots]').hidden = false;
         dots.forEach((dot, i) => dot.addEventListener('click', () => show(i)));
-        carousel.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') { hovering = true; schedule(); } });
-        carousel.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { hovering = false; schedule(); } });
+        carousel.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') {
+            hovering = true;
+            schedule();
+        } });
+        carousel.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') {
+            hovering = false;
+            schedule();
+        } });
         carousel.addEventListener('focusin', schedule);
         carousel.addEventListener('focusout', () => window.setTimeout(schedule, 0));
         document.addEventListener('visibilitychange', schedule);
         motion.addEventListener('change', schedule);
         const surface = carousel.querySelector('.event-slides');
         surface.addEventListener('pointerdown', e => {
-            if (e.pointerType !== 'touch') return;
+            if (e.pointerType !== 'touch')
+                return;
             start = { x: e.clientX, y: e.clientY };
-            suppressClick = false; touching = true; schedule();
+            suppressClick = false;
+            touching = true;
+            schedule();
         });
         surface.addEventListener('pointerup', e => {
-            if (!start) return;
+            if (!start)
+                return;
             const dx = e.clientX - start.x, dy = e.clientY - start.y;
-            start = null; touching = false;
+            start = null;
+            touching = false;
             if (Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy) * 1.2) {
-                suppressClick = true; show(current + (dx < 0 ? 1 : -1));
-            } else schedule();
+                suppressClick = true;
+                show(current + (dx < 0 ? 1 : -1));
+            }
+            else
+                schedule();
         });
         surface.addEventListener('pointercancel', () => { start = null; touching = false; schedule(); });
-        surface.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); suppressClick = false; } }, true);
+        surface.addEventListener('click', e => { if (suppressClick) {
+            e.preventDefault();
+            suppressClick = false;
+        } }, true);
         show(0);
     });
     const navigation = document.querySelector('[data-portal-navigation]');
@@ -335,8 +354,12 @@
             closeDropdowns();
     }
     toggle?.addEventListener('click', () => setNavigationExpanded(toggle.getAttribute('aria-expanded') !== 'true'));
-    const normalizedPath = path => path.replace(/\/+$/, '') || '/';
-    const normalizedQuery = search => JSON.stringify(Array.from(new URLSearchParams(search).entries()).sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)));
+    const normalizedPath = (path) => path.replace(/\/+$/, '') || '/';
+    const normalizedQuery = (search) => {
+        const pairs = [];
+        new URLSearchParams(search).forEach((value, key) => pairs.push([key, value]));
+        return JSON.stringify(pairs.sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)));
+    };
     navigation?.querySelectorAll('a[href]').forEach(link => {
         const url = new URL(link.href, location.href);
         const queryMatches = !url.search || normalizedQuery(url.search) === normalizedQuery(location.search);
@@ -345,7 +368,7 @@
             let parent = link.closest('details');
             while (parent && navigation.contains(parent)) {
                 parent.classList.add('is-active');
-                parent = parent.parentElement?.closest('details');
+                parent = parent.parentElement?.closest('details') ?? null;
             }
         }
     });
@@ -356,7 +379,7 @@
         if (!panel)
             return;
         panel.style.removeProperty('--nav-panel-shift');
-        if (compactViewport.matches || navigation.classList.contains('nav-is-compact'))
+        if (!navigation || compactViewport.matches || navigation.classList.contains('nav-is-compact'))
             return;
         const boundary = navigation.querySelector('.nav-inner').getBoundingClientRect();
         const bounds = panel.getBoundingClientRect();
@@ -369,8 +392,10 @@
             summary?.setAttribute('aria-expanded', String(menu.open));
             if (menu.open) {
                 // Close siblings only; a nested expansion must retain its parents.
-                menus.forEach(other => { if (other !== menu && other.parentElement === menu.parentElement)
-                    other.open = false; });
+                menus.forEach(other => {
+                    if (other !== menu && other.parentElement === menu.parentElement)
+                        other.open = false;
+                });
                 placeDropdown(menu);
             }
         });
@@ -380,7 +405,7 @@
             event.preventDefault();
             menu.open = true;
             const targets = Array.from(menu.querySelectorAll('a[href], summary')).filter(element => element !== summary && element.getClientRects().length > 0);
-            (event.key === 'ArrowUp' ? targets.at(-1) : targets[0])?.focus();
+            (event.key === 'ArrowUp' ? targets[targets.length - 1] : targets[0])?.focus();
         });
     });
     document.addEventListener('keydown', event => {
