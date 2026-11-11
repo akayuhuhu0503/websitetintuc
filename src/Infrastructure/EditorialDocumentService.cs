@@ -117,7 +117,8 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             {
                 await file.DisposeAsync();
                 await using var tx = db.Database.CurrentTransaction == null ? await db.Database.BeginTransactionAsync(ct) : null;
-                var changed = await db.EditorialDocuments.Where(x => x.MediaAssetId == asset.Id && x.RowVersion == proof.RowVersion && x.ScanState == InquiryScanState.Clean)
+                var changed = await db.EditorialDocuments.Where(x => x.MediaAssetId == asset.Id && x.RowVersion == proof!.RowVersion
+                    && (managedNoAv ? x.ScanState == InquiryScanState.NotScanned && x.Attempts == 0 : x.ScanState == InquiryScanState.Clean))
                     .ExecuteUpdateAsync(x => x.SetProperty(d => d.ScanState, InquiryScanState.ScanFailed).SetProperty(d => d.Error, "FileHashMismatch"), ct);
                 if (changed == 1)
                 {
