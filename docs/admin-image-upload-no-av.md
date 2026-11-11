@@ -2,7 +2,7 @@
 
 Scope: administrator-only media upload through `POST /admin/media/upload` for JPEG/PNG. Inspired by `quanlyduan` attachment upload (authenticated user, extension/size cap, random storage name). It is **not** an identical copy of the report-attachment policy: the public GDLA origin requires stronger media validation.
 
-Status (2026-11-11): **Release build and isolated service/controller checks PASS; HTTP/SQL Server workflow acceptance pending; not merged/deployed/enabled.** See `managed-upload-iis-handoff.md`. The hosting organization must approve the CMS-only exception before enabling it.
+Status (2026-11-11): **Release build, isolated service/controller checks and real HTTP/SQL Server fixture workflow PASS (48 final-run checks); not merged/deployed/enabled on IIS.** See `managed-upload-iis-handoff.md` for test-host scope and deployment limits. The hosting organization must approve the CMS-only exception before enabling it.
 
 ## Behavior
 

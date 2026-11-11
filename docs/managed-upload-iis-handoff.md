@@ -1,6 +1,6 @@
 # Bàn giao upload quản trị không antivirus
 
-Ngày 11/11/2026. PR #1 vẫn Draft cho đến khi kiểm tra bắt buộc HTTP và workflow SQL Server hoàn tất. Không dùng nhánh này cho IIS vận hành khi gate còn thiếu.
+Ngày 11/11/2026. Kiểm thử HTTP/SQL Server cô lập đã hoàn tất: đủ điều kiện đề xuất merge PR #1. Chưa triển khai hoặc nghiệm thu trên IIS thật.
 
 ## Đã kiểm tra trên Developer
 
@@ -9,7 +9,10 @@ Ngày 11/11/2026. PR #1 vẫn Draft cho đến khi kiểm tra bắt buộc HTTP 
 - Kết quả lần chạy cuối: 40/40 kiểm tra tập trung PASS; thêm 1 kiểm tra parser Publish nhận hai cờ mới PASS. Không cộng các lần chạy trước. Kiểm tra Office là kiểm tra cấu trúc và nội dung nguy hiểm, không phải chứng nhận toàn bộ chuẩn OpenXML hoặc kết quả antivirus.
 - Upload thật JPG/PNG (giải mã/mã hóa lại, SHA), PDF/DOCX/XLSX, private read, giả định dạng, MIME sai, giới hạn byte, PDF hỏng/hành động JavaScript, macro, công thức, quan hệ ngoài, XML lỗi, hash trùng/tamper, policy tắt, quyền không đủ, thu hồi public grant; banner nháp/công bố; validator gắn ảnh đại diện và tài liệu vào nháp.
 - Public controller được gọi trực tiếp với grant fixture lưu trong SQLite: attachment, nosniff, trạng thái NotScanned. Đây **không phải** chứng cứ đăng nhập/CSRF qua HTTP hoặc duyệt/xuất bản bài qua transaction SQL Server. Không giả lập SQL lock để báo workflow PASS.
-- Chưa chạy HTTP CMS đăng nhập/CSRF, gửi duyệt → duyệt → xuất bản bài trên SQL Server; chưa kiểm tra browser/IIS. Không đọc/ghi lại 703 media thật; các nhánh source/import exception và Runtime18/TLS/Application Role giữ nguyên. Kiểm tra policy nguồn cô lập không thay thế readback production.
+- Bổ sung E2E thật bằng `powershell -NoProfile -File tests/LandPortal.ManagedUploadHttpTests/run.ps1`: **48/48 kiểm tra PASS trong lần chạy cuối** (gồm setup/guard và các bước HTTP), không cộng lần chạy trước. SQL Server LocalDB 17.0.1000.7, compatibility 160, database test mới đủ 18 migration. Kestrel dùng middleware/controllers/views hiện hành; chỉ test host inject MediaUploadOptions no-AV, không nới guard vận hành.
+- HTTP Identity/CAPTCHA/CSRF thật với bốn tài khoản giả: JPG cover, PNG trong thân bài, PDF/DOCX/XLSX đính kèm; SQL xác nhận đủ 5 liên kết nháp; xem trước/tải riêng; Submit → Approve → PublishApproved; bài công khai 200; ba tài liệu attachment/nosniff/byte khớp và hai ảnh 200. Từ chối file giả, thiếu CSRF, upload/đọc/xuất bản không đủ quyền. Cả 5 media giữ NotScanned.
+- Các lần harness ban đầu chưa đạt được giữ riêng: sai tên trường form, ảnh bị gửi nhầm vào danh sách tài liệu, và đường dẫn MDF mặc định trùng giữa instance. Đã sửa harness theo đúng form CMS và đường dẫn SQL riêng từng run; không sửa guard ứng dụng. Kết quả cuối tại `.local/tests/noav-http-3dc8b7223ec5/result.json` (private, không commit).
+- Chưa kiểm tra browser/IIS thật; LocalDB không chứng minh cấu hình vận hành SQL Server 2022/IIS. Không đọc/ghi lại 703 media thật, tài khoản BA hoặc SQL vận hành. Runtime18/TLS/Application Role giữ nguyên. Host và instance test đã dừng; dữ liệu test giữ lại để đối soát, không xóa database khác.
 
 ## Sau khi đủ gate và merge main
 

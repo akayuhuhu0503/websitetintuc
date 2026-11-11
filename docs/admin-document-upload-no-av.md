@@ -1,6 +1,6 @@
 # Upload tài liệu PDF/DOCX/XLSX của biên tập viên (nhánh review)
 
-Trạng thái 11/11/2026: **Build Release PASS; kiểm thử service/controller cô lập PASS; chưa nghiệm thu HTTP/SQL Server workflow, chưa merge, chưa triển khai IIS hoặc bật cấu hình**. Xem `managed-upload-iis-handoff.md`.
+Trạng thái 11/11/2026: **Build Release PASS; kiểm thử service/controller và E2E HTTP/SQL Server cô lập PASS (48 kiểm tra lần cuối); chưa merge, chưa triển khai IIS hoặc bật cấu hình vận hành**. Xem `managed-upload-iis-handoff.md` về phạm vi test host và giới hạn nghiệm thu IIS.
 
 ## Phạm vi
 
