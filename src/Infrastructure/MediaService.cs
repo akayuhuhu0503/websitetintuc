@@ -25,7 +25,10 @@ public sealed class MediaUploadOptions
     public bool DevelopmentExceptionEnabled => IsDevelopmentLoopback && AllowUnscannedDevelopmentUploads;
     public bool NativeUatUploads { get; init; }
     public bool NativeLanSampleUploads { get; init; }
-    public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads||NativeLanSampleUploads;
+    // Opt-in for managed CMS JPEG/PNG only; not a malware scan result.
+    public const string ManagedImageNoAvValidation = "ImageDecodedNoAv";
+    public bool ApprovedManagedImageWithoutAv { get; init; }
+    public bool UploadEnabled=>DevelopmentExceptionEnabled||NativeUatUploads||NativeLanSampleUploads||ApprovedManagedImageWithoutAv;
 
     public static MediaUploadOptions FromConfiguration(IConfiguration configuration, string environmentName)
     {
@@ -51,6 +54,7 @@ public sealed class MediaUploadOptions
             IsDevelopmentLoopback = string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) && loopback
             ,IsIsolatedLanDemo=LanDemoDeployment.Validate(configuration,environmentName)
             ,NativeUatUploads=UatDeployment.Validate(configuration,environmentName)
+            ,ApprovedManagedImageWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&configuration["Media:AllowManagedImageWithoutAv"]=="true"
             ,NativeLanSampleUploads=configuration["Scanner:Provider"]==LanMediaSamples.Provider&&LanMediaSamples.Require(configuration,environmentName).Count>0
         };
     }
@@ -61,8 +65,10 @@ public sealed class MediaUploadOptions
         ? !asset.IsQuarantined && asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" && OfficeDocumentPolicy.IsDocument(asset.MimeType)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")
         && (asset.ScanStatus is "NotScanned" or "Clean")
-        && (asset.Origin != "Uploaded" || asset.ValidationStatus == "Validated")
-        && (asset.ScanStatus == "Clean" || (asset.Origin == "Source" && IsDevelopmentLoopback) || (asset.Origin == "Uploaded" && DevelopmentExceptionEnabled)));
+        && (asset.Origin != "Uploaded" || asset.ValidationStatus == "Validated" || (ApprovedManagedImageWithoutAv && asset.ValidationStatus == ManagedImageNoAvValidation))
+        && (asset.ScanStatus == "Clean" || (asset.Origin == "Source" && IsDevelopmentLoopback) || (asset.Origin == "Uploaded" && DevelopmentExceptionEnabled)
+            || (ApprovedManagedImageWithoutAv && asset.Origin == "Uploaded" && asset.ValidationStatus == ManagedImageNoAvValidation
+                && asset.ScanStatus == "NotScanned" && asset.MimeType is ("image/jpeg" or "image/png"))));
 }
 
 public sealed class MediaUploadException(string message, int statusCode = 400) : Exception(message)
@@ -89,7 +95,6 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
     public async Task<MediaUploadResult> UploadAsync(Stream input, string originalName, string declaredMimeType, string userId,
         bool canManageAllMedia, CancellationToken cancellationToken = default, Func<Task>? validateEnvelope = null)
     {
-        await RequireUploadScannerAsync(cancellationToken);
         if (!options.UploadEnabled)
             throw new MediaUploadException("Chưa có máy quét mã độc. Upload chỉ mở khi bật ngoại lệ rõ ràng ở Development trên loopback; production vẫn bị chặn.", 503);
         ValidatePrivateStorageRoot(storage.MediaRoot,storage);
@@ -98,6 +103,8 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         var extension = Path.GetExtension(name);
         if (!AllowedExtensions.TryGetValue(extension, out var expectedMime))
             throw new MediaUploadException("Chỉ nhận JPEG, PNG, GIF, WebP hoặc PDF; không nhận video, SVG, HTML hay tệp thực thi.");
+        var approvedManagedImage = options.ApprovedManagedImageWithoutAv && expectedMime is "image/jpeg" or "image/png";
+        if (!approvedManagedImage) await RequireUploadScannerAsync(cancellationToken);
         if((options.NativeUatUploads||options.NativeLanSampleUploads)&&expectedMime=="application/pdf")throw new MediaUploadException("PDF dùng mục Tài liệu của bài để lưu cách ly và quét bằng worker.");
         var claimed = declaredMimeType.Split(';', 2)[0].Trim().ToLowerInvariant();
         if (claimed != expectedMime && claimed != "application/octet-stream")
@@ -135,6 +142,16 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
             if (validateEnvelope is not null) await validateEnvelope();
             var digest = Convert.ToHexStringLower(hash.GetHashAndReset());
             var (mime, width, height) = ValidateContent(temporaryPath, expectedMime, cancellationToken);
+            if (approvedManagedImage)
+            {
+                // Decode and re-encode the accepted image; never publish client-supplied original bytes or metadata.
+                RewriteManagedImage(temporaryPath, mime, cancellationToken);
+                (mime, width, height) = ValidateContent(temporaryPath, expectedMime, cancellationToken);
+                length = new FileInfo(temporaryPath).Length;
+                if (length == 0 || length > maximum) throw new MediaUploadException("Ảnh sau chuẩn hóa vượt giới hạn dung lượng.", 413);
+                await using var canonical = System.IO.File.OpenRead(temporaryPath);
+                digest = Convert.ToHexStringLower(await SHA256.HashDataAsync(canonical, cancellationToken));
+            }
             // Equal bytes reuse the existing immutable original only within an authorized visibility scope.
             var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == digest, cancellationToken);
             if (duplicate is not null)
@@ -146,10 +163,11 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
             {
                 Sha256 = digest, OriginalName = name, MimeType = mime, ByteLength = length,
                 Width = width, Height = height, UploadedByUserId = userId, Origin = "Uploaded",
-                ValidationStatus = "Validated", ScanStatus = "NotScanned", IsQuarantined = false
+                ValidationStatus = approvedManagedImage ? MediaUploadOptions.ManagedImageNoAvValidation : "Validated",
+                ScanStatus = "NotScanned", IsQuarantined = false
             };
             InquiryScanResult? scan=null;
-            if(options.NativeUatUploads||options.NativeLanSampleUploads)
+            if(!approvedManagedImage && (options.NativeUatUploads||options.NativeLanSampleUploads))
             {
                 if(configuration==null||!(options.NativeLanSampleUploads?LanMediaSamples.Require(configuration,"Development").Count>0:UatDeployment.Validate(configuration,"Staging")))throw new MediaUploadException("Thiếu profile UAT được kiểm chứng.",503);
                 var scanner=InquiryScannerFactory.Create(configuration,options.NativeLanSampleUploads?"Development":"Staging",maximum);
@@ -170,7 +188,7 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
             db.MediaAssets.Add(asset);
             db.AuditLogs.Add(new AuditLog
             {
-                Actor = userId, Action = "UploadMedia", Detail = scan==null?$"asset={asset.Id};mime={mime};bytes={length};validation=Validated;scan=NotScanned;exception=DevelopmentLoopback":System.Text.Json.JsonSerializer.Serialize(new{asset.Id,asset.Sha256,asset.ByteLength,asset.ScanStatus,asset.ValidationStatus,scan.Provider,scan.EngineVersion,scan.Error,scope="UAT native synchronous image scan; not source promotion"})
+                Actor = userId, Action = "UploadMedia", Detail = scan==null?$"asset={asset.Id};mime={mime};bytes={length};validation={asset.ValidationStatus};scan=NotScanned;policy={(approvedManagedImage ? "ManagedImageNoAv" : "DevelopmentLoopback")}":System.Text.Json.JsonSerializer.Serialize(new{asset.Id,asset.Sha256,asset.ByteLength,asset.ScanStatus,asset.ValidationStatus,scan.Provider,scan.EngineVersion,scan.Error,scope="UAT native synchronous image scan; not source promotion"})
             });
             try
             {
@@ -207,6 +225,27 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
                 if (remove) System.IO.File.Delete(finalPath);
             }
         }
+    }
+
+    private static void RewriteManagedImage(string path, string mime, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var canonicalPath = path + ".canonical";
+        try
+        {
+            using var bitmap = SKBitmap.Decode(path) ?? throw new MediaUploadException("Ảnh không giải mã được.");
+            using var image = SKImage.FromBitmap(bitmap);
+            using var encoded = image.Encode(mime == "image/png" ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg, 90)
+                ?? throw new MediaUploadException("Không thể chuẩn hóa ảnh.");
+            using (var stream = new FileStream(canonicalPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                encoded.SaveTo(stream);
+                stream.Flush(true);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            System.IO.File.Move(canonicalPath, path, overwrite: true);
+        }
+        finally { if (System.IO.File.Exists(canonicalPath)) System.IO.File.Delete(canonicalPath); }
     }
 
     private async Task EnsureDuplicateAccessible(MediaAsset asset, string actualMime, string userId, bool canManageAllMedia, CancellationToken cancellationToken)
