@@ -66,6 +66,7 @@
   },
   "Video": {
     "Enabled": "false",
+    "AllowManagedVideoWithoutAv": "false",
     "ProcessorApproved": "false",
     "FfmpegPath": "",
     "FfprobePath": "",

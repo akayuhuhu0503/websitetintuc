@@ -3,7 +3,8 @@
 @section Styles{<link rel="stylesheet" href="~/css/video.css" asp-append-version="true" />}
 <div id="video-upload" data-content-id="@Model.ContentId" data-row-version="@Model.RowVersion" data-max-bytes="@Model.MaxFileBytes" data-chunk-bytes="@Model.ChunkBytes">
 <a href="/admin/edit/@Model.ContentId">← Biên tập thông tin và duyệt bài</a><h1>Tải video từ máy</h1><h2>@Model.Title</h2>
-<p class="scope-note">Tệp giữ trong kho cách ly. Tải đủ tệp chưa có nghĩa sẵn sàng phát. Chỉ xuất bản phiên bản có video và ảnh đại diện hợp lệ sau khi quét an toàn.</p>
+<p class="scope-note">Bản gốc luôn giữ riêng tư. Tải đủ tệp chưa có nghĩa sẵn sàng phát. Chỉ xuất bản phiên bản có MP4 và poster đã kiểm định theo chính sách đang áp dụng.</p>
+@if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới sẽ được chuyển mã và kiểm tra SHA256, chưa quét antivirus (NotScanned). Phụ đề vẫn yêu cầu quét riêng.</p>}
 <p>Bộ xử lý: <strong>@AdminLabels.State(Model.Processor)</strong>. Nếu chưa sẵn sàng, tác vụ nền ghi nhận lý do bị chặn.</p>
 @Html.AntiForgeryToken()
 <div class="video-panel"><label for="video-file">Chọn tệp MP4, MOV hoặc WebM</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm" /><p>Tối đa @((Model.MaxFileBytes/1024d/1024).ToString("N0")) MiB; mỗi phần tải @(Model.ChunkBytes<1024*1024?(Model.ChunkBytes/1024d).ToString("N0")+" KiB":(Model.ChunkBytes/1024d/1024).ToString("N0")+" MiB"). Sau tải lại trang, chọn lại đúng tệp; hệ thống kiểm tra từng phần tệp đã nhận trước khi tiếp tục.</p>

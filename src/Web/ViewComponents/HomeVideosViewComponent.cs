@@ -17,7 +17,7 @@ public sealed class HomeVideosViewComponent(PortalDbContext db, PublicContentQue
         var limit=enabled.Length==0?3:Math.Min(3,enabled.Sum(x=>x.Limit));
         if(limit<=0)return View(cards);
         var pins=enabled.SelectMany(b=>site!.Revision.Pins.Where(x=>x.BlockId==b.Id).OrderBy(x=>x.SortOrder).ThenBy(x=>x.ContentId)).Select(x=>x.ContentId).Distinct().Take(12).ToArray();
-        var rows=query.Published().Where(x=>x.Kind==ContentKind.Video && db.ContentAssets.Any(a=>a.RevisionId==x.RevisionId&&a.Usage=="Video"&&db.Set<VideoFile>().Any(v=>v.MediaAssetId==a.MediaAssetId&&v.State==VideoState.Ready&&v.Original.ScanStatus=="Clean")));
+        var rows=query.Published().Where(x=>x.Kind==ContentKind.Video && db.ContentAssets.Any(a=>a.RevisionId==x.RevisionId&&a.Usage=="Video"&&db.Set<VideoFile>().Any(v=>v.MediaAssetId==a.MediaAssetId&&v.State==VideoState.Ready&&(v.Original.ScanStatus=="Clean" || options.ApprovedManagedVideoWithoutAv && v.Original.ScanStatus=="NotScanned" && v.Original.ValidationStatus==VideoOptions.NoAvValidated))));
         var pinned=pins.Length==0?[]:await PublicContentQuery.ForDisplay(rows.Where(x=>pins.Contains(x.Id))).ToListAsync();
         var latest=await query.CardsPageAsync(PublicContentQuery.Recent(rows.Where(x=>!pins.Contains(x.Id))),0,12);
         var candidates=pins.Select(id=>pinned.SingleOrDefault(x=>x.Id==id)).Where(x=>x!=null).Select(x=>x!).Concat(latest).Take(24).ToArray();
@@ -38,7 +38,7 @@ public sealed class HomeVideosViewComponent(PortalDbContext db, PublicContentQue
     }
     private bool Present(VideoFile v)
     {
-        if(!VideoReadiness.HasProof(v,environment.IsDevelopment()))return false;
+        if(!VideoReadiness.HasProof(v,environment.IsDevelopment(),options))return false;
         try
         {
             return new[]{(v.Original.StorageKey,(long?)v.Original.ByteLength),(v.Mp4Key,v.Mp4Bytes),(v.PosterKey,v.PosterBytes)}

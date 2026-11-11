@@ -14,6 +14,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     [HttpGet("admin/videos")]
     public async Task<IActionResult> Index(string? q,string? state,int page=1)
     {
+        ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         var actor=await permissions.GetAsync(UserId);if(!actor.Has(Permissions.ManageVideos)||!new[]{Permissions.ViewOwn,Permissions.ViewAll,Permissions.EditOwn,Permissions.EditAll,Permissions.Review}.Any(actor.Has))return Forbid();if(q?.Length>200)return BadRequest();
         var contents=permissions.Scope(db.Contents.AsNoTracking(),actor).Where(x=>x.Kind==ContentKind.Video);
         if(!actor.Has(Permissions.ViewAll)&&!actor.Has(Permissions.EditAll))contents=contents.Where(x=>x.OwnerUserId==UserId||actor.Has(Permissions.Review)&&x.SubmittedRevisionId!=null);
@@ -32,6 +33,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     [HttpGet("admin/videos/upload/{contentId:guid}")]
     public async Task<IActionResult> Upload(Guid contentId)
     {
+        ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         try{await uploads.AuthorizeAsync(UserId,contentId,false);var c=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==contentId);var title=await db.Revisions.Where(x=>x.Id==c.CurrentRevisionId).Select(x=>x.Title).SingleAsync();return View("~/Views/VideoAdmin/Upload.cshtml",new VideoUploadModel(contentId,title,Convert.ToBase64String(c.RowVersion),options.MaxFileBytes,options.ChunkBytes,(await processor.HealthAsync()).Code));}
         catch(BadHttpRequestException e)when(e.StatusCode==413){return StatusCode(413,new{error="Chunk vượt giới hạn request của web server."});}catch(MediaUploadException e){return StatusCode(e.StatusCode,new{error=e.Message});}
     }

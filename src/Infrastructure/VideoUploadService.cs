@@ -13,7 +13,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     public string ChunkPath(Guid session,int index)=>MediaService.ResolveMediaPath(storage,$"video-upload/{session:N}/{index:D6}.chunk");
     public async Task<ContentActor> AuthorizeAsync(string userId,Guid contentId,bool write,CancellationToken ct=default)
     {
-        if(!options.Enabled)throw new MediaUploadException("Upload video chưa mở tại môi trường này; dùng cấu hình SQL Test/kho Test đã xác minh.",503);
+        if(!options.Enabled)throw new MediaUploadException("Upload video chưa mở; cần bật Video và cấu hình môi trường/kho tệp hợp lệ.",503);
         var actor=await permissions.GetAsync(userId);
         if(!actor.Has(Permissions.ManageVideos)||!actor.Has(Permissions.ManageMedia))throw new MediaUploadException("Thiếu quyền quản lý video và media hiện thời.",403);
         var content=await db.Contents.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==contentId,ct);
@@ -37,7 +37,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     }
     public async Task<VideoUploadSession> CreateAsync(Guid contentId,string user,string name,string mime,long bytes,string chunkManifestHash,CancellationToken ct=default)
     {
-        if(media!=null)await media.RequireUploadScannerAsync(ct);
+        if(!options.ApprovedManagedVideoWithoutAv && media!=null)await media.RequireUploadScannerAsync(ct);
         await AuthorizeAsync(user,contentId,true,ct);
         if(!IsHash(chunkManifestHash))throw new MediaUploadException("Cần SHA-256 của manifest chunk trước khi tạo phiên.");
         if(bytes<1||bytes>options.MaxFileBytes)throw new MediaUploadException("Dung lượng video vượt giới hạn cấu hình hoặc tệp rỗng.",413);
@@ -64,7 +64,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     }
     public async Task<bool> ChunkAsync(Guid id,string user,int index,string digest,Stream input,CancellationToken ct=default)
     {
-        if(media!=null)await media.RequireUploadScannerAsync(ct);
+        if(!options.ApprovedManagedVideoWithoutAv && media!=null)await media.RequireUploadScannerAsync(ct);
         if(!IsHash(digest))throw new MediaUploadException("Chunk cần SHA-256 hợp lệ.");
         await GetAsync(id,user,true,ct);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(60));ct=timeout.Token;
@@ -96,7 +96,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     public async Task<VideoUploadSession> CompleteAsync(Guid id,string user,CancellationToken ct=default)
     {
         var previous=await GetAsync(id,user,false,ct);if(previous.State==VideoUploadState.Completed)return previous;
-        if(media!=null)await media.RequireUploadScannerAsync(ct);
+        if(!options.ApprovedManagedVideoWithoutAv && media!=null)await media.RequireUploadScannerAsync(ct);
         await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted,ct);await Lock("video:complete",ct);
         // Another complete may have committed while this request waited.
         var check=await db.Set<VideoUploadSession>().AsNoTracking().SingleAsync(x=>x.Id==id,ct);if(check.State==VideoUploadState.Completed){await tx.CommitAsync(ct);return check;}
@@ -116,6 +116,7 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
             var duplicate=await db.MediaAssets.SingleOrDefaultAsync(x=>x.Sha256==digest,ct);
             if(duplicate!=null)
             {
+                if(duplicate.ValidationStatus != (options.ApprovedManagedVideoWithoutAv?VideoOptions.NoAvPending:"VideoEnvelopeOnly") && duplicate.ValidationStatus != (options.ApprovedManagedVideoWithoutAv?VideoOptions.NoAvValidated:"VideoValidated"))throw new MediaUploadException("Video trùng thuộc chính sách khác; không đổi trạng thái tài nguyên cũ.",409);
                 if(duplicate.Origin!="VideoUpload"||duplicate.UploadedByUserId!=user||!await db.Set<VideoFile>().AnyAsync(x=>x.MediaAssetId==duplicate.Id,ct))throw new MediaUploadException("Byte trùng thuộc tài nguyên khác hoặc phạm vi riêng tư khác.",409);
                 if(!File.Exists(MediaService.ResolveMediaPath(storage,duplicate.StorageKey))||await HashFileAsync(MediaService.ResolveMediaPath(storage,duplicate.StorageKey),ct)!=digest)throw new MediaUploadException("Bản trùng không còn khớp byte.",409);
                 s.MediaAssetId=duplicate.Id;
@@ -123,9 +124,9 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
             else
             {
                 if(File.Exists(output)){if(new FileInfo(output).Length!=bytes||await HashFileAsync(output,ct)!=digest)throw new MediaUploadException("Bản gốc mồ côi khác byte; không ghi đè.",409);}else File.Move(temporary,output,false);
-                var asset=new MediaAsset{StorageKey=key,Sha256=digest,ByteLength=bytes,MimeType=s.Mime,OriginalName="video"+s.Extension,Origin="VideoUpload",UploadedByUserId=user,ValidationStatus="VideoEnvelopeOnly",ScanStatus="NotScanned",IsQuarantined=true};db.MediaAssets.Add(asset);s.MediaAssetId=asset.Id;db.Add(new VideoFile{MediaAssetId=asset.Id,Original=asset,UploadSessionId=s.Id,AvailableUtc=Now,State=VideoState.Pending});
+                var asset=new MediaAsset{StorageKey=key,Sha256=digest,ByteLength=bytes,MimeType=s.Mime,OriginalName="video"+s.Extension,Origin="VideoUpload",UploadedByUserId=user,ValidationStatus=options.ApprovedManagedVideoWithoutAv?VideoOptions.NoAvPending:"VideoEnvelopeOnly",ScanStatus="NotScanned",IsQuarantined=true};db.MediaAssets.Add(asset);s.MediaAssetId=asset.Id;db.Add(new VideoFile{MediaAssetId=asset.Id,Original=asset,UploadSessionId=s.Id,AvailableUtc=Now,State=VideoState.Pending});
             }
-            s.Sha256=digest;s.State=VideoUploadState.Completed;s.UpdatedUtc=Now;db.AuditLogs.Add(new(){Actor=user,Action="video.upload.completed",ContentId=s.ContentId,Detail=JsonSerializer.Serialize(new{s.Id,s.MediaAssetId,bytes,digest})});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return s;
+            s.Sha256=digest;s.State=VideoUploadState.Completed;s.UpdatedUtc=Now;db.AuditLogs.Add(new(){Actor=user,Action="video.upload.completed",ContentId=s.ContentId,Detail=JsonSerializer.Serialize(new{s.Id,s.MediaAssetId,bytes,digest,policy=options.ApprovedManagedVideoWithoutAv?VideoOptions.NoAvPending:"ScannerRequired"})});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return s;
         }
         finally{if(File.Exists(temporary))File.Delete(temporary);} // Unknown commit keeps its private immutable original for reconciliation.
     }
