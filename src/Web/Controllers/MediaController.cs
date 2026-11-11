@@ -17,8 +17,12 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && !x.IsQuarantined);
         if (asset is null || !mediaOptions.CanServe(asset)) return NotFound();
         var internalException=InternalMediaExceptionPolicy.Candidate(asset);
+        var managedImageNoAv=mediaOptions.ApprovedManagedImageWithoutAv
+            && asset.Origin=="Uploaded" && asset.ValidationStatus==MediaUploadOptions.ManagedImageNoAvValidation
+            && asset.ScanStatus=="NotScanned" && asset.MimeType is ("image/jpeg" or "image/png");
         if(internalException&&!await InternalMediaExceptionPolicy.HasGrantAsync(db,asset))return NotFound();
         if(internalException)Response.Headers["X-Media-Scan-Status"]="ScannerSkipped";
+        if(managedImageNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
         if (asset.MimeType == "application/pdf" && asset.Origin is not ("Source" or "EditorialDocument")) return NotFound();
         if (asset.Origin == "EditorialDocument")
         {
@@ -47,13 +51,13 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
         catch (InvalidOperationException) { return NotFound(); }
         catch (MediaUploadException) { return NotFound(); }
         if (!System.IO.File.Exists(path)) return NotFound();
-        if (asset.ValidationStatus == "Phase3BValidated" || internalException)
+        if (asset.ValidationStatus == "Phase3BValidated" || internalException || managedImageNoAv)
         {
             // Batch scan proof binds the original bytes, also after materialization.
             try
             {
                 var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if ((!internalException && asset.ScanStatus != "Clean") || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
+                if ((!internalException && !managedImageNoAv && asset.ScanStatus != "Clean") || input.Length != asset.ByteLength || Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(input)) != asset.Sha256) { await input.DisposeAsync(); return NotFound(); }
                 if (!await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) && !await PublicSiteService.HasPublicAssetGrantAsync(db,id,DateTimeOffset.UtcNow)) { await input.DisposeAsync(); return NotFound(); }
                 input.Position = 0;
                 Response.Headers["X-Content-Type-Options"] = "nosniff";
