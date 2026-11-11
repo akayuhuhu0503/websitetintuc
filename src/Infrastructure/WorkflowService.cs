@@ -6,7 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
 
-public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null)
+public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null, VideoOptions? videoOptions = null)
 {
     public Task<WorkflowResult> SaveAsync(Guid? id, DraftInput input, ContentActor actor, byte[]? version, Guid commandId, bool autosave = false)
     {
@@ -157,7 +157,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
                 }
                 else if(asset.Usage=="Video")
                 {
-                    if(storage==null||!await VideoReadiness.ReadyAsync(db,storage,asset.MediaAsset,(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback))throw new InvalidOperationException("Video chưa Ready, chưa quét đúng byte hoặc thiếu rendition/poster; không xuất bản.");
+                    if(storage==null||!await VideoReadiness.ReadyAsync(db,storage,asset.MediaAsset,(mediaOptions??new MediaUploadOptions()).IsDevelopmentLoopback,policy:videoOptions))throw new InvalidOperationException("Video chưa Ready theo chính sách kiểm định, sai byte hoặc thiếu MP4/poster; không xuất bản.");
                     continue;
                 }
                 if (!(mediaOptions ?? new MediaUploadOptions()).CanServe(asset.MediaAsset) || !AllowedMime(asset.MediaAsset.MimeType))

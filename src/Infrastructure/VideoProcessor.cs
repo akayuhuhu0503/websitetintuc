@@ -21,7 +21,7 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage)
     public static bool BrowserCompatible(VideoProbe p)=>p.Codec=="h264"&&p.PixelFormat=="yuv420p"&&(p.Profile is "Baseline" or "Constrained Baseline" or "Main" or "High")&&(p.Audio==null||p.Audio=="aac"&&p.AudioProfile=="LC");
     private sealed record SavedOutput(int Policy,Guid Asset,string InputSha,string FfmpegSha,string FfprobeSha,VideoOutput Output);
     private IDataProtector ManifestProtector()=>DataProtectionProvider.Create(new DirectoryInfo(storage.KeysRoot),b=>b.SetApplicationName("LandPortal")).CreateProtector("LandPortal.VideoOutputManifest.v1");
-    private async Task<VideoOutput?> ReuseAsync(Guid asset,string inputHash,CancellationToken ct)
+    private async Task<VideoOutput?> ReuseAsync(Guid asset,string inputHash,CancellationToken ct,bool forceTranscode)
     {
         var root=Path.GetDirectoryName(MediaService.ResolveMediaPath(storage,$"video-output/{asset:N}/boundary"))!;if(!Directory.Exists(root))return null;
         foreach(var dir in Directory.EnumerateDirectories(root).Take(20))
@@ -31,7 +31,7 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage)
             try
             {
                 var saved=JsonSerializer.Deserialize<SavedOutput>(ManifestProtector().Unprotect(await File.ReadAllTextAsync(manifest,ct)));
-                if(saved==null||saved.Policy!=2||saved.Asset!=asset||saved.InputSha!=inputHash||saved.FfmpegSha!=options.FfmpegSha256||saved.FfprobeSha!=options.FfprobeSha256)continue;var result=saved.Output;
+                if(saved==null||saved.Policy!=(forceTranscode?3:2)||saved.Asset!=asset||saved.InputSha!=inputHash||saved.FfmpegSha!=options.FfmpegSha256||saved.FfprobeSha!=options.FfprobeSha256)continue;var result=saved.Output;
                 if(!result.Mp4.StartsWith($"video-output/{asset:N}/",StringComparison.Ordinal)||!result.Poster.StartsWith($"video-output/{asset:N}/",StringComparison.Ordinal))continue;
                 var mp4=MediaService.ResolveMediaPath(storage,result.Mp4);var poster=MediaService.ResolveMediaPath(storage,result.Poster);
                 if(!File.Exists(mp4)||!File.Exists(poster)||new FileInfo(mp4).Length!=result.Mp4Bytes||new FileInfo(poster).Length!=result.PosterBytes||await VideoUploadService.HashFileAsync(mp4,ct)!=result.Mp4Hash||await VideoUploadService.HashFileAsync(poster,ct)!=result.PosterHash)continue;
@@ -52,6 +52,9 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage)
     internal async Task<string> Run(string binary,IEnumerable<string> arguments,int seconds,CancellationToken ct)
     {
         var p=new ProcessStartInfo(binary){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,WorkingDirectory=storage.TempRoot};p.ArgumentList.Add("-max_alloc");p.ArgumentList.Add("67108864");foreach(var arg in arguments)p.ArgumentList.Add(arg);
+        // Native tools inherit the service token, never elevate or receive SQL/runtime secrets.
+        // Keep only OS loader variables; operators run the worker as a dedicated non-admin identity.
+        foreach(var key in p.Environment.Keys.Where(k=>!new[]{"SystemRoot","WINDIR","PATH","PATHEXT"}.Contains(k,StringComparer.OrdinalIgnoreCase)).ToArray())p.Environment.Remove(key);
         p.Environment["TEMP"]=storage.TempRoot;p.Environment["TMP"]=storage.TempRoot;
         using var process=Process.Start(p)??throw new VideoProcessingException("VIDEO_PROCESSOR_START_FAILED");using var deadline=CancellationTokenSource.CreateLinkedTokenSource(ct);deadline.CancelAfter(TimeSpan.FromSeconds(seconds));
         async Task<string> Read(StreamReader reader){var buffer=new char[1024];var text=new System.Text.StringBuilder();int n;while((n=await reader.ReadAsync(buffer,deadline.Token))>0){if(text.Length+n>131072)throw new VideoProcessingException("VIDEO_PROCESSOR_OUTPUT_LIMIT");text.Append(buffer,0,n);}return text.ToString();}
@@ -89,12 +92,12 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage)
         var rotation=video[0].TryGetProperty("side_data_list",out var side)?side.EnumerateArray().Where(x=>x.TryGetProperty("rotation",out _)).Select(x=>x.GetProperty("rotation").GetInt32()).FirstOrDefault():0;
         return new(codec,ac,width,height,duration,container,(rotation%360+360)%360){PixelFormat=video[0].TryGetProperty("pix_fmt",out var pixel)?pixel.GetString():null,Profile=video[0].TryGetProperty("profile",out var profile)?profile.GetString():null,AudioProfile=audio.Length>0&&audio[0].TryGetProperty("profile",out var ap)?ap.GetString():null,FrameRate=rate,UsedRateFallback=fallback};
     }
-    public async Task<VideoOutput> ProcessAsync(Guid asset,string input,CancellationToken ct=default)
+    public async Task<VideoOutput> ProcessAsync(Guid asset,string input,CancellationToken ct=default,bool forceTranscode=false)
     {
         var health=await HealthAsync(ct);if(!health.Ready)throw new VideoProcessingException(health.Code,true);
-        var cpuStart=nativeCpuMilliseconds;var inputHash=await VideoUploadService.HashFileAsync(input,ct);var reused=await ReuseAsync(asset,inputHash,ct);if(reused!=null)return reused with{NativeCpuMilliseconds=nativeCpuMilliseconds-cpuStart};
+        var cpuStart=nativeCpuMilliseconds;var inputHash=await VideoUploadService.HashFileAsync(input,ct);var reused=await ReuseAsync(asset,inputHash,ct,forceTranscode);if(reused!=null)return reused with{NativeCpuMilliseconds=nativeCpuMilliseconds-cpuStart};
         var before=await ProbeAsync(input,ct);var folder=MediaService.ResolveMediaPath(storage,$"video-output/{asset:N}/{Guid.NewGuid():N}/marker");var directory=Path.GetDirectoryName(folder)!;Directory.CreateDirectory(directory);var output=Path.Combine(directory,"play.mp4");var poster=Path.Combine(directory,"poster.jpg");
-        var compatible=BrowserCompatible(before);
+        var compatible=!forceTranscode && BrowserCompatible(before);
         var args=new List<string>{"-nostdin","-hide_banner","-loglevel","error","-protocol_whitelist","file,pipe","-threads",options.Threads.ToString(CultureInfo.InvariantCulture),"-i",input,"-map","0:v:0","-map","0:a:0?","-map_metadata","-1","-map_chapters","-1"};
         if(compatible)args.AddRange(["-c","copy"]);
         else
@@ -108,6 +111,6 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage)
         using(var codec=SkiaSharp.SKCodec.Create(poster)){if(codec==null||codec.Info.Width<1||codec.Info.Height<1)throw new VideoProcessingException("VIDEO_POSTER_VERIFY_FAILED");}
         var mp4=new FileInfo(output);var jpg=new FileInfo(poster);if(mp4.Length<32||jpg.Length<16||mp4.Length>options.MaxFileBytes*3||jpg.Length>16*1024*1024)throw new VideoProcessingException("VIDEO_OUTPUT_SIZE_FAILED");
         string Key(string p)=>Path.GetRelativePath(storage.MediaRoot,p).Replace('\\','/');var result=new VideoOutput(Key(output),await VideoUploadService.HashFileAsync(output,ct),mp4.Length,Key(poster),await VideoUploadService.HashFileAsync(poster,ct),jpg.Length,after,before){NativeCpuMilliseconds=nativeCpuMilliseconds-cpuStart};
-        var receipt=ManifestProtector().Protect(JsonSerializer.Serialize(new SavedOutput(2,asset,inputHash,options.FfmpegSha256,options.FfprobeSha256,result)));await File.WriteAllTextAsync(Path.Combine(directory,"result.dat"),receipt,ct);return result;
+        var receipt=ManifestProtector().Protect(JsonSerializer.Serialize(new SavedOutput(forceTranscode?3:2,asset,inputHash,options.FfmpegSha256,options.FfprobeSha256,result)));await File.WriteAllTextAsync(Path.Combine(directory,"result.dat"),receipt,ct);return result;
     }
 }

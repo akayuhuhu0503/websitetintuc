@@ -29,6 +29,17 @@ public static class AdminLabels
     public static readonly IReadOnlyDictionary<string,string> States=new Dictionary<string,string>(StringComparer.Ordinal)
     {
         ["Draft"]="Bản nháp",["PendingReview"]="Chờ duyệt",["Approved"]="Đã duyệt",["Published"]="Đã đăng",["Rejected"]="Bị trả lại",["Unpublished"]="Đã gỡ",["Archived"]="Trong thùng rác",
+        ["VIDEO_PROCESSOR_CONFIGURED"]="Đường dẫn và SHA256 bộ xử lý hợp lệ",
+        ["VIDEO_PROCESSOR_NOT_AVAILABLE"]="Chưa tìm thấy FFmpeg/FFprobe tại đường dẫn cấu hình",
+        ["VIDEO_PROCESSOR_NOT_APPROVED"]="Bộ xử lý chưa có xác nhận sử dụng và tham chiếu giấy phép",
+        ["VIDEO_PROCESSOR_HASH_MISMATCH"]="SHA256 FFmpeg/FFprobe không khớp cấu hình",
+        ["VIDEO_ENCODER_NOT_AVAILABLE"]="FFmpeg thiếu bộ mã hóa H.264 libx264",
+        ["VIDEO_PROCESSOR_START_FAILED"]="Không khởi chạy được FFmpeg/FFprobe",
+        ["VIDEO_PROCESSOR_REJECTED"]="FFmpeg/FFprobe từ chối tệp",
+        ["VIDEO_PROCESSOR_TIMEOUT"]="Xử lý video vượt thời gian cho phép",
+        ["VIDEO_PROCESSOR_MEMORY_LIMIT"]="Xử lý video vượt giới hạn bộ nhớ",
+        ["VIDEO_PROCESSOR_OUTPUT_LIMIT"]="Thông tin trả về của bộ xử lý vượt giới hạn",
+        ["VIDEO_PROCESSOR_CANCELLED"]="Đã dừng xử lý video",
         ["Ready"]="Sẵn sàng",["Disabled"]="Chưa được bật",["NotScanned"]="Chưa quét an toàn",["Clean"]="Đã quét sạch",["Infected"]="Phát hiện mã độc",["ScanFailed"]="Quét chưa thành công",["Scanning"]="Đang quét",["Deleted"]="Đã xóa theo chính sách",
         ["Pending"]="Đang chờ",["Running"]="Đang thực hiện",["Completed"]="Đã hoàn thành",["Cancelled"]="Đã hủy",["Canceled"]="Đã hủy",["Failed"]="Chưa thành công",["Blocked"]="Đang bị chặn",["NeedsReview"]="Cần kiểm tra lại",
         ["Uploading"]="Đang tải tệp",["Finalizing"]="Đang xác nhận tệp",["Uploaded"]="Đã tải đủ tệp",["Processing"]="Đang xử lý",["Queued"]="Đã vào hàng đợi",["Expired"]="Đã hết hạn",["RejectedFile"]="Tệp bị từ chối",
