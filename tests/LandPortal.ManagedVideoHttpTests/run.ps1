@@ -26,7 +26,7 @@ builder.Services.AddSingleton(new VideoOptions {
  Enabled=true, ApprovedManagedVideoWithoutAv=builder.Configuration["VideoTestNoAv"]=="true",
  FfmpegPath=builder.Configuration["Video:FfmpegPath"]!,FfprobePath=builder.Configuration["Video:FfprobePath"]!,
  FfmpegSha256=builder.Configuration["Video:FfmpegSha256"]!,FfprobeSha256=builder.Configuration["Video:FfprobeSha256"]!,
- ProcessorApproved=true,LicenseReference="Isolated synthetic fixture", MaxFileBytes=10*1024*1024
+  MaxFileBytes=10*1024*1024
 });
 var app = builder.Build();
 '@

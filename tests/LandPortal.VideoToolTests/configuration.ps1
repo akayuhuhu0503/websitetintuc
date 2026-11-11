@@ -1,8 +1,8 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../../scripts/uat-common.ps1')
 $settings=[pscustomobject]@{
  Mail=[pscustomobject]@{Transport='Disabled'}
- Video=[pscustomobject]@{Enabled='true';ProcessorApproved='true';LicenseReference='isolated-test';FfmpegPath='';FfprobePath='';FfmpegSha256='';FfprobeSha256=''}
+ Video=[pscustomobject]@{Enabled='true';FfmpegPath='';FfprobePath='';FfmpegSha256='';FfprobeSha256=''}
 }
 $count=0
 function Expect-Rejected([scriptblock]$Action) {
@@ -18,10 +18,10 @@ Assert-UatOptionalServices $settings;$count++
 $settings.Video.FfmpegPath='relative.exe'
 Expect-Rejected { Assert-UatOptionalServices $settings };$count++
 $settings.Video.FfmpegPath=''
-$settings.Video.ProcessorApproved='false'
+$settings.Video.Enabled='invalid'
 Expect-Rejected { Assert-UatOptionalServices $settings };$count++
-$settings.Video.ProcessorApproved='true';$settings.Video.LicenseReference=''
-Expect-Rejected { Assert-UatOptionalServices $settings };$count++
+$settings.Video.Enabled='false'
+Assert-UatOptionalServices $settings;$count++
 foreach($file in @('scripts/build-for-iis.ps1','scripts/uat-common.ps1')){
  $tokens=$null;$errors=$null
  [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot ('../../'+$file)),[ref]$tokens,[ref]$errors)

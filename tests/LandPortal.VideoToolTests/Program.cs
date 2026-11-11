@@ -4,6 +4,12 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using LandPortal.Infrastructure;
 
+if(args.Length==2 && args[0]=="--configuration")
+{
+    MinimalConfigurationChecks.Run(args[1]);
+    return;
+}
+
 var repo=Path.GetFullPath(args.Length>0?args[0]:Environment.CurrentDirectory);
 var run=Path.Combine(repo,".local","tests","video-tools-"+Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(run);
@@ -14,7 +20,7 @@ foreach(var path in new[]{storage.MediaRoot,storage.TempRoot,storage.KeysRoot,st
 var app=Path.Combine(run,"package");var web=Path.Combine(app,"web");var worker=Path.Combine(app,"worker");Directory.CreateDirectory(web);Directory.CreateDirectory(worker);
 var fixedDir=Path.Combine(app,"tools","ffmpeg");Directory.CreateDirectory(fixedDir);
 var pathDir=Path.Combine(run,"path-bin");Directory.CreateDirectory(pathDir);
-var approved=new VideoOptions{Enabled=true,ProcessorApproved=true,LicenseReference="Existing local synthetic-test tooling approval only"};
+var approved=new VideoOptions{Enabled=true};
 var locator=new VideoToolLocator(web,pathDir);
 Check(locator.FixedDirectory==new VideoToolLocator(worker,pathDir).FixedDirectory,"Web and Worker share fixed application tools directory");
 Check(locator.Find(approved)==new VideoToolPaths(null,null),"Missing tools; no disk scan or download");
@@ -26,8 +32,8 @@ File.WriteAllText(Path.Combine(fixedDir,"ffmpeg.exe"),"not an executable");
 File.WriteAllText(Path.Combine(fixedDir,"ffprobe.exe"),"not an executable");
 Check(locator.Find(approved).Ffmpeg==Path.Combine(fixedDir,"ffmpeg.exe"),"Fixed directory precedes PATH");
 var noApproval=await new VideoProcessor(new VideoOptions(),storage,locator).HealthAsync();
-Check(noApproval.Code=="VIDEO_PROCESSOR_NOT_APPROVED"&&noApproval.FfmpegVersion==null,"No executable invocation without processor approval");
-Check((await new VideoProcessor(new VideoOptions{ProcessorApproved=true},storage,locator).HealthAsync()).Code=="VIDEO_PROCESSOR_NOT_APPROVED","License approval still required");
+Check(noApproval.Code=="VIDEO_DISABLED"&&noApproval.FfmpegVersion==null,"Disabled video does not invoke executables");
+Check((await new VideoProcessor(new VideoOptions{Enabled=true},storage,locator).HealthAsync()).Code=="VIDEO_PROCESSOR_START_FAILED","Enabled video checks executable without manual approval fields");
 Check((await new VideoProcessor(approved,storage,locator).HealthAsync()).Code=="VIDEO_PROCESSOR_START_FAILED","Invalid executable reported safely");
 Check(!VideoProcessor.HasRequiredEncoders("libx264 aac mjpeg mentioned in descriptions"),"Encoder names in prose cannot pass capability check");
 Check(!VideoProcessor.HasRequiredEncoders(" V..... libx264 H264\n A..... aac AAC"),"Missing JPEG encoder denied");
@@ -49,7 +55,7 @@ var health=await processor.HealthAsync();
 Check(health.Ready&&health.FfmpegVersion!=null&&health.FfprobeVersion!=null,"Real discovery executes version/encoder checks without configured paths or hashes");
 Check(health.FfmpegSha256==tools.RootElement.GetProperty("ffmpegSha256").GetString(),"Observed hash equals actual binary bytes");
 Check((await new VideoProcessor(approved,storage,new VideoToolLocator(Path.Combine(run,"other"),pathDir)).HealthAsync()).Ready,"Real PATH fallback works without manual configuration");
-var wrongPin=new VideoOptions{ProcessorApproved=true,LicenseReference=approved.LicenseReference,FfmpegSha256=new string('0',64)};
+var wrongPin=new VideoOptions{Enabled=true,FfmpegSha256=new string('0',64)};
 Check((await new VideoProcessor(wrongPin,storage,locator).HealthAsync()).Code=="VIDEO_PROCESSOR_HASH_MISMATCH","Optional legacy pin still enforced");
 if(OperatingSystem.IsWindows())
 {
@@ -65,7 +71,7 @@ if(OperatingSystem.IsWindows())
     finally{executable.SetAccessControl(restored);}
 }
 var uploadTool=Path.Combine(storage.MediaRoot,"ffmpeg.exe");File.Copy(Path.Combine(fixedDir,"ffmpeg.exe"),uploadTool);
-var badLocation=new VideoOptions{ProcessorApproved=true,LicenseReference=approved.LicenseReference,FfmpegPath=uploadTool,FfprobePath=Path.Combine(fixedDir,"ffprobe.exe")};
+var badLocation=new VideoOptions{Enabled=true,FfmpegPath=uploadTool,FfprobePath=Path.Combine(fixedDir,"ffprobe.exe")};
 Check((await new VideoProcessor(badLocation,storage).HealthAsync()).Code=="VIDEO_TOOL_PATH_UNSAFE","Tools inside upload storage never executed");
 
 var sample=Path.Combine(run,"synthetic.mp4");

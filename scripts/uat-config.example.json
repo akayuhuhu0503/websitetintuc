@@ -67,11 +67,9 @@
   "Video": {
     "Enabled": "false",
     "AllowManagedVideoWithoutAv": "false",
-    "ProcessorApproved": "false",
     "FfmpegPath": "",
     "FfprobePath": "",
     "FfmpegSha256": "",
-    "FfprobeSha256": "",
-    "LicenseReference": ""
+    "FfprobeSha256": ""
   }
 }

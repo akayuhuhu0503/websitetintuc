@@ -13,8 +13,6 @@ Dùng bản `.env` private hiện hành đã đối chiếu với cấu hình II
 | `Video__Enabled` | `true` để mở chức năng video |
 | `Video__AllowManagedVideoWithoutAv` | `true`, ngoại lệ video riêng |
 | FFmpeg/FFprobe | Tự tìm `TTDL-IIS\tools\ffmpeg\ffmpeg.exe`, `ffprobe.exe`, rồi PATH của tiến trình; không cần nhập đường dẫn/SHA256 |
-| `Video__ProcessorApproved` | `true` sau khi duyệt bộ xử lý |
-| `Video__LicenseReference` | Tham chiếu giấy phép/xác nhận sử dụng có thật, không điền mã giả |
 
 FFmpeg cần bộ mã hóa `libx264`, AAC và JPEG; ứng dụng tự chạy kiểm tra phiên bản và danh sách encoder. Giữ các giới hạn file/chunk/quota/thời gian/thread hiện có. Web và Worker phải nhìn thấy cùng bộ công cụ đã được vận hành cài từ nguồn tin cậy và kho media/temp/keys. Không tự tải công cụ. SHA256 tự tính chỉ phát hiện thay đổi, không chứng minh nguồn gốc. Các đường dẫn/hash cũ vẫn được tôn trọng nếu có; có thể bỏ bốn khóa đó khỏi đầu vào để dùng cơ chế tự tìm. Xem [video-tools-auto-discovery.md](video-tools-auto-discovery.md).
 

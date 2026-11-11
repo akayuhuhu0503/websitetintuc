@@ -17,7 +17,7 @@ function Read-IisEnvironment([string]$Path,[switch]$ForPublish) {
   if(-not $seen.Add($key)){throw ('Trường .env bị lặp: '+$key)}
   if($value.Length -ge 2 -and (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))){$value=$value.Substring(1,$value.Length-2)}
   if($key -cin @('LANDPORTAL_HOME','DOTNET_ENVIRONMENT','ASPNETCORE_ENVIRONMENT','IIS_SITE_NAME','IIS_MACHINE_NAME')){$meta[$key]=$value;continue}
-  if($key -cin @('Deployment__TargetApproved','Deployment__TargetApprovalReference','Scanner__PolicyReference','Scanner__DefenderPrivacyPolicyReference')){continue} # Obsolete keys in existing private inputs are ignored.
+  if($key -cin @('Deployment__TargetApproved','Deployment__TargetApprovalReference','Scanner__PolicyReference','Scanner__DefenderPrivacyPolicyReference','Video__ProcessorApproved','Video__LicenseReference')){continue} # Obsolete keys in existing private inputs are ignored, not converted into approvals.
   if(-not $allowed.Contains($key)){throw ('Trường không được hỗ trợ trong .env IIS: '+$key+'. Dùng scripts/ttdl.env.example; không dùng .env Development.')}
   $parts=$key -split '__';$settings.($parts[0]).($parts[1])=$value
  }
