@@ -375,7 +375,7 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
         if (assets.Count != selections.Count) throw new InvalidOperationException("Tài nguyên chưa tồn tại trong kho.");
         foreach (var asset in assets)
         {
-            if (asset.Origin == "EditorialDocument" && (!await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id) || asset.MimeType == OfficeDocumentPolicy.Docx && (input.Metadata.WeeklyYear == null || !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id))))
+            if (asset.Origin == "EditorialDocument" && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id))
                 throw new InvalidOperationException("Tài liệu chỉ dùng trong đúng hồ sơ; Word chỉ thuộc lịch tuần.");
             if(selections[asset.Id].Usage=="Subtitle")
             {
