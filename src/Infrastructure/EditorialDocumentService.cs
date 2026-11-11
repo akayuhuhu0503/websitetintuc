@@ -99,13 +99,13 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
         MediaUploadOptions? policy = null)
     {
         var proof = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.MediaAssetId == asset.Id, ct);
-        var validScan=asset.ScanStatus=="Clean" && asset.ValidationStatus=="Validated"
-            && proof?.ScanState==InquiryScanState.Clean && proof.ScannedSha256==asset.Sha256 && proof.ScannedUtc!=null
+        var validScan=proof is not null && asset.ScanStatus=="Clean" && asset.ValidationStatus=="Validated"
+            && proof.ScanState==InquiryScanState.Clean && proof.ScannedSha256==asset.Sha256 && proof.ScannedUtc!=null
             && !string.IsNullOrWhiteSpace(proof.EngineVersion)
             && (development || !proof.EngineVersion.StartsWith("Defender/", StringComparison.Ordinal));
-        var managedNoAv=policy?.ApprovedManagedDocumentsWithoutAv==true
+        var managedNoAv=proof is not null && policy?.ApprovedManagedDocumentsWithoutAv==true
             && asset.ScanStatus=="NotScanned" && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
-            && proof?.ScanState==InquiryScanState.NotScanned && proof.Attempts==0
+            && proof.ScanState==InquiryScanState.NotScanned && proof.Attempts==0
             && proof.ScannedSha256==null && proof.ScannedUtc==null && proof.EngineVersion==null;
         if (asset.Origin != "EditorialDocument" || !OfficeDocumentPolicy.IsDocument(asset.MimeType) || asset.IsQuarantined
             || (!validScan && !managedNoAv)) return null;
