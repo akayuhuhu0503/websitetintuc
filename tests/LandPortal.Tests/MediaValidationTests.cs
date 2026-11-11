@@ -85,6 +85,21 @@ public static class MediaValidationTests
                 await Rejected(() => new MediaService(db, storage, production).UploadAsync(input, "test.png", "image/png", owner, false), 503);
             });
 
+            await Case("Managed CMS image opt-in is image-only and does not fake antivirus Clean", () =>
+            {
+                var managed = new MediaUploadOptions { ApprovedManagedImageWithoutAv = true };
+                var image = new MediaAsset { Origin = "Uploaded", MimeType = "image/png",
+                    ScanStatus = "NotScanned", ValidationStatus = MediaUploadOptions.ManagedImageNoAvValidation, IsQuarantined = false };
+                Check(managed.UploadEnabled && managed.CanServe(image), "Approved decoded image rejected.");
+                Check(!(new MediaUploadOptions()).CanServe(image), "Default policy served an unscanned managed image.");
+                image.MimeType = "application/pdf";
+                Check(!managed.CanServe(image), "Non-image upload bypassed scanner.");
+                image.MimeType = "image/png";
+                image.IsQuarantined = true;
+                Check(!managed.CanServe(image), "Quarantined image bypassed policy.");
+                return Task.CompletedTask;
+            });
+
             await Case("Real PNG pixels decode and SQL/file preserve truthful NotScanned state and dimensions", async () =>
             {
                 using var input = new MemoryStream(png, false);
