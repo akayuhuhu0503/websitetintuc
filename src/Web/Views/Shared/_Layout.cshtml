@@ -72,7 +72,15 @@
     </div>
     @if(site is not null&&(KnownText(site.Revision.SupervisingAgency)||KnownText(site.Revision.ResponsiblePerson)||KnownText(site.Revision.LicenseNumber))){<div class="container footer-legal">@if(KnownText(site.Revision.SupervisingAgency)){<p>Cơ quan chủ quản: @site.Revision.SupervisingAgency</p>}@if(KnownText(site.Revision.ResponsiblePerson)){<p>Người chịu trách nhiệm chính: @site.Revision.ResponsiblePerson</p>}@if(KnownText(site.Revision.LicenseNumber)){<p>Số giấy phép: @site.Revision.LicenseNumber</p>}</div>}
     @if(traffic is not null){<details class="container public-traffic"><summary>Thống kê truy cập <span>Hôm nay: @traffic.Today · Tổng: @traffic.Total</span></summary><p>Đang truy cập (5 phút): @traffic.Active · Tháng này: @traffic.Month</p><small>Số phiên truy cập từ khi hệ thống bắt đầu ghi nhận, không phải số người duy nhất. Phiên hết hạn sau 20 phút không hoạt động. Không thu địa chỉ IP, tài khoản hay email; dùng cookie ngẫu nhiên. Cập nhật @traffic.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm:ss").</small></details>}
-    <div class="footer-bottom"><div class="container"><span>© @DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Year @organization</span></div></div>
+    <div class="footer-bottom">
+        <div class="container footer-credits">
+            <p class="footer-copyright">© @DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Year Cục Quản lý đất đai</p>
+            <div class="footer-credits-details">
+                <p>Đơn vị chủ quản: <strong>Cục Quản lý đất đai – Bộ Nông nghiệp và Môi trường</strong></p>
+                <p>Phát triển bởi: <strong>Trung tâm Dữ liệu và Thông tin đất đai</strong></p>
+            </div>
+        </div>
+    </div>
 </footer>
 <script src="~/js/site.js" asp-append-version="true" defer></script>
 @await RenderSectionAsync("Scripts", required: false)

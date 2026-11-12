@@ -159,3 +159,12 @@
 .portal-shell .main-nav .nav-utility-links{justify-content:flex-start}
 
 }
+
+/* Footer ownership and development credits. */
+.portal-shell .footer-bottom>.footer-credits{flex-direction:column;align-items:center;gap:8px;text-align:center;line-height:1.7}
+.portal-shell .footer-credits p{margin:0}
+.portal-shell .footer-copyright{font-size:12px;color:#e8cccc}
+.portal-shell .footer-credits-details{display:flex;align-items:baseline;justify-content:center;gap:12px;font-size:13px;max-width:100%}
+.portal-shell .footer-credits-details strong{font-weight:600;color:#fff}
+.portal-shell .footer-credits-details p+p{border-left:1px solid #ffffff40;padding-left:12px}
+@media(max-width:1199px){.portal-shell .footer-credits-details{flex-direction:column;align-items:center;gap:4px}.portal-shell .footer-credits-details p+p{border-left:0;padding-left:0}}
