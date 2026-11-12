@@ -119,6 +119,8 @@ builder.Services.AddScoped<PublicTraffic>();
 builder.Services.AddScoped<WorkflowService>();
 builder.Services.AddSingleton(SchedulerOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<SchedulerService>();
+builder.Services.AddSingleton<WebPublicationScheduler>();
+builder.Services.AddHostedService<WebPublicationBackgroundService>();
 builder.Services.AddScoped<CurrentPermissionService>();
 builder.Services.AddSingleton(InteractionMailOptions.FromConfiguration(builder.Configuration,builder.Environment.EnvironmentName));
 builder.Services.AddScoped<InteractionService>();
@@ -132,6 +134,9 @@ builder.Services.AddSingleton(VideoOptions.FromConfiguration(builder.Configurati
 builder.Services.AddScoped<VideoUploadService>();
 builder.Services.AddScoped<VideoSubtitleService>();
 builder.Services.AddScoped<VideoProcessor>();
+builder.Services.AddHostedService<WebVideoProcessingService>();
+builder.Services.AddScoped<InteractionOutboxService>();
+builder.Services.AddHostedService<WebMaintenanceService>();
 builder.Services.AddScoped<InquiryAssignmentService>();
 builder.Services.AddScoped<InquiryLookupService>();
 builder.Services.AddScoped<InquiryCalendarService>();
@@ -197,6 +202,7 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseAuthorization();
+app.UseMiddleware<DuePublicationMiddleware>();
 app.MapGet("/health", () => Results.Ok(new { status = "running", phase = "2B" }));
 app.MapGet("/ready", async (PortalDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 app.MapGet("/robots.txt", () => Results.Text("User-agent: *\nDisallow: /\n", "text/plain"));

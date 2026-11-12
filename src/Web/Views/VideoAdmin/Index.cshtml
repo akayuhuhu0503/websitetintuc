@@ -8,17 +8,17 @@
 <dl class="video-panel">
     <dt>FFmpeg (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.Ready?"Sẵn sàng · "+tools.FfmpegVersion:tools.FfmpegFound?"Đã tìm thấy; chưa đủ điều kiện xử lý":"Chưa tìm thấy")</dd>
     <dt>FFprobe (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.FfprobeVersion!=null?"Sẵn sàng · "+tools.FfprobeVersion:tools.FfprobeFound?"Đã tìm thấy; chưa xác minh thực thi":"Chưa tìm thấy")</dd>
-    <dt>Worker video</dt><dd>@AdminLabels.State(ViewData["VideoWorkerCode"] as string ?? "VIDEO_WORKER_UNKNOWN")</dd>
+    <dt>Xử lý video trong website</dt><dd>@AdminLabels.State(ViewData["VideoWorkerCode"] as string ?? "VIDEO_WORKER_UNKNOWN")</dd>
     @if(ViewData["VideoWorkerObservation"] is LandPortal.Infrastructure.VideoWorkerObservation worker){
-        <dt>Worker cập nhật lúc</dt><dd>@worker.Utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</dd>
-        <dt>Kiểm tra bằng tài khoản Worker</dt><dd>@AdminLabels.State(worker.Tools.Code)</dd>
-        <dt>Phiên bản trên Worker</dt><dd>FFmpeg: @(worker.Tools.FfmpegVersion ?? "Chưa xác nhận") · FFprobe: @(worker.Tools.FfprobeVersion ?? "Chưa xác nhận")</dd>
+        <dt>Bộ xử lý cập nhật lúc</dt><dd>@worker.Utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</dd>
+        <dt>Kiểm tra trong ứng dụng</dt><dd>@AdminLabels.State(worker.Tools.Code)</dd>
+        <dt>Phiên bản bộ xử lý</dt><dd>FFmpeg: @(worker.Tools.FfmpegVersion ?? "Chưa xác nhận") · FFprobe: @(worker.Tools.FfprobeVersion ?? "Chưa xác nhận")</dd>
         @if(!worker.ScannerReady&&!worker.ManagedVideoWithoutAv){<dt>Scanner</dt><dd>Chưa sẵn sàng; chưa có chính sách video không antivirus được bật.</dd>}
         @if(worker.ToolsChangedUtc!=null){<dt>Thay đổi binary gần nhất</dt><dd>@worker.ToolsChangedUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") · Đã ghi nhận hash cũ/mới; không phải xác thực nguồn phát hành.</dd>}
     }
 </dl>
-<p class="scope-note">Cài bộ xử lý đã được đơn vị vận hành duyệt vào <code>TTDL-IIS\tools\ffmpeg</code> hoặc PATH của tài khoản dịch vụ. Không cần nhập đường dẫn/SHA256; ứng dụng không tự tải công cụ. Kết quả tài khoản Web không thay thế kiểm tra thực tế của Worker.</p>
-<p class="scope-note">Video Worker là tiến trình riêng. Recycle Application Pool chỉ khởi động lại Web, không khởi động Worker. Web và Worker phải dùng cùng gói cấu hình và kho temp/keys; trạng thái ở đây không cấp quyền công bố video.</p>
+<p class="scope-note">Bộ xử lý dùng công cụ trong gói triển khai; không cần tạo Task Scheduler hoặc tài khoản Worker riêng. Khi công cụ chưa sẵn sàng, video tiếp tục chờ, không được tự công bố.</p>
+<p class="scope-note">Video chỉ được xử lý khi ứng dụng website đang chạy. Nếu IIS cho ứng dụng nghỉ hoặc khởi động lại, hàng đợi vẫn được lưu và tiếp tục ở lần khởi động kế tiếp. Sau khi dừng đột ngột, tác vụ có thể cần chờ hết hạn khóa xử lý trước khi chạy lại. Trạng thái ở đây không thay thế duyệt và xuất bản.</p>
 }
 @if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới theo chính sách CMS không antivirus: kiểm định định dạng, chuyển mã và tạo poster; trạng thái vẫn là Chưa quét antivirus. Chỉ công khai sau duyệt và xuất bản.</p>}
 <form method="get"><label for="video-query">Tìm tiêu đề video</label><input id="video-query" name="q" maxlength="200" value="@Model.Query" /><label for="video-filter">Trạng thái biên tập</label><select id="video-filter" name="state"><option value="">Tất cả</option>@foreach(var value in Enum.GetValues<LandPortal.Domain.WorkflowState>()){<option value="@value" selected="@(Model.State==value.ToString())">@AdminLabels.State(value)</option>}</select><button class="button" type="submit">Tìm</button></form>

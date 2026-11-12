@@ -78,9 +78,13 @@ try{
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'START.md')
  Copy-Item -LiteralPath (Join-Path $repo 'docs/TTDL-GITHUB-IIS-HANDOFF.md') -Destination (Join-Path $staging 'TTDL-GITHUB-IIS-HANDOFF.md')
  Copy-Item -LiteralPath (Join-Path $repo 'docs/iis-one-command.md') -Destination (Join-Path $staging 'iis-one-command.md')
- # Operator-installed tools survive updates; never download or execute native tools during Publish.
+ # Build-only acquisition from the reviewed publisher release; never download at runtime.
  $videoTools=Join-Path $staging 'tools/ffmpeg'
  [void][IO.Directory]::CreateDirectory($videoTools)
+ if([string]$inputSettings.Settings.Video.Enabled -ieq 'true'){
+  . (Join-Path $PSScriptRoot 'iis-video-tools.ps1')
+  Install-IisVideoTools -Destination $videoTools -CacheRoot (Join-Path $repo '.local/dependencies/ffmpeg')
+ }
  Copy-Item -LiteralPath (Join-Path $repo 'docs/video-tools-auto-discovery.md') -Destination (Join-Path $videoTools 'README.md')
  $config=Join-Path $staging 'web/web.config'
  [xml]$xml=Get-Content -LiteralPath $config -Raw -Encoding UTF8
@@ -152,15 +156,15 @@ try{
  if(Test-Path -LiteralPath $output){Move-Item -LiteralPath $output -Destination $previous}
  Move-Item -LiteralPath $staging -Destination $output
  Write-Output ('PUBLISH PASS: '+$output)
- if($PrivateMode -eq 'WebBundle'){Write-Output ('COPY ONLY: '+(Join-Path $output 'web')+'; confidential .runtime included. Keep existing sibling private data and tools. Restart IIS and Workers.')}else{
+ if($PrivateMode -eq 'WebBundle'){Write-Output ('COPY ONLY: '+(Join-Path $output 'web')+'; confidential .runtime included. Keep existing sibling private data. Restart IIS; background queues run inside Web.')}else{
  Write-Output ('Copy whole Publish folder to IIS: '+$output+'; IIS Physical Path: web/')
  if($PrivateMode -in @('Portable','WebBundle')){Write-Output ('PRIVATE CONFIG (confidential, outside webroot): '+(Join-Path $output 'private/uat.json'))}else{Write-Output ('PRIVATE CONFIG (not in publish): '+(Join-Path $privateHome 'uat.json'))}
  if($PrivateMode -notin @('Portable','WebBundle')){Write-Output 'Target paths/HTTPS/Defender are discovered by ops/configure-iis-uat.ps1 on IIS; activation remains gated. No SQL was contacted.'}
  }
- Write-Output 'Web + Worker (5 modes) + tools + ops ready. SQL/IIS/deployment NOT RUN. Read START.md.'
+ Write-Output 'Web + durable background queues + tools ready. Legacy Worker CLI retained for compatibility. SQL/IIS/deployment NOT RUN. Read START.md.'
  if($PrivateMode -eq 'WebBundle'){
   Write-Output 'GÓI WEB CHỨA CẤU HÌNH BÍ MẬT: chuyển nguyên web qua kênh riêng, gồm .runtime; không đưa lên Git hoặc URL tải công khai.'
-  Write-Output 'Dữ liệu vẫn ở sibling private. Lần chuyển đầu đổi launcher Worker theo web/.runtime/README.md; những lần sau chỉ thay web và restart.'
+  Write-Output 'Dữ liệu vẫn ở sibling private. Web tự xử lý hàng đợi khi đang chạy; không cần Task Scheduler hoặc tài khoản Worker riêng.'
  }elseif($PrivateMode -eq 'Portable'){
   Write-Output 'GÓI CHỨA CẤU HÌNH BÍ MẬT: chuyển cả thư mục Publish bằng kênh riêng; IIS chỉ trỏ web/. Không đưa gói lên Git hoặc URL tải công khai.'
   Write-Output 'Không cần tên máy/site hoặc script cấu hình bổ sung. Runtime tự tìm private/uat.json và thông tin IIS; thiếu quyền/HTTPS thì báo503; scanner chưa sẵn sàng chỉ chặn upload cần quét.'

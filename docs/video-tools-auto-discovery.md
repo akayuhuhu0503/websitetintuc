@@ -1,45 +1,29 @@
-# FFmpeg/FFprobe tự nhận diện — IIS UAT
+# Bộ xử lý video trong gói Web IIS
 
-Không cần nhập bốn khóa `Video__FfmpegPath`, `Video__FfprobePath`, `Video__FfmpegSha256`, `Video__FfprobeSha256`. Để trống hoặc bỏ chúng khỏi `.env`. Nếu vẫn giữ giá trị cũ, ứng dụng tôn trọng override/pin cũ và báo lỗi nếu không khớp, không âm thầm bỏ kiểm tra.
+Với `Video__Enabled=true`, lệnh `powershell -NoProfile -File scripts/build-for-iis.ps1` tự chuẩn bị FFmpeg/FFprobe và đưa vào `web/.runtime/tools/ffmpeg`. Người vận hành không cần cài công cụ, nhập đường dẫn/SHA256 hoặc sửa PATH trên IIS. Cấu hình bốn khóa đường dẫn/hash cũ vẫn được tôn trọng nếu đang có; không tự bỏ pin đã cấu hình.
 
-## Cài một lần, dùng qua các lần cập nhật
+## Nguồn công cụ và kiểm tra khi Build
 
-Vận hành cài bộ công cụ có nguồn phát hành/giấy phép đã được đơn vị kiểm tra vào:
+`scripts/dependencies/ffmpeg-win64.json` ghim bản Gyan Essentials 9.0.2 Windows x64, URL phát hành cố định, dung lượng và SHA256 do nhà phát hành công bố. [FFmpeg chính thức](https://www.ffmpeg.org/download.html#build-windows) liên kết tới Gyan; [checksum của Gyan](https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip.sha256) trùng digest của tài sản phát hành GitHub. Đây là giá trị đã rà soát trong source, không lấy checksum mới từ mạng để tin ngay tại mỗi lần build.
 
-```text
-D:\WWW_GDLA\publish\TTDL-IIS\tools\ffmpeg\ffmpeg.exe
-D:\WWW_GDLA\publish\TTDL-IIS\tools\ffmpeg\ffprobe.exe
-```
+Lần build đầu cần HTTPS tới GitHub; các lần sau dùng cache `.local/dependencies/ffmpeg`, luôn kiểm tra lại byte/hash. Build thất bại nếu cache sai, mạng không truy cập được khi chưa có cache, archive thiếu giấy phép hoặc đường dẫn không an toàn. Không tự tải tại runtime, không cài phần mềm lên Windows, không sửa ACL/PATH, không thực thi native tool khi Publish. Binary không được đưa vào Git.
 
-Đây là thư mục cố định tương đối với gói ứng dụng, dùng chung Web/Worker; không phải cấu hình riêng cho tên máy. Nếu không có binary ở đây, chỉ tìm đúng hai tên trên các thư mục PATH tuyệt đối của tiến trình (tối đa 128 mục, không quét ổ đĩa). Không tìm trong current directory, không dùng thư mục upload/temp/keys/snapshots, UNC hoặc reparse. Binary đã tìm thấy nhưng lỗi không được che bằng cách chạy một bản khác trên PATH.
+Chỉ hai executable cùng bản nguyên gốc `LICENSE`, `README.txt` được giải nén, kèm `package-origin.json`. Manifest của toàn gói xác minh các file này. Ứng dụng ưu tiên công cụ đóng gói; gói bị thiếu/sai hash bị từ chối, không âm thầm chuyển sang binary khác. Gói cũ chưa có công cụ vẫn hỗ trợ vị trí `TTDL-IIS/tools/ffmpeg` và PATH tuyệt đối như trước.
 
-Publish tạo hướng dẫn tại `tools/ffmpeg/README.md`, không tải, chạy hay đóng gói FFmpeg. Khi cập nhật gói, **giữ nguyên binary do vận hành cài trong tools/ffmpeg**; không mirror/xóa thư mục tools. Nếu công cụ nằm trong PATH, tài khoản dịch vụ phải nhận được PATH đó sau restart; PATH của phiên đăng nhập Admin không nhất thiết là PATH của IIS/Worker.
+## Phạm vi giấy phép
 
-Không có binary thì trang quản trị báo chưa tìm thấy; website không tự tải binary. Việc cài từ nguồn tin cậy vẫn thuộc vận hành, không được thay bằng hash tự tính. Không có cơ chế mới tự phê duyệt nguồn/công cụ.
+Gyan Essentials dùng GPLv3 và có libx264. Gói này phục vụ triển khai nội bộ TTDL, giữ nguyên giấy phép/thông tin nguồn của nhà phát hành. [GNU phân biệt việc sao chép trong cùng một tổ chức với việc phân phối ra ngoài](https://www.gnu.org/licenses/gpl-faq.html#InternalDistribution). Không đưa gói binary lên GitHub hoặc URL tải công khai. Nếu phát hành cho đơn vị khác, cần cung cấp nguồn tương ứng, thông tin build và giấy phép các thư viện theo nghĩa vụ phân phối thực tế; chỉ một đường dẫn nguồn FFmpeg không chứng minh đã đủ toàn bộ nguồn phụ thuộc. Đây không phải mã phê duyệt nội bộ hay cờ cấu hình mới.
 
-## Chính sách giữ nguyên
+## Kiểm tra trong ứng dụng
 
-- `Video__Enabled` và ba cờ no-AV là lựa chọn vận hành, mặc định tắt; no-AV vẫn chỉ hợp lệ trong Staging/UAT. Không còn yêu cầu `Video__ProcessorApproved`/`Video__LicenseReference`: hai chuỗi này không xác minh nguồn hay giấy phép. Video tắt thì không thực thi bộ xử lý. Vận hành vẫn phải cài bản FFmpeg từ nguồn tin cậy, tuân thủ giấy phép/phân phối của bản đó; không có mã xác nhận nội bộ hay cơ chế tự phê duyệt thay thế.
-- Phiên bản FFmpeg/FFprobe được kiểm tra bằng thực thi `-version`; encoder phải có đúng `libx264`, `aac`, `mjpeg`. Thực thi thử theo tài khoản tiến trình hiện tại, không nâng quyền. Worker `--video` kiểm tra lại định kỳ và trước xử lý.
-- SHA256 được tự tính; kiểm tra lại và giữ file handle chống thay byte trong mỗi lần thực thi Windows. Thay byte giữa các lệnh của một lượt xử lý sẽ bị từ chối. Lượt kiểm tra mới có thể nhận binary đã cập nhật sau kiểm tra phiên bản/encoder; hash cũ/mới được ghi nhận. Đây không phải chữ ký hay chứng minh nguồn gốc.
-- Cache MP4/poster gắn hash binary thực tế, không dùng hash rỗng trong cấu hình. Pipeline/quota/chunk/timeout/codec/SHA/duyệt/xuất bản và trạng thái NotScanned không thay đổi. Không sửa SQL/migration, video cũ hoặc 703 media.
+Ứng dụng kiểm tra `-version`, encoder `libx264`, `aac`, `mjpeg`, quyền thực thi thực tế dưới tài khoản Web và giới hạn tiến trình hiện có. SHA256 tự tính dùng kiểm tra toàn vẹn/audit, không thay cho nguồn phát hành. File handle Windows bảo vệ byte trong lúc thực thi. Runtime không nâng quyền và không tải phần mềm.
 
-## Trạng thái quản trị và Worker
+Video được xử lý ngay trong tiến trình Web bằng hàng đợi bền vững hiện có, không cần Task Scheduler hoặc tài khoản dịch vụ riêng. Khi IIS dừng/nghỉ, xử lý cũng dừng; hàng đợi tiếp tục sau khi ứng dụng được đánh thức. Không cam kết xử lý liên tục 24/7 khi Application Pool có thể nghỉ.
 
-`/admin/videos` hiển thị riêng FFmpeg, FFprobe dưới tài khoản Web, kết quả Worker và lý do bị chặn. Kết quả Web không được dùng để khẳng định Worker có quyền thực thi.
+Các cờ no-AV vẫn mặc định tắt và chỉ hợp lệ trong Staging/UAT. Dữ liệu chưa quét vẫn là `NotScanned`; kiểm định định dạng, chuyển mã MP4/poster, quota, chunk, thời gian xử lý, SHA256, phân quyền và workflow xuất bản giữ nguyên. Không sửa SQL, migration hoặc media hiện có.
 
-Worker ghi heartbeat được bảo vệ bằng Data Protection trong `Storage.TempRoot/video-worker-status.dat`; Web/Worker phải dùng cùng temp và keys, với quyền đọc/ghi thực tế đã cấp. Thiếu/hỏng/quá hạn heartbeat hiển thị chưa xác nhận/mất cập nhật, không giả Ready. Đây chỉ là chẩn đoán, không cấp quyền xuất bản. `--health` là phép kiểm tra riêng, không giả rằng dịch vụ vòng lặp đang chạy. Nhật ký Worker và audit tác vụ video ghi hash/version quan sát được; không ghi secret.
+## Kiểm tra và rollback
 
-Tài khoản Worker không thuộc Administrators/SYSTEM, cần Read/Execute bộ công cụ, Read cấu hình, quyền kho media/temp/keys theo quy trình hiện hành. Không cấp quyền mới tự động. Kiểm tra trên IIS sau khi review/merge:
+Kiểm tra acquisition/cache/hash/ZIP/giấy phép: `powershell -NoProfile -File scripts/test-iis-video-tools.ps1`. Kiểm tra xử lý video và vòng đời Web dùng bộ kiểm thử tập trung tương ứng, không chạy lại toàn bộ E2E.
 
-```powershell
-powershell -NoProfile -File .\ops\uat-runtime.ps1 -PublishRoot D:\WWW_GDLA\publish\TTDL-IIS -Mode Video -Health
-```
-
-Chạy dưới đúng tài khoản Worker. Dịch vụ dùng cùng lệnh với `-Mode Video`, bỏ `-Health`; wrapper truyền `--video`. Không tự bật Mail/scanner hoặc sửa SQL.
-
-## Build, kiểm tra và rollback
-
-Build/publish đầy đủ Web/Worker bằng quy trình `scripts/build-for-iis.ps1` hiện có. Chưa deploy tự động. Backup bộ binary/config/manifest trước cập nhật; giữ bộ công cụ và dữ liệu tại chỗ. Rollback đồng bộ binary/config/manifest. Nếu quay về binary trước cơ chế tự tìm, dùng lại cấu hình đường dẫn/hash đã backup của bản cũ; không phục hồi SQL hoặc xóa media.
-
-Kiểm thử tập trung: `dotnet run --project tests/LandPortal.VideoToolTests -c Release -- <repo-root>`. Cần bộ công cụ đã được duyệt cho test trong `.local/video-tools.json`; chỉ tạo cây file riêng dưới `.local/tests`, không kết nối SQL/IIS. Bao gồm discovery, trạng thái bật/tắt, phiên bản/encoder thật, một chuyển mã MP4/poster, cache, hash drift và heartbeat. Không chạy lại 48/60 E2E.
+Khi cập nhật, thay nguyên `web` gồm `.runtime`, giữ kho dữ liệu ngoài ứng dụng. Rollback nguyên thư mục `web` cũ để khôi phục binary/config/manifest và bộ công cụ đồng bộ; không rollback SQL hoặc xóa media. Nếu còn tiến trình video riêng của bản cũ, không chạy song song hai cơ chế; bản Worker mới từ chối chế độ Video trên WebBundle để tránh xử lý trùng.

@@ -30,7 +30,7 @@ function ConvertTo-IisWebBundle([string]$Staging) {
   if($f.Name -like '.env*' -or $f.Extension -in @('.bak','.mdf','.ldf','.pfx','.key','.pem','.dpapi')){throw 'Excluded package file'}
   @{path=$relative;sha256=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant();bytes=$f.Length}
  })
- $manifest=@{schema=2;privateMode='WebBundle';utc=[DateTimeOffset]::UtcNow.ToString('O');environment='Staging';files=$files;privateConfiguration=@{path='private/uat.json';confidential=$true;sha256=(Get-FileHash -LiteralPath (Join-Path $runtime 'private/uat.json')).Hash.ToLowerInvariant()};schemaIncluded=$false;sqlExecuted=$false;storageDefault='../private';workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail')}
+ $manifest=@{schema=2;privateMode='WebBundle';utc=[DateTimeOffset]::UtcNow.ToString('O');environment='Staging';files=$files;privateConfiguration=@{path='private/uat.json';confidential=$true;sha256=(Get-FileHash -LiteralPath (Join-Path $runtime 'private/uat.json')).Hash.ToLowerInvariant()};schemaIncluded=$false;sqlExecuted=$false;storageDefault='../private';backgroundHost='Web';workerModes=@('Scheduler','Documents','InquiryScan','Video','Mail')}
  $json=$manifest|ConvertTo-Json -Depth 8
  [IO.File]::WriteAllText((Join-Path $runtime 'manifest.json'),$json,[Text.UTF8Encoding]::new($false))
  # Outer files are build receipts only; never needed on IIS.
