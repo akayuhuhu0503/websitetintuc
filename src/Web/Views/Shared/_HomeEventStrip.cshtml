@@ -10,6 +10,7 @@
         <article class="event-slide" data-event-slide hidden="@(i>0)" role="group" aria-roledescription="banner" aria-label="@(i+1) / @banners.Length">
             <a href="@banner.Url" aria-label="@banner.Label" target="@(banner.NewWindow?"_blank":null)" rel="@(banner.NewWindow?"noopener noreferrer":null)">
                 <img src="@banner.ImageUrl" alt="@banner.Alt" width="1170" height="100" loading="lazy" decoding="async" />
+                <span class="event-slide-caption" aria-hidden="true">@banner.Label</span>
             </a>
         </article>
     }

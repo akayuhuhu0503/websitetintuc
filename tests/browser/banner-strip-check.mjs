@@ -28,7 +28,7 @@ function strip(count) {
         .replace('hidden="@(i>0)"',i?'hidden':'')
         .replace('aria-label="@(i+1) / @banners.Length"',`aria-label="${i+1} / ${count}"`)
         .replace(/<a [^\n]+>/,`<a href="/fixture-link-${i}" aria-label="Fixture ${i}">`)
-        .replace('@banner.ImageUrl',`http://fixture.test/image/${i}`).replace('@banner.Alt',`Fixture ${i}`)).join('');
+        .replace('@banner.ImageUrl',`http://fixture.test/image/${i}`).replace('@banner.Alt',`Fixture ${i}`).replace('@banner.Label',`Fixture ${i}`)).join('');
     return `<section class="home-event-strip" data-event-carousel><div class="event-slides">${slides}</div>${count>1?`<nav class="event-dots" data-event-dots hidden>${Array.from({length:count},(_,i)=>`<button data-event-dot="${i}"><span></span></button>`).join('')}</nav>`:''}</section>`;
 }
 const browser = await chromium.launch({channel:'msedge',headless:true});
@@ -48,12 +48,23 @@ async function measure() {
         const e=document.querySelector('.home-event-strip'),r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();
         const style=getComputedStyle(p),parentInnerWidth=p.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
         const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect();
-        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,overflow:document.documentElement.scrollWidth>innerWidth};
+        const caption=e.querySelector('.is-active .event-slide-caption')||e.querySelector('.event-slide-caption');
+        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,radius:getComputedStyle(e).borderRadius,captionDisplay:getComputedStyle(caption).display,captionHeight:caption.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth};
     });
     assert(Math.abs(result.w-result.parentInnerWidth)<0.5,JSON.stringify(result));
-    assert(Math.abs(result.h-result.w*10/117)<0.1,JSON.stringify(result));
+    const mobile = (await page.viewportSize()).width <= 640;
+    if (mobile) {
+        assert(Math.abs(result.ih-result.iw*10/117)<0.6,JSON.stringify(result));
+        assert(result.h>=result.ih+result.captionHeight-0.5 && result.captionHeight>10,JSON.stringify(result));
+        assert.notEqual(result.captionDisplay,'none');
+    } else {
+        assert(Math.abs(result.h-result.w*10/117)<0.1,JSON.stringify(result));
+        assert(Math.abs(result.ih-result.h)<0.1);
+        assert.equal(result.captionDisplay,'none');
+    }
     assert(Math.abs(result.center-result.parentCenter)<0.1);
-    assert(Math.abs(result.iw-result.w)<0.1&&Math.abs(result.ih-result.h)<0.1);
+    assert(Math.abs(result.iw-result.w)<0.1);
+    assert.equal(result.radius,'0px');
     assert.equal(result.fit,'cover');assert.equal(result.overflow,false);checks++;
     return result;
 }
@@ -64,6 +75,7 @@ try {
         await render(0);assert.equal(await page.locator('.home-event-strip').count(),0);checks++;
         await render(3);await measure();await page.locator('[data-event-dot="2"]').click();await page.waitForTimeout(450);await measure();
         assert.equal(await page.locator('.is-active a').getAttribute('href'),'/fixture-link-2');
+        assert.match(await page.locator('.is-active .event-slide-caption').textContent(),/Fixture 2/);
     }
     await page.setViewportSize({width:1366,height:900});await page.mouse.move(0,0);await render(3);await page.bringToFront();
     await page.waitForFunction(()=>document.querySelector('[data-event-dot="1"]')?.getAttribute('aria-current')==='true',{},{timeout:7000});checks++;
