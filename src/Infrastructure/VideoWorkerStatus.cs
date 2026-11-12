@@ -8,6 +8,7 @@ namespace LandPortal.Infrastructure;
 public sealed record VideoWorkerObservation(DateTimeOffset Utc, string Machine, int ProcessId, string State,
     VideoToolHealth Tools, bool ScannerReady, bool ManagedVideoWithoutAv,
     string? PreviousFfmpegSha256 = null, string? PreviousFfprobeSha256 = null, DateTimeOffset? ToolsChangedUtc = null);
+public sealed record VideoWorkerInspection(VideoWorkerObservation? Observation, string Code);
 
 public static class VideoWorkerStatus
 {
@@ -20,15 +21,32 @@ public static class VideoWorkerStatus
     private static IDataProtector Protector(StorageOptions storage) => DataProtectionProvider.Create(
         new DirectoryInfo(storage.KeysRoot),b=>b.SetApplicationName("LandPortal")).CreateProtector("LandPortal.VideoWorkerStatus.v1");
 
-    public static VideoWorkerObservation? Read(StorageOptions storage)
+    public static VideoWorkerObservation? Read(StorageOptions storage) => Inspect(storage).Observation;
+
+    public static VideoWorkerInspection Inspect(StorageOptions storage,int processSeconds=300,DateTimeOffset? now=null)
     {
         try
         {
             var path=StatusPath(storage);
-            if(!File.Exists(path)||new FileInfo(path).Length>32768)return null;
-            return JsonSerializer.Deserialize<VideoWorkerObservation>(Protector(storage).Unprotect(File.ReadAllText(path)));
+            // Open directly: File.Exists would hide access denial as a missing Worker.
+            using var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
+            if(file.Length is 0 or >32768)return new(null,"VIDEO_WORKER_STATUS_INVALID");
+            using var reader=new StreamReader(file);
+            var observation=JsonSerializer.Deserialize<VideoWorkerObservation>(Protector(storage).Unprotect(reader.ReadToEnd()));
+            if(observation is null||observation.Tools is null||string.IsNullOrWhiteSpace(observation.Machine)||observation.ProcessId<=0||observation.Utc==default)
+                return new(null,"VIDEO_WORKER_STATUS_INVALID");
+            return new(observation,StateCode(observation,processSeconds,now));
         }
-        catch(Exception e)when(e is IOException or UnauthorizedAccessException or CryptographicException or JsonException or VideoProcessingException){return null;}
+        catch(FileNotFoundException){return new(null,"VIDEO_WORKER_STATUS_MISSING");}
+        catch(DirectoryNotFoundException){return new(null,"VIDEO_WORKER_STATUS_MISSING");}
+        catch(UnauthorizedAccessException){return new(null,"VIDEO_WORKER_STATUS_ACCESS_DENIED");}
+        catch(System.Security.SecurityException){return new(null,"VIDEO_WORKER_STATUS_ACCESS_DENIED");}
+        catch(CryptographicException){return new(null,"VIDEO_WORKER_STATUS_UNVERIFIED");}
+        catch(System.Xml.XmlException){return new(null,"VIDEO_WORKER_STATUS_UNVERIFIED");}
+        catch(JsonException){return new(null,"VIDEO_WORKER_STATUS_INVALID");}
+        catch(VideoProcessingException){return new(null,"VIDEO_WORKER_STATUS_PATH_UNSAFE");}
+        catch(InvalidOperationException){return new(null,"VIDEO_WORKER_STATUS_UNVERIFIED");}
+        catch(IOException){return new(null,"VIDEO_WORKER_STATUS_READ_FAILED");}
     }
 
     public static void Write(StorageOptions storage,VideoToolHealth tools,bool scannerReady,bool noAv,string state="Running")

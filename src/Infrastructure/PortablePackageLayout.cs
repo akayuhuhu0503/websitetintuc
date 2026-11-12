@@ -12,7 +12,9 @@ public sealed record PortablePackageLayout(string Root, string WebRoot, string D
 
     public static PortablePackageLayout Resolve(string baseDirectory)
     {
-        var component=new DirectoryInfo(baseDirectory);
+        // AppContext.BaseDirectory ends with a separator. Preserve one canonical component
+        // path: Directory.GetParent(".../web/") otherwise returns web, not its package.
+        var component=new DirectoryInfo(Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDirectory)));
         var embedded=Path.Combine(component.FullName,".runtime");
         if(File.Exists(Path.Combine(embedded,"manifest.json")))
             return new(embedded,component.FullName,Path.Combine(component.Parent!.FullName,"private"),true);

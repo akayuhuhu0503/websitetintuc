@@ -52,7 +52,8 @@ public sealed class AdminMediaController(PortalDbContext db, StorageOptions stor
         var rows = await assets.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return Json(new { items = rows.Select(x => Describe(x, contentId)), page, total, pageSize,
             uploadAvailable = options.UploadEnabled && actor.Has(Permissions.ManageMedia),
-            notice = options.ApprovedManagedImageWithoutAv?"Ảnh JPG/PNG của quản trị được kiểm tra, chuẩn hóa và ghi nhận chưa quét antivirus; các loại tệp khác vẫn yêu cầu scanner.":options.NativeUatUploads?"UAT: ảnh được quét Clamd trước khi cấp quyền dùng; PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp tải lên được kiểm tra định dạng, chưa quét mã độc." : "Tải lên chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
+            managedImageWithoutAv = options.ApprovedManagedImageWithoutAv,
+            notice = options.ApprovedManagedImageWithoutAv?"Ảnh JPG/PNG của quản trị được kiểm tra, chuẩn hóa và ghi nhận chưa quét antivirus; các loại tệp khác vẫn yêu cầu scanner.":options.NativeUatUploads?"UAT: chính sách ảnh quản trị không antivirus đang tắt trong cấu hình runtime; tải ảnh yêu cầu scanner sẵn sàng. PDF/Word/Excel dùng mục Tài liệu.":options.DevelopmentExceptionEnabled ? "Ngoại lệ Development: tệp tải lên được kiểm tra định dạng, chưa quét mã độc." : "Tải lên chưa mở: thiếu máy quét và chưa bật ngoại lệ Development." });
     }
 
     [HttpPost("admin/media/upload"), RequireUploadAntiforgeryHeader, DisableUploadFormValueModelBinding, RequestSizeLimit(67_174_400)]
