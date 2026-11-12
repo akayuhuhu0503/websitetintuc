@@ -39,6 +39,13 @@ public static class PortableIisConfiguration
         "DATA_HOME"=>"Kho dữ liệu phải dùng đường dẫn tuyệt đối, private và nằm ngoài thư mục web.",
         "STORE_WRITE"=>"Tài khoản pool không tạo/ghi được kho dữ liệu. Cấp Modify cho media, snapshots, temp và keys; giữ file cấu hình chỉ đọc.",
         "STORAGE_BOUNDARY"=>"Kho private chưa khớp manifest hoặc ranh giới IIS webroot. IIS chỉ được trỏ vào web; không ánh xạ private.",
+        "STORAGE_PATH"=>"Đường dẫn kho không hợp lệ: phải tách riêng ngoài web/wwwroot, không lồng nhau hoặc đi qua reparse point.",
+        "STORAGE_MANIFEST"=>"Không xác minh được manifest/hash của gói Web/Worker và cấu hình private. Cập nhật nguyên cùng một gói web; không sửa manifest/JSON.",
+        "IIS_METADATA_ACCESS_DENIED"=>"Tài khoản hiện hành không có quyền đọc metadata IIS. Với Worker, chọn đúng pool bằng -IisAppPool và cấp Read chỉ cho cấu hình WAS của pool đó; không cấp Administrator.",
+        "IIS_METADATA_MISSING"=>"Chưa có tệp metadata IIS của pool đã chọn. Kiểm tra đúng tên pool và khởi động pool trước Worker; không dùng XML sao chép thay thế.",
+        "IIS_METADATA_INVALID"=>"Metadata IIS không hợp lệ hoặc đường dẫn metadata không an toàn. Kiểm tra cấu hình WAS của đúng pool; không sửa manifest hay kho dữ liệu.",
+        "IIS_METADATA_UNAVAILABLE"=>"Không đọc được metadata IIS. Worker Task Scheduler cần -IisAppPool đúng tên và quyền Read trên cấu hình WAS riêng của pool; không cần quyền quản trị IIS toàn máy.",
+        "IIS_MAPPING"=>"Metadata IIS đã đọc được nhưng mapping sai: pool phải trỏ đúng web của gói; không ánh xạ private hoặc .runtime thành thư mục được phục vụ.",
         _=>"Cấu hình kỹ thuật SQL/TLS hoặc kho dữ liệu không hợp lệ. Developer kiểm tra đầu vào; không tắt guard để khởi động."
     };
 
@@ -46,6 +53,7 @@ public static class PortableIisConfiguration
     {
         var stage="ENV";
         try{return LoadCore(ref stage);}
+        catch(IisConfigurationException){throw;}
         catch(Exception error) when(error is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or ArgumentException or System.Security.SecurityException or MediaUploadException or KeyNotFoundException)
         {throw new IisConfigurationException("IIS-CONFIG-003-"+stage,StartupHint(stage));}
     }
@@ -87,7 +95,7 @@ public static class PortableIisConfiguration
         if(!Uri.TryCreate(config["Public:BaseUrl"],UriKind.Absolute,out var origin)||origin.Scheme!="https"||!string.Equals(origin.IdnHost,config["Deployment:ExpectedHost"],StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Exact HTTPS origin required.");
         stage="TECHNICAL";
         ResolveScannerDefaults(config);
-        stage="STORAGE_BOUNDARY";
+        stage="STORAGE_PATH";
         if(layout.WebBundle)ValidateExternalStores(config,layout.WebRoot);
         StorageOptions.FromConfiguration(config).PortableBoundary?.EnsureValidated();
         stage="TECHNICAL";
