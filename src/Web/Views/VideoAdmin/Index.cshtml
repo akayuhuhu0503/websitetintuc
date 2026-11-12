@@ -6,8 +6,8 @@
 <p>Bộ xử lý: <strong>@AdminLabels.State(Model.Processor)</strong>. Trạng thái tải/quét/xử lý xem tại từng nội dung; thông tin video không có nghĩa tệp đã sẵn sàng.</p>
 @if(ViewData["VideoTools"] is LandPortal.Infrastructure.VideoToolHealth tools){
 <dl class="video-panel">
-    <dt>FFmpeg (tài khoản Web)</dt><dd>@(tools.Ready?"Sẵn sàng · "+tools.FfmpegVersion:tools.FfmpegFound?"Đã tìm thấy; chưa đủ điều kiện xử lý":"Chưa tìm thấy")</dd>
-    <dt>FFprobe (tài khoản Web)</dt><dd>@(tools.FfprobeVersion!=null?"Sẵn sàng · "+tools.FfprobeVersion:tools.FfprobeFound?"Đã tìm thấy; chưa xác minh thực thi":"Chưa tìm thấy")</dd>
+    <dt>FFmpeg (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.Ready?"Sẵn sàng · "+tools.FfmpegVersion:tools.FfmpegFound?"Đã tìm thấy; chưa đủ điều kiện xử lý":"Chưa tìm thấy")</dd>
+    <dt>FFprobe (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.FfprobeVersion!=null?"Sẵn sàng · "+tools.FfprobeVersion:tools.FfprobeFound?"Đã tìm thấy; chưa xác minh thực thi":"Chưa tìm thấy")</dd>
     <dt>Worker video</dt><dd>@AdminLabels.State(ViewData["VideoWorkerCode"] as string ?? "VIDEO_WORKER_UNKNOWN")</dd>
     @if(ViewData["VideoWorkerObservation"] is LandPortal.Infrastructure.VideoWorkerObservation worker){
         <dt>Worker cập nhật lúc</dt><dd>@worker.Utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</dd>
@@ -18,6 +18,7 @@
     }
 </dl>
 <p class="scope-note">Cài bộ xử lý đã được đơn vị vận hành duyệt vào <code>TTDL-IIS\tools\ffmpeg</code> hoặc PATH của tài khoản dịch vụ. Không cần nhập đường dẫn/SHA256; ứng dụng không tự tải công cụ. Kết quả tài khoản Web không thay thế kiểm tra thực tế của Worker.</p>
+<p class="scope-note">Video Worker là tiến trình riêng. Recycle Application Pool chỉ khởi động lại Web, không khởi động Worker. Web và Worker phải dùng cùng gói cấu hình và kho temp/keys; trạng thái ở đây không cấp quyền công bố video.</p>
 }
 @if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới theo chính sách CMS không antivirus: kiểm định định dạng, chuyển mã và tạo poster; trạng thái vẫn là Chưa quét antivirus. Chỉ công khai sau duyệt và xuất bản.</p>}
 <form method="get"><label for="video-query">Tìm tiêu đề video</label><input id="video-query" name="q" maxlength="200" value="@Model.Query" /><label for="video-filter">Trạng thái biên tập</label><select id="video-filter" name="state"><option value="">Tất cả</option>@foreach(var value in Enum.GetValues<LandPortal.Domain.WorkflowState>()){<option value="@value" selected="@(Model.State==value.ToString())">@AdminLabels.State(value)</option>}</select><button class="button" type="submit">Tìm</button></form>

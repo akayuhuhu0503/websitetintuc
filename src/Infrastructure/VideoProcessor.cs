@@ -22,6 +22,7 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
     private string? ffmpegHash,ffprobeHash;
     public VideoToolHealth? LastHealth {get;private set;}
     public VideoWorkerObservation? WorkerObservation()=>VideoWorkerStatus.Read(storage);
+    public VideoWorkerInspection WorkerStatus()=>VideoWorkerStatus.Inspect(storage,options.ProcessSeconds);
     public static bool BrowserCompatible(VideoProbe p)=>p.Codec=="h264"&&p.PixelFormat=="yuv420p"&&(p.Profile is "Baseline" or "Constrained Baseline" or "Main" or "High")&&(p.Audio==null||p.Audio=="aac"&&p.AudioProfile=="LC");
     private sealed record SavedOutput(int Policy,Guid Asset,string InputSha,string FfmpegSha,string FfprobeSha,VideoOutput Output);
     private IDataProtector ManifestProtector()=>DataProtectionProvider.Create(new DirectoryInfo(storage.KeysRoot),b=>b.SetApplicationName("LandPortal")).CreateProtector("LandPortal.VideoOutputManifest.v1");

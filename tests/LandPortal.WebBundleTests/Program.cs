@@ -18,6 +18,8 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Options;
 using SkiaSharp;
 
+if(args is ["--upload-policy"]){await UploadPolicyChecks.Run();return;}
+
 if(args.Length!=1)throw new ArgumentException("Published WebBundle web path required; no SQL is opened.");
 var web=Path.GetFullPath(args[0]);
 var layout=PortablePackageLayout.Resolve(web);

@@ -17,9 +17,9 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
         ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         var actor=await permissions.GetAsync(UserId);if(!actor.Has(Permissions.ManageVideos)||!new[]{Permissions.ViewOwn,Permissions.ViewAll,Permissions.EditOwn,Permissions.EditAll,Permissions.Review}.Any(actor.Has))return Forbid();if(q?.Length>200)return BadRequest();
         ViewData["VideoTools"]=await processor.HealthAsync(HttpContext.RequestAborted);
-        var observation=processor.WorkerObservation();
-        ViewData["VideoWorkerCode"]=VideoWorkerStatus.StateCode(observation,options.ProcessSeconds);
-        ViewData["VideoWorkerObservation"]=observation;
+        var workerStatus=processor.WorkerStatus();
+        ViewData["VideoWorkerCode"]=workerStatus.Code;
+        ViewData["VideoWorkerObservation"]=workerStatus.Observation;
         var contents=permissions.Scope(db.Contents.AsNoTracking(),actor).Where(x=>x.Kind==ContentKind.Video);
         if(!actor.Has(Permissions.ViewAll)&&!actor.Has(Permissions.EditAll))contents=contents.Where(x=>x.OwnerUserId==UserId||actor.Has(Permissions.Review)&&x.SubmittedRevisionId!=null);
         if(!string.IsNullOrEmpty(state)){if(!Enum.TryParse<WorkflowState>(state,out var filter)||!Enum.IsDefined(filter))return BadRequest();contents=contents.Where(x=>x.State==filter);}

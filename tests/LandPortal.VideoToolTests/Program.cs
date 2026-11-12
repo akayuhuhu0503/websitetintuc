@@ -4,6 +4,19 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using LandPortal.Infrastructure;
 
+if(args.Length==1 && args[0]=="--worker-status")
+{
+    WorkerStatusChecks.Run();
+    return;
+}
+
+if(args.Length==2 && args[0]=="--iis-runtime")
+{
+    await LocatorRuntimeChecks.RunAsync(args[1]);
+    WorkerStatusChecks.Run();
+    return;
+}
+
 if(args.Length==2 && args[0]=="--configuration")
 {
     MinimalConfigurationChecks.Run(args[1]);

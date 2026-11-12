@@ -49,6 +49,9 @@ public sealed class MediaUploadOptions
             return value;
         }
         var explicitException = bool.TryParse(configuration["Media:AllowUnscannedDevelopmentUploads"], out var enabled) && enabled;
+        // JSON boolean true is surfaced as "True"; flags are booleans, not case-sensitive string tokens.
+        var managedImages = bool.TryParse(configuration["Media:AllowManagedImageWithoutAv"], out var imageEnabled) && imageEnabled;
+        var managedDocuments = bool.TryParse(configuration["Media:AllowManagedDocumentsWithoutAv"], out var documentEnabled) && documentEnabled;
         var loopback = Uri.TryCreate(configuration["Public:BaseUrl"], UriKind.Absolute, out var uri) && uri.IsLoopback && uri.Scheme is "http" or "https";
         return new MediaUploadOptions
         {
@@ -62,8 +65,8 @@ public sealed class MediaUploadOptions
             IsDevelopmentLoopback = string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) && loopback
             ,IsIsolatedLanDemo=LanDemoDeployment.Validate(configuration,environmentName)
             ,NativeUatUploads=UatDeployment.Validate(configuration,environmentName)
-            ,ApprovedManagedImageWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&configuration["Media:AllowManagedImageWithoutAv"]=="true"
-            ,ApprovedManagedDocumentsWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&configuration["Media:AllowManagedDocumentsWithoutAv"]=="true"
+            ,ApprovedManagedImageWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&managedImages
+            ,ApprovedManagedDocumentsWithoutAv=environmentName=="Staging"&&UatDeployment.Validate(configuration,environmentName)&&managedDocuments
             ,NativeLanSampleUploads=configuration["Scanner:Provider"]==LanMediaSamples.Provider&&LanMediaSamples.Require(configuration,environmentName).Count>0
         };
     }
