@@ -1,0 +1,19 @@
+/* Public weekly schedules only; no change to the editorial workflow or global cards. */
+.weekly-schedule { min-width: 0; }
+.weekly-schedule .weekly-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin: 24px 0 16px; }
+.weekly-schedule .weekly-filter > div { flex: 0 1 130px; min-width: 0; }
+.weekly-schedule .weekly-filter input { width: 100%; margin-bottom: 0; }
+.weekly-schedule .weekly-filter > a { padding-block: 10px; }
+.weekly-schedule .weekly-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin: 16px 0 24px; }
+.weekly-schedule .weekly-navigation a { font-weight: 600; }
+.weekly-schedule .weekly-selected { margin-block: 28px; }
+.weekly-schedule .weekly-archive { margin-top: 32px; }
+.weekly-schedule .weekly-articles { list-style: none; margin: 0; padding: 0; }
+.weekly-schedule .weekly-articles > li { padding: 18px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.weekly-schedule .weekly-articles h3 { margin: 0 0 8px; font-size: 1.1rem; line-height: 1.5; overflow-wrap: anywhere; }
+.weekly-schedule .weekly-article-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 8px; color: var(--muted); font-size: .9rem; }
+.weekly-schedule .weekly-open { font-size: .95rem; font-weight: 600; }
+@media (max-width: 600px) {
+    .weekly-schedule .weekly-filter > div { flex: 1 1 110px; }
+    .weekly-schedule .weekly-navigation > span { flex-basis: 100%; order: -1; }
+}

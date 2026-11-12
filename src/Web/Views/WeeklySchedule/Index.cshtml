@@ -1,9 +1,75 @@
 @model LandPortal.Web.Controllers.WeeklySchedulePage
 @using System.Globalization
-@{ViewData["Title"]="Lịch công tác tuần "+Model.Week+"/"+Model.Year;var monday=ISOWeek.ToDateTime(Model.Year,Model.Week,DayOfWeek.Monday);var prev=monday.AddDays(-7);var next=monday.AddDays(7);}
+@{
+    ViewData["Title"]="Lịch công tác tuần";
+    var monday=ISOWeek.ToDateTime(Model.Year,Model.Week,DayOfWeek.Monday);
+    var prev=monday.AddDays(-7);var next=monday.AddDays(7);
+    var hasSelectedSchedule=Model.Release is not null||Model.WeekArticles.Count>0;
+    var showWeek=Model.ExplicitWeek||hasSelectedSchedule;
+}
+@section Styles { <link rel="stylesheet" href="~/css/weekly-schedule.css" asp-append-version="true" /> }
 <partial name="_PublicBreadcrumb" model='"Lịch công tác tuần"' />
-<h1>Lịch công tác tuần @Model.Week/@Model.Year</h1><p>Ngày theo giờ Việt Nam · tuần ISO bắt đầu thứ Hai</p>
-<nav aria-label="Chọn tuần"><a href="?year=@ISOWeek.GetYear(prev)&week=@ISOWeek.GetWeekOfYear(prev)">Tuần trước</a> · <a href="?year=@ISOWeek.GetYear(next)&week=@ISOWeek.GetWeekOfYear(next)">Tuần sau</a></nav>
-@if(Model.Versions.Count>0){<nav aria-label="Các phiên bản đã xuất bản"><p>Phiên bản đã xuất bản:</p><ul>@foreach(var v in Model.Versions){<li><a href="?year=@Model.Year&week=@Model.Week&version=@v.Version" aria-current="@(Model.Release?.Version==v.Version?"page":null)">Phiên bản @v.Version · @v.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</a></li>}</ul></nav>}
-@if(Model.Release is {} release&&Model.Metadata is {} metadata){<p>Phiên bản @release.Version – cập nhật lúc @release.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</p>@if(metadata.WeeklyOriginalAssetId is Guid original){<p><a href="/media/@original?download=true">Tải Word gốc của phiên bản @release.Version</a></p>}<div class="article-body">@Html.Raw(LandPortal.Infrastructure.V05ContentPolicy.Table(metadata))</div>}else{<p>Chưa có lịch được duyệt cho tuần này.</p>}
-<p><a href="/lich-tuan/nguon">Các nội dung lịch tuần đã nhập từ nguồn</a></p>
+<div class="weekly-schedule">
+<h1>Lịch công tác tuần</h1>
+<p>Xem lịch công tác và các tài liệu đã công bố của Cục Quản lý đất đai.</p>
+<form method="get" action="/lich-tuan" class="weekly-filter">
+    <div><label for="weekly-year">Năm</label><input id="weekly-year" name="year" type="number" min="2000" max="2200" value="@Model.Year" required /></div>
+    <div><label for="weekly-week">Tuần</label><input id="weekly-week" name="week" type="number" min="1" max="53" value="@Model.Week" required /></div>
+    <button type="submit" class="button">Xem lịch</button>
+    <a href="/lich-tuan">Tất cả lịch đã công bố</a>
+</form>
+<nav class="weekly-navigation" aria-label="Chọn tuần">
+    @if(ISOWeek.GetYear(prev)>=2000){<a href="?year=@ISOWeek.GetYear(prev)&week=@ISOWeek.GetWeekOfYear(prev)">← Tuần trước</a>}
+    <span>Tuần @Model.Week/@Model.Year · @monday.ToString("dd/MM/yyyy") – @monday.AddDays(6).ToString("dd/MM/yyyy")</span>
+    @if(ISOWeek.GetYear(next)<=2200){<a href="?year=@ISOWeek.GetYear(next)&week=@ISOWeek.GetWeekOfYear(next)">Tuần sau →</a>}
+</nav>
+@if(showWeek)
+{
+    <section class="weekly-selected" aria-labelledby="weekly-selected-title">
+        <h2 id="weekly-selected-title">Lịch công tác tuần @Model.Week/@Model.Year</h2>
+        @if(Model.Versions.Count>0)
+        {
+            <nav aria-label="Các phiên bản đã xuất bản"><p>Phiên bản đã xuất bản:</p><ul>
+            @foreach(var v in Model.Versions){<li><a href="?year=@Model.Year&week=@Model.Week&version=@v.Version" aria-current="@(Model.Release?.Version==v.Version?"page":null)">Phiên bản @v.Version · @v.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</a></li>}
+            </ul></nav>
+        }
+        @if(Model.Release is {} release&&Model.Metadata is {} metadata)
+        {
+            <p>Phiên bản @release.Version – cập nhật lúc @release.PublishedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm, dd/MM/yyyy")</p>
+            @if(metadata.WeeklyOriginalAssetId is Guid original){<p><a href="/media/@original?download=true">Tải Word gốc của phiên bản @release.Version</a></p>}
+            <div class="article-body">@Html.Raw(LandPortal.Infrastructure.V05ContentPolicy.Table(metadata))</div>
+        }
+        @if(Model.WeekArticles.Count>0)
+        {
+            <p>Mở lịch dưới đây để xem nội dung và các tệp PDF, Word đính kèm.</p>
+            <partial name="_ScheduleArticles" model="Model.WeekArticles" />
+        }
+        @if(Model.Release is null&&Model.WeekArticles.Count==0)
+        {
+            <p>Chưa có lịch công tác được công bố cho tuần @Model.Week/@Model.Year. Bạn có thể xem các lịch đã công bố bên dưới.</p>
+        }
+    </section>
+}
+@if(Model.PublishedSchedules.Count>0||!hasSelectedSchedule)
+{
+<section id="weekly-archive" class="weekly-archive" aria-labelledby="weekly-archive-title">
+    <h2 id="weekly-archive-title">@(hasSelectedSchedule?"Các lịch công tác khác":"Lịch công tác đã công bố")</h2>
+    @if(Model.PublishedSchedules.Count>0)
+    {
+        <partial name="_ScheduleArticles" model="Model.PublishedSchedules" />
+        @if(Model.TotalPages>1)
+        {
+            <nav class="weekly-navigation" aria-label="Phân trang lịch công tác">
+                @if(Model.Page>1){<a href="@Url.Action("Index",new{year=Model.ExplicitWeek?(int?)Model.Year:null,week=Model.ExplicitWeek?(int?)Model.Week:null,version=Model.RequestedVersion,page=Model.Page-1})#weekly-archive">← Trang trước</a>}
+                <span>Trang @Model.Page / @Model.TotalPages</span>
+                @if(Model.Page<Model.TotalPages){<a href="@Url.Action("Index",new{year=Model.ExplicitWeek?(int?)Model.Year:null,week=Model.ExplicitWeek?(int?)Model.Week:null,version=Model.RequestedVersion,page=Model.Page+1})#weekly-archive">Trang sau →</a>}
+            </nav>
+        }
+    }
+    else
+    {
+        <p>Chưa có lịch công tác được công bố.</p>
+    }
+</section>
+}
+</div>

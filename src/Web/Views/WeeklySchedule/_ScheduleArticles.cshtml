@@ -1,0 +1,14 @@
+@model IReadOnlyList<LandPortal.Web.Services.WeeklyScheduleArticle>
+<ul class="weekly-articles">
+@foreach(var item in Model)
+{
+    <li>
+        <h3><a href="@item.Url">@item.Title</a></h3>
+        <p class="weekly-article-meta">
+            @if(item.Period is {} period){<a href="/lich-tuan?year=@period.Year&week=@period.Week">Tuần @period.Week/@period.Year</a>}
+            @if(item.DisplayDate is {} date){<span>Ngày đăng: @date.ToString("dd/MM/yyyy")</span>}
+        </p>
+        <a class="weekly-open" href="@item.Url">Xem lịch và tài liệu đính kèm →</a>
+    </li>
+}
+</ul>

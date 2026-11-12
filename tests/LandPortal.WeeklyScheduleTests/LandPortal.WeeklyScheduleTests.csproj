@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Web/Services/WeeklyScheduleArticle.cs" Link="WeeklyScheduleArticle.cs" />
+  </ItemGroup>
+</Project>
