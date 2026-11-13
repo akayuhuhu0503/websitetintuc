@@ -8,6 +8,24 @@ namespace LandPortal.Infrastructure;
 
 public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null, VideoOptions? videoOptions = null)
 {
+    public async Task<IReadOnlyDictionary<string,string>> InspectRequirementsAsync(Guid id)
+    {
+        var content = await db.Contents.AsNoTracking().SingleAsync(x => x.Id == id);
+        var draft = await DraftAsync(id);
+        var revision = draft == null ? await RevisionAsync(id, content.CurrentRevisionId) : null;
+        try
+        {
+            var metadata = draft?.Metadata ?? revision!.Metadata;
+            V05ContentPolicy.Validate(metadata, content.Kind); ValidateDisclosureRequired(metadata);
+            await ValidateRequiredAsync(content, draft?.Title ?? revision!.Title, draft?.BodyHtml ?? revision!.BodyHtml,
+                draft == null ? revision!.PrimaryCategoryId : draft.PrimaryCategoryId, draft?.Assets.Count ?? revision!.Assets.Count,
+                draft?.Summary ?? revision!.Summary, draft?.Author ?? revision!.Author, draft == null ? revision!.CoverAssetId : draft.CoverAssetId,
+                draft != null ? draft.Assets.Where(x => x.Usage == "Attachment").Select(x => x.MediaAssetId).ToArray() : revision!.Assets.Where(x => x.Usage == "Attachment").Select(x => x.MediaAssetId).ToArray());
+            return new Dictionary<string,string>();
+        }
+        catch (EditorialValidationException error) { return error.Errors; }
+        catch (InvalidOperationException error) { return new Dictionary<string,string> { ["Metadata"] = error.Message }; }
+    }
     public Task<WorkflowResult> SaveAsync(Guid? id, DraftInput input, ContentActor actor, byte[]? version, Guid commandId, bool autosave = false)
     {
         var action = autosave ? "Autosave" : "SaveDraft";
@@ -28,7 +46,12 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
                 throw new DbUpdateConcurrencyException("Bản nháp đã đóng hoặc chuyển trạng thái. Mở bản sửa mới; autosave cũ không được thay đổi trạng thái.");
             var draft = await DraftAsync(content.Id);
             if (draft is null) { draft = new ContentDraft { ContentId = content.Id }; db.ContentDrafts.Add(draft); }
+            var previousVideos = draft.Assets.Where(x => x.Usage == "Video").Select(x => x.MediaAssetId).ToArray();
             await ApplyAsync(draft, input, actor, content);
+            // Autosave need not create a revision. Persist removal in the same
+            // transaction so a delayed Ready callback cannot undo the user's edit.
+            foreach (var removedVideo in previousVideos.Except(draft.Assets.Where(x => x.Usage == "Video").Select(x => x.MediaAssetId)))
+                db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = content.Id, Action = VideoDraftAttachmentService.Removed, Detail = removedVideo.ToString("D") });
             content.HasEditorialChanges = true;
             content.ApprovedRevisionId = null; content.ApprovalHash = null; content.SubmittedRevisionId = null;
             if (!autosave) content.CurrentRevisionId = await SnapshotAsync(content, draft, actor);
@@ -37,6 +60,42 @@ public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUp
             return content;
         });
     }
+
+    // Runs under the same content lock, optimistic version and command receipt as
+    // manual edits. Read the draft here: background completion must never replay
+    // an old browser snapshot over newer text, categories or attachments.
+    public Task<WorkflowResult> AttachReadyVideoAsync(Guid id, Guid sessionId, ContentActor actor, byte[] version, bool development, CancellationToken ct = default) =>
+        ExecuteAsync(id, actor, version, sessionId, "AttachReadyVideo", sessionId.ToString("D"), async content =>
+        {
+            var c = Existing(content); Active(c);
+            var rights = new CurrentPermissionService(db);
+            var fresh = await rights.GetAsync(actor.UserId);
+            Require(fresh, Permissions.ManageVideos); Require(fresh, Permissions.ManageMedia); Edit(fresh, c);
+            if (!await rights.CanAccessContentAsync(fresh, id)) throw new UnauthorizedAccessException();
+            if (c.State is not (WorkflowState.Draft or WorkflowState.Rejected)) throw new DbUpdateConcurrencyException("Bản nháp đã đóng; video không tự gắn vào bản đã gửi duyệt.");
+            var session = await db.Set<VideoUploadSession>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == sessionId && x.ContentId == id && x.OwnerUserId == fresh.UserId, ct);
+            if (session is not { State: VideoUploadState.Completed, MediaAssetId: not null }) throw new MediaUploadException("Video chưa hoàn tất tải cho bản nháp này.", 409);
+            var intent = await db.AuditLogs.AsNoTracking().Where(x => x.ContentId == id && x.Actor == fresh.UserId && x.Action == VideoUploadService.EditorAttachRequested && x.Detail == sessionId.ToString("D")).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+            if (intent == null || await db.AuditLogs.AnyAsync(x => x.ContentId == id && x.Id > intent.Id && VideoDraftAttachmentService.DraftBoundaryActions.Contains(x.Action), ct))
+                throw new MediaUploadException("Bản nháp đã đổi luồng xử lý từ khi tải video. Chọn lại video trong bản sửa phù hợp.", 409);
+            if (await db.ContentAssets.AnyAsync(x => x.MediaAssetId == session.MediaAssetId && db.Revisions.Any(r => r.Id == x.RevisionId && r.ContentId == id), ct) ||
+                await db.AuditLogs.AnyAsync(x => x.ContentId == id && x.Action == VideoDraftAttachmentService.Removed && x.Detail == session.MediaAssetId.Value.ToString("D"), ct))
+                throw new DbUpdateConcurrencyException("Video đã được gắn trước đó; không tự gắn lại sau khi gỡ.");
+            var asset = await db.MediaAssets.AsNoTracking().SingleAsync(x => x.Id == session.MediaAssetId, ct);
+            if (videoOptions?.Enabled != true || storage == null || asset.UploadedByUserId != fresh.UserId || !await VideoReadiness.ReadyAsync(db, storage, asset, development, ct, videoOptions))
+                throw new MediaUploadException("Video chưa đạt kiểm định MP4, ảnh đại diện hoặc tính toàn vẹn. Bản nháp được giữ nguyên.", 409);
+            var draft = await DraftAsync(id) ?? throw new InvalidOperationException("Không có bản nháp để gắn video.");
+            if (!draft.Assets.Any(x => x.MediaAssetId == asset.Id))
+            {
+                if (draft.Assets.Count >= 100) throw new MediaUploadException("Bản nháp đã đạt giới hạn tài nguyên.", 409);
+                draft.Assets.Add(new() { ContentId = id, MediaAssetId = asset.Id, Usage = "Video", SortOrder = draft.Assets.Count == 0 ? 0 : draft.Assets.Max(x => x.SortOrder) + 1 });
+            }
+            draft.UpdatedUtc = (clock ?? TimeProvider.System).GetUtcNow(); draft.UpdatedByUserId = fresh.UserId;
+            c.CurrentRevisionId = await SnapshotAsync(c, draft, fresh);
+            c.HasEditorialChanges = true; c.State = WorkflowState.Draft;
+            c.ApprovedRevisionId = null; c.ApprovalHash = null; c.SubmittedRevisionId = null;
+            return c;
+        });
 
     public Task<WorkflowResult> BeginEditAsync(Guid id, ContentActor actor, byte[] version, Guid commandId) =>
         ExecuteAsync(id, actor, version, commandId, "BeginEdit", "", async content =>

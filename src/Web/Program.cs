@@ -145,6 +145,7 @@ builder.Services.AddScoped<InteractionBatchService>();
 builder.Services.AddScoped<OutboxReconciliationService>();
 builder.Services.AddScoped<AccountAdministrationService>();
 builder.Services.AddSingleton(new TemporaryPasswordDelivery(storage.TempRoot,builder.Environment.WebRootPath??Path.Combine(builder.Environment.ContentRootPath,"wwwroot")));
+builder.Services.AddSingleton<CmsTemporaryPasswordDelivery>();
 builder.Services.AddScoped<IAuthorizationHandler, FreshPermissionHandler>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddScoped<EditorialDocumentService>();

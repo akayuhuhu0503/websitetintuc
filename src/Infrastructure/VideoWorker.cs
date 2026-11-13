@@ -5,12 +5,15 @@ using System.Text.Json;
 using LandPortal.Domain;
 using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
-public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoOptions options,IInquiryScanner scanner,VideoProcessor processor,CurrentPermissionService permissions,TimeProvider? clock=null)
+public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoOptions options,IInquiryScanner scanner,VideoProcessor processor,CurrentPermissionService permissions,TimeProvider? clock=null,bool development=false)
 {
     private DateTimeOffset Now=>(clock??TimeProvider.System).GetUtcNow();
+    public Task<int> AttachReadyAsync(Guid? only=null,CancellationToken ct=default) =>
+        new VideoDraftAttachmentService(db,storage,options,permissions,new WorkflowService(db,new HtmlPolicy(),storage:storage,clock:clock,videoOptions:options),development).ProcessReadyAsync(ct,only);
     public async Task<bool> RunOnceAsync(Guid? only=null,CancellationToken ct=default)
     {
         if(!options.Enabled)throw new InvalidOperationException("Video worker requires an enabled, validated environment.");
+        await AttachReadyAsync(only,ct); // Recover a Ready job after a previous host stopped before attachment.
         // A no-AV worker must not consume attempts or relabel legacy quarantined jobs
         // when no scanner is available. Only new explicitly enrolled uploads proceed.
         var onlyManaged=options.ApprovedManagedVideoWithoutAv && !(await scanner.HealthAsync(ct)).Ready;
@@ -96,6 +99,7 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
             db.AuditLogs.Add(new(){Actor="video-worker",Action="video.processing.completed",ContentId=session.ContentId,Detail=JsonSerializer.Serialize(new{AssetId=id,Lease=lease,current.Attempts,Bytes=file.Original.ByteLength,file.Original.Sha256,State=state.ToString(),Policy=noAv?VideoOptions.NoAvValidated:"ScannerRequired",ScanStatus=noAv?"NotScanned":scan?.State.ToString(),current.Error,scan?.Provider,scan?.EngineVersion,scan?.SignatureVersion,scan?.SignatureUpdatedUtc,scan?.OutputSha256,Tools=processor.LastHealth,NativeCpuMs=output?.NativeCpuMilliseconds,Reused=output?.Reused,SourceProbe=output?.OriginalProbe,OutputProbe=output?.Probe,OutputHash=output?.Mp4Hash,PosterHash=output?.PosterHash,LatencyMs=watch.ElapsedMilliseconds,Utc=Now})});
             try{await db.SaveChangesAsync();await tx.CommitAsync();}catch(DbUpdateConcurrencyException){await tx.RollbackAsync();}
         }
+        if(state==VideoState.Ready){db.ChangeTracker.Clear();await AttachReadyAsync(id,ct);}
         return true;
     }
 }

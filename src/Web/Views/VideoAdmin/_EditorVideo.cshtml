@@ -1,0 +1,33 @@
+@model EditorModel
+@inject LandPortal.Infrastructure.VideoOptions VideoOptions
+<section id="editor-video" class="editor-video video-panel" data-content-id="@Model.Id" data-max-bytes="@VideoOptions.MaxFileBytes" data-chunk-bytes="@VideoOptions.ChunkBytes" aria-labelledby="editor-video-heading">
+    <h2 id="editor-video-heading">Video của bài viết</h2>
+    <p>Chọn video ngay tại đây. Hệ thống lưu nháp, tải tệp và xử lý; video đạt kiểm định sẽ tự gắn vào bản nháp này. Gửi duyệt và xuất bản vẫn là thao tác riêng.</p>
+    @if(VideoOptions.Enabled)
+    {
+        <label for="editor-video-file">Tệp MP4, MOV hoặc WebM</label>
+        <input id="editor-video-file" type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" />
+        <p class="scope-note">Tối đa @((VideoOptions.MaxFileBytes/1024d/1024).ToString("N0")) MiB. Có thể dùng tên tiếng Việt, dấu cách và nhiều dấu chấm. Mở lại bài sẽ giữ trạng thái tải; để tiếp tục phần chưa tải, chọn lại đúng tệp trên máy.</p>
+        <div class="video-actions">
+            <button type="button" class="button" data-video-action="start">Tải video lên</button>
+            <button type="button" class="button secondary" data-video-action="pause" disabled>Tạm dừng</button>
+            <button type="button" class="button secondary" data-video-action="resume" disabled>Tiếp tục tải</button>
+            <button type="button" class="button secondary" data-video-action="cancel" disabled>Hủy lần tải</button>
+        </div>
+        <label for="editor-video-progress">Tiến độ tải video</label>
+        <progress id="editor-video-progress" value="0" max="100"></progress>
+        <p data-video-message role="status" aria-live="polite">Chưa chọn tệp video.</p>
+        <p data-video-processing role="status" aria-live="polite"></p>
+        <button type="button" class="button secondary" data-video-action="attach" hidden>Kiểm tra và gắn lại vào nháp</button>
+        <button type="button" class="button secondary" data-video-action="retry" hidden>Thử xử lý lại</button>
+        <div data-video-preview></div>
+        <div data-video-attached></div>
+        <details class="video-upload-history"><summary>Các lần tải của tôi</summary><div data-video-sessions></div></details>
+        @if(VideoOptions.ApprovedManagedVideoWithoutAv)
+        {<p class="scope-note">Tệp mới được kiểm định định dạng, chuyển mã MP4 và tạo ảnh đại diện; chưa quét antivirus theo chính sách CMS đang áp dụng. Không tự công bố video.</p>}
+        @if(Model.Id!=null)
+        {<a class="editor-video-advanced" href="/admin/videos/upload/@Model.Id">Chọn video có sẵn hoặc quản lý phụ đề</a>}
+    }
+    else
+    {<p role="status" class="validation-summary">Tải video chưa được mở ở môi trường này. Bạn vẫn có thể lưu thông tin bản nháp.</p>}
+</section>

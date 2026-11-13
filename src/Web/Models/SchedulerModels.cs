@@ -10,6 +10,8 @@ public sealed class ScheduleForm
     [StringLength(100)] public string? JobVersion { get; set; }
     [Required] public DateTime? DueVietnam { get; set; }
     public bool Direct { get; set; }
+    // Explicit editor intent; the standalone scheduler keeps its existing form.
+    [StringLength(10)] public string? EditorMode { get; set; }
     public string Title { get; set; } = "";
     public bool CanDirect { get; set; }
     public bool CanApproved { get; set; }

@@ -2,14 +2,14 @@
 @{Layout="_AdminLayout";ViewData["Title"]="Tải video từ máy";}
 @section Styles{<link rel="stylesheet" href="~/css/video.css" asp-append-version="true" />}
 <div id="video-upload" data-content-id="@Model.ContentId" data-row-version="@Model.RowVersion" data-max-bytes="@Model.MaxFileBytes" data-chunk-bytes="@Model.ChunkBytes">
-<a href="/admin/edit/@Model.ContentId">← Biên tập thông tin và duyệt bài</a><h1>Tải video từ máy</h1><h2>@Model.Title</h2>
+<a href="/admin/edit/@Model.ContentId">← Trở lại trình biên tập để tải video và tự gắn vào nháp</a><h1>Video có sẵn và phụ đề</h1><h2>@Model.Title</h2>
 <p class="scope-note">Bản gốc luôn giữ riêng tư. Tải đủ tệp chưa có nghĩa sẵn sàng phát. Chỉ xuất bản phiên bản có MP4 và poster đã kiểm định theo chính sách đang áp dụng.</p>
 @if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới sẽ được chuyển mã và kiểm tra SHA256, chưa quét antivirus (NotScanned). Phụ đề vẫn yêu cầu quét riêng.</p>}
-<p>Bộ xử lý: <strong>@AdminLabels.State(Model.Processor)</strong>. Nếu chưa sẵn sàng, tác vụ nền ghi nhận lý do bị chặn.</p>
+<details><summary>Trạng thái xử lý</summary><p>@AdminLabels.State(Model.Processor). Video chưa đủ điều kiện sẽ được giữ lại để kiểm tra.</p></details>
 @Html.AntiForgeryToken()
 <div class="video-panel"><label for="video-file">Chọn tệp MP4, MOV hoặc WebM</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm" /><p>Tối đa @((Model.MaxFileBytes/1024d/1024).ToString("N0")) MiB; mỗi phần tải @(Model.ChunkBytes<1024*1024?(Model.ChunkBytes/1024d).ToString("N0")+" KiB":(Model.ChunkBytes/1024d/1024).ToString("N0")+" MiB"). Sau tải lại trang, chọn lại đúng tệp; hệ thống kiểm tra từng phần tệp đã nhận trước khi tiếp tục.</p>
-<div class="video-actions"><button type="button" class="button" id="video-start">Tạo phiên và tải</button><button type="button" class="button secondary" id="video-pause" disabled>Tạm dừng</button><button type="button" class="button secondary" id="video-resume" disabled>Tiếp tục</button><button type="button" class="button danger" id="video-cancel" disabled>Hủy phiên tải</button></div>
-<label for="video-progress">Byte đã được SQL xác nhận</label><progress id="video-progress" value="0" max="100"></progress><p id="video-status" role="status" aria-live="polite">Chưa tải tệp.</p><p id="video-job" role="status" aria-live="polite"></p>
+<div class="video-actions"><button type="button" class="button" id="video-start">Tải video</button><button type="button" class="button secondary" id="video-pause" disabled>Tạm dừng</button><button type="button" class="button secondary" id="video-resume" disabled>Tiếp tục</button><button type="button" class="button danger" id="video-cancel" disabled>Hủy lần tải</button></div>
+<label for="video-progress">Tiến độ tải đã xác nhận</label><progress id="video-progress" value="0" max="100"></progress><p id="video-status" role="status" aria-live="polite">Chưa tải tệp.</p><p id="video-job" role="status" aria-live="polite"></p>
 <button type="button" class="button secondary" id="video-select" hidden>Gắn tệp này vào phiên bản nháp</button><button type="button" class="button secondary" id="video-retry" hidden>Đưa lại vào hàng đợi (tối đa 3 lần)</button>
 <button type="button" class="button danger" id="video-cancel-job" hidden>Hủy xử lý tệp đã tải</button><div id="video-preview"></div>
 </div>

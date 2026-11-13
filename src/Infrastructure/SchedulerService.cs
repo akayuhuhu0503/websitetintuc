@@ -43,7 +43,7 @@ public sealed class SchedulerService(PortalDbContext db, WorkflowService workflo
     public static DateTime ToVietnam(DateTimeOffset utc) => TimeZoneInfo.ConvertTime(utc, VietnamTimeZone).DateTime;
 
     public async Task<PublicationJob> ScheduleAsync(Guid contentId, Guid revisionId, DateTimeOffset dueUtc, bool direct,
-        ContentActor actor, byte[] contentVersion, Guid? replaceJobId = null, byte[]? replaceVersion = null)
+        ContentActor actor, byte[] contentVersion, Guid? replaceJobId = null, byte[]? replaceVersion = null, bool acknowledgeIdentical = false)
     {
         Require(actor, Permissions.Schedule);
         var now = time.GetUtcNow(); dueUtc = dueUtc.ToUniversalTime();
@@ -72,6 +72,13 @@ public sealed class SchedulerService(PortalDbContext db, WorkflowService workflo
             else if (content.State is not (WorkflowState.Draft or WorkflowState.Rejected or WorkflowState.PendingReview or WorkflowState.Approved))
                 throw new InvalidOperationException("Mở bản sửa và lưu phiên bản trước khi hẹn giờ.");
             var active = await db.PublicationJobs.SingleOrDefaultAsync(x => x.ContentId == contentId && x.IsActive);
+            if (acknowledgeIdentical && replaceJobId == null && replaceVersion == null && active != null &&
+                active.RevisionId == revisionId && active.RevisionHash == revision.ContentHash && active.DueUtc == dueUtc &&
+                active.Direct == direct && active.RequestedByUserId == currentActor.UserId &&
+                active.ReviewerUserId == reviewer && active.ApprovalHash == (direct ? null : content.ApprovalHash))
+            {
+                await tx.CommitAsync(); return active;
+            }
             var generation = active == null ? 1 : checked(active.Generation + 1);
             if (active != null)
             {

@@ -2,7 +2,18 @@
 @{ Layout = "_AdminLayout"; ViewData["Title"] = "Quản trị tài khoản"; }
 <p><a href="/admin/users">← Danh sách tài khoản</a></p><h1>@Model.UserName</h1><p>@(Model.Disabled ? "Tài khoản đã vô hiệu hóa." : "Tài khoản đang hoạt động.") @(Model.MustChangePassword ? "Phải đổi mật khẩu trước khi quản trị." : "")</p>
 <div asp-validation-summary="All" class="validation-summary" role="alert"></div>
-@if(TempData["CredentialFile"] is string credentialFile){<section class="account-card" role="status"><h2>Bàn giao mật khẩu tạm</h2><p>Mật khẩu chỉ có trong tệp private trên máy chủ: <code>@credentialFile</code>. Tệp chỉ cho tài khoản Windows chạy ứng dụng và SYSTEM đọc. Người vận hành có thẩm quyền bàn giao qua kênh an toàn; không đưa tệp vào Git, log, email từ website hoặc thư mục công khai.</p></section>}
+@if(Model.CredentialDeliveryId is Guid deliveryId){
+<section class="account-card credential-handoff"><h2>Nhận mật khẩu tạm một lần</h2>
+<p>Phiên bàn giao có hiệu lực 10 phút sau khi tạo hoặc đặt lại mật khẩu. Xác thực bằng mật khẩu hiện tại của <strong>chính bạn</strong> để xem một lần qua HTTPS. Không cần mở tệp trên máy chủ.</p>
+<p class="form-help">Nhận mật khẩu trước khi đổi nhóm quyền hoặc thu hồi phiên của tài khoản này. Thay đổi tài khoản làm phiên bàn giao hết hiệu lực. Nếu đã hết hạn hoặc đã xem, chỉ có thể tạo mật khẩu tạm mới; không thể đọc lại mật khẩu cũ.</p>
+@if(Model.SecureCredentialTransport&&Model.CredentialCaptcha is { } challenge){
+<form method="post" action="/admin/users/@Uri.EscapeDataString(Model.Id)/temporary-credential" autocomplete="off">@Html.AntiForgeryToken()
+<input type="hidden" name="DeliveryId" value="@deliveryId" /><input type="hidden" name="CaptchaId" value="@challenge.Id" />
+<div class="form-field"><label for="credential-current-password">Mật khẩu hiện tại của bạn <span aria-hidden="true">*</span></label><input id="credential-current-password" name="CurrentPassword" type="password" required maxlength="256" autocomplete="current-password" /></div>
+<div class="form-field"><label for="credential-captcha">@challenge.Question <span aria-hidden="true">*</span></label><input id="credential-captcha" name="CaptchaAnswer" inputmode="numeric" required maxlength="3" autocomplete="off" /></div>
+<button type="submit" class="button">Xác thực và xem mật khẩu một lần</button></form>
+}else if(!Model.SecureCredentialTransport){<p class="validation-summary">Mở CMS bằng HTTPS để bàn giao mật khẩu an toàn. Không nhập mật khẩu trên kết nối HTTP.</p>}
+</section>}
 @if (!Model.CanChangeSensitive) { <p class="validation-summary">Tài khoản có quyền nhạy cảm. Thay đổi cần quyền ủy quyền đặc quyền và quyền nằm trong phạm vi của người thực hiện.</p> }
 <section class="account-card"><h2>Thông tin tài khoản</h2><form method="post" action="/admin/users/@Uri.EscapeDataString(Model.Id)/update">@Html.AntiForgeryToken()<input type="hidden" name="ConcurrencyStamp" value="@Model.ConcurrencyStamp" />
 <div class="form-field"><label asp-for="Email"></label><input asp-for="Email" maxlength="256" /></div><div class="form-field"><label asp-for="DisplayName"></label><input asp-for="DisplayName" maxlength="200" /></div><button class="button" type="submit">Lưu thông tin</button></form></section>

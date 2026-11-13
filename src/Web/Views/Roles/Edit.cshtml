@@ -1,7 +1,21 @@
 @model RoleEditModel
 @{ Layout = "_AdminLayout"; ViewData["Title"] = Model.Id is null ? "Tạo nhóm quyền" : "Chỉnh sửa nhóm quyền"; }
 <p><a href="/admin/roles">← Danh sách nhóm</a></p><h1>@ViewData["Title"]</h1><p>Chỉ cấp/thu hồi quyền chính mình có, trong danh sách cho phép. Quyền nhạy cảm cần <strong>@AdminLabels.Permission(LandPortal.Application.Permissions.GrantPrivileged)</strong>. Thay đổi ảnh hưởng mọi thành viên và thu hồi phiên cũ.</p>@if (Model.IsOwnRole) { <p class="validation-summary">Bạn đang thuộc nhóm này; không được sửa tập quyền của nhóm mình.</p> }
-<form method="post" action="/admin/roles/save" class="account-card">@Html.AntiForgeryToken()<input asp-for="Id" type="hidden" /><input asp-for="ConcurrencyStamp" type="hidden" /><div asp-validation-summary="All" class="validation-summary" role="alert"></div><div class="form-field"><label asp-for="Name"></label><input asp-for="Name" maxlength="100" /></div>
-<fieldset><legend>Danh sách quyền</legend>@foreach (var permission in Model.Catalog) { <label class="account-checkbox"><input type="checkbox" name="Permissions" value="@permission.Key" checked="@Model.Permissions.Contains(permission.Key)" disabled="@(!permission.CanDelegate)" /> @AdminLabels.Permission(permission.Key) @(permission.Sensitive ? "— nhạy cảm" : "")</label>@if (!permission.CanDelegate && Model.Permissions.Contains(permission.Key)) { <input type="hidden" name="Permissions" value="@permission.Key" /> } }</fieldset><button type="submit" class="button">Lưu nhóm quyền</button></form>
+<form method="post" action="/admin/roles/save" class="account-card" data-role-editor>@Html.AntiForgeryToken()<input asp-for="Id" type="hidden" /><input asp-for="ConcurrencyStamp" type="hidden" /><div asp-validation-summary="All" class="validation-summary" role="alert"></div><div class="form-field"><label asp-for="Name"></label><input asp-for="Name" maxlength="100" /></div>
+<h2>Chọn bộ quyền gợi ý</h2><p>Các nút dưới đây chỉ chọn thêm quyền trên biểu mẫu, chưa lưu và không thay đổi quyền đang có. Kiểm tra danh sách rồi bấm <strong>Lưu nhóm quyền</strong>. Phạm vi chuyên mục được giao riêng tại từng tài khoản.</p>
+<div class="role-presets">
+@foreach(var suggestion in RolePermissionSuggestions.All){
+var allowed=!Model.IsOwnRole&&suggestion.Permissions.All(key=>Model.Catalog.Any(x=>x.Key==key&&x.CanDelegate));
+<section><h3>@suggestion.Name</h3><p>@suggestion.Description</p>
+<button type="button" class="button secondary" data-role-preset="@string.Join(' ',suggestion.Permissions)" disabled="@(!allowed)">Chọn thêm bộ quyền</button>
+@if(!allowed){<small>Bạn chưa có đủ quyền ủy quyền bộ này hoặc đang thuộc nhóm.</small>}</section>
+}</div><p data-role-selection-status role="status"></p>
+<details class="role-advanced" open><summary>Quyền chi tiết · kiểm tra trước khi lưu</summary>
+@foreach(var group in Model.Catalog.GroupBy(x=>RolePermissionSuggestions.Group(x.Key))){
+<fieldset><legend>@group.Key</legend>
+@foreach (var permission in group) { <label class="account-checkbox"><input type="checkbox" name="Permissions" value="@permission.Key" checked="@Model.Permissions.Contains(permission.Key)" disabled="@(!permission.CanDelegate)" /> @AdminLabels.Permission(permission.Key) @(permission.Sensitive ? "— nhạy cảm" : "")</label>@if (!permission.CanDelegate && Model.Permissions.Contains(permission.Key)) { <input type="hidden" name="Permissions" value="@permission.Key" /> } }
+</fieldset>}
+</details><button type="submit" class="button">Lưu nhóm quyền</button></form>
 
 @section Styles { <link rel="stylesheet" href="~/css/accounts.css" asp-append-version="true" /> }
+@section Scripts { <script src="~/js/account-roles.js" asp-append-version="true" defer></script> }

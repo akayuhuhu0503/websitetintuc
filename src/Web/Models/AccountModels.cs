@@ -19,6 +19,10 @@ public sealed class CreateAccountModel
 }
 public sealed class AccountDetailModel
 {
+    public Guid? CredentialDeliveryId {get;set;}
+    public DateTimeOffset? CredentialExpiresUtc {get;set;}
+    public bool SecureCredentialTransport {get;set;}
+    public LandPortal.Infrastructure.PublicCaptchaPrompt? CredentialCaptcha {get;set;}
     public bool UnrestrictedCategories { get; set; }
     public IReadOnlyList<EditorCategory> Categories { get; set; }=[];
     public IReadOnlySet<int> CategoryIds { get; set; }=new HashSet<int>();
@@ -35,6 +39,14 @@ public sealed class AccountDetailModel
     public List<string> RoleIds { get; set; } = [];
     public IReadOnlyList<string> EffectivePermissions { get; set; } = [];
 }
+public sealed class RevealCredentialModel
+{
+    public Guid DeliveryId {get;set;}
+    public Guid CaptchaId {get;set;}
+    [Required,StringLength(256),DataType(DataType.Password)] public string CurrentPassword {get;set;}="";
+    [Required,StringLength(3)] public string CaptchaAnswer {get;set;}="";
+}
+public sealed record CredentialOnceModel(string UserId,string UserName,string TemporaryPassword);
 public sealed record RoleChoice(string Id, string Name, bool Sensitive);
 public sealed record RoleListRow(string Id, string Name, int MemberCount, IReadOnlyList<string> Permissions);
 public sealed class RoleListModel

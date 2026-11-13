@@ -16,11 +16,11 @@
       text('video-job',`Đang xác minh tệp: ${Math.min(file.size,(index+1)*chunkBytes).toLocaleString('vi-VN')} / ${file.size.toLocaleString('vi-VN')} byte; chưa xác nhận tải lên.`);
     }return digest(new Blob([receipts.join('\n')]));
   };
-  const labels={Uploading:'Đang tải',Completed:'Đã tải xong',Cancelled:'Đã hủy',Expired:'Hết hạn',Pending:'Chờ quét',Scanning:'Đang quét',Processing:'Đang xử lý',Ready:'Sẵn sàng',Infected:'Cách ly do phát hiện nguy cơ',ScanFailed:'Quét chưa thành công',Failed:'Xử lý chưa thành công',Blocked:'Bị chặn'};
-  const label=v=>window.landPortalStateLabel ? window.landPortalStateLabel(v) : (labels[v] || 'Cần kiểm tra trạng thái');
+  const labels={Uploading:'Đang tải',Completed:'Đã tải xong',Cancelled:'Đã hủy',Expired:'Hết hạn',Pending:'Đang chờ xử lý',Scanning:'Đang kiểm tra tệp',Processing:'Đang chuyển mã và tạo ảnh đại diện',Ready:'Đã xử lý',Infected:'Cách ly do phát hiện nguy cơ',ScanFailed:'Chưa hoàn tất kiểm tra an toàn',Failed:'Xử lý chưa thành công',Blocked:'Chưa đủ điều kiện xử lý'};
+  const label=v=>labels[v] || (window.landPortalStateLabel ? window.landPortalStateLabel(v) : 'Cần kiểm tra trạng thái');
   const show=state=>{
     session=state;el('video-progress').value=state.expectedBytes?state.receivedBytes/state.expectedBytes*100:0;
-    text('video-status',`${state.receivedBytes.toLocaleString('vi-VN')} / ${state.expectedBytes.toLocaleString('vi-VN')} byte đã xác nhận (${Math.floor(state.receivedBytes/state.expectedBytes*100)}%). Phiên: ${label(state.state)}.`);
+    text('video-status',`Đã tải ${Math.floor(state.receivedBytes/state.expectedBytes*100)}%. ${label(state.state)}.`);
     text('video-job',state.job?`Tệp: ${label(state.job.state)}. ${state.job.error?'Cần kiểm tra nhật ký xử lý.':''} · Lần thử ${state.job.attempts}/3`:'Chưa có kết luận quét/xử lý.');
     el('video-cancel-job').hidden=!state.mediaAssetId||['Ready','Infected','Cancelled'].includes(state.job?.state);
     const preview=el('video-preview');preview.replaceChildren();if(state.job?.state==='Ready'){const v=document.createElement('video');v.controls=true;v.playsInline=true;v.preload='metadata';v.className='article-video';v.setAttribute('aria-label','Xem trước video trong bản nháp');v.src=`/admin/videos/media/${state.mediaAssetId}/play?contentId=${content}`;v.poster=`/admin/videos/media/${state.mediaAssetId}/poster?contentId=${content}`;preview.append(v);}
@@ -47,7 +47,7 @@
         abort=new AbortController();await api(`/admin/videos/sessions/${session.id}/chunks/${index}`,'PUT',part,{'Content-Type':'application/octet-stream','X-Chunk-SHA256':hash},abort.signal);await status();
       }
       if(!paused&&session.receivedBytes===session.expectedBytes){await api(`/admin/videos/sessions/${session.id}/complete`,'POST');await status();await sessions();}
-    }catch(e){paused=true;if(e.name!=='AbortError')throw e;await status();text('video-job','Đã tạm dừng. Byte SQL xác nhận được giữ; tiếp tục sẽ đối chiếu lại.');}
+    }catch(e){paused=true;if(e.name!=='AbortError')throw e;await status();text('video-job','Đã tạm dừng. Phần tệp đã nhận được giữ; tiếp tục sẽ đối chiếu lại.');}
     finally{busy=false;abort=null;el('video-pause').disabled=true;el('video-start').disabled=false;el('video-resume').disabled=!session||session.state!=='Uploading';}
   };
   const guard=async f=>{try{await f();}catch(e){text('video-job',e.message||'Có lỗi thật; chưa xác nhận thao tác.');}};

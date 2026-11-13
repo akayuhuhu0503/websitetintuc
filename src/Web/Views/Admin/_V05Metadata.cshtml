@@ -1,7 +1,7 @@
 @model EditorModel
 @using LandPortal.Domain
 @if(Model.Kind==ContentKind.Article){
-<fieldset disabled="@(!Model.CanSave)"><legend>Công khai thông tin</legend>
+<details class="editor-advanced" open="@(Model.Metadata.DisclosureGroupId!=null)"><summary>Công khai thông tin theo mẫu chuyên biệt</summary><fieldset disabled="@(!Model.CanSave)"><legend>Nhóm thông tin</legend>
 <p>Chọn nhóm nếu đây là bài công khai thông tin. Bài tin thông thường không cần điền các trường bên dưới. Bài công khai thông tin phải được gửi duyệt.</p>
 <label asp-for="Metadata.DisclosureGroupId">Nhóm thông tin</label><select asp-for="Metadata.DisclosureGroupId"><option value="">Bài tin thông thường</option>@foreach(var group in LandPortal.Infrastructure.V05ContentPolicy.Groups){<option value="@group.Key">@group.Value</option>}</select>
 <div id="disclosure-fields" hidden="@(Model.Metadata.DisclosureGroupId==null)">
@@ -11,18 +11,18 @@
 <label asp-for="Metadata.PublicationSource">Nguồn phát hành chính thức *</label><input asp-for="Metadata.PublicationSource" maxlength="1000"/>
 <label asp-for="Metadata.LegalBasisReference">Căn cứ pháp lý/phát hành *</label><textarea asp-for="Metadata.LegalBasisReference" maxlength="2000"></textarea>
 <label asp-for="Metadata.PublicationReviewEvidence">Xác nhận thẩm quyền và đã rà soát thông tin cá nhân (nội bộ) *</label><textarea asp-for="Metadata.PublicationReviewEvidence" maxlength="2000"></textarea>
-<p>Tài liệu phải được quét an toàn trước khi phát hành. Chỉ công khai thông tin cá nhân khi đã được phép.</p>
-</div></fieldset>}
+<p>Tài liệu phải đạt kiểm định theo chính sách hiện hành trước khi phát hành. Chỉ công khai thông tin cá nhân khi đã được phép.</p>
+</div></fieldset></details>}
 @if(Model.Metadata.WeeklyYear!=null){
-<fieldset disabled="@(!Model.CanSave)"><legend>Lịch công tác tuần (ISO, ngày theo Việt Nam)</legend>
+<fieldset disabled="@(!Model.CanSave)"><legend>Lịch công tác tuần</legend><label for="weekly-date">Chọn một ngày trong tuần cần lập lịch</label><input id="weekly-date" type="date"/><p id="weekly-range" class="form-help" role="status"></p>
 <label asp-for="Metadata.WeeklyYear">Năm ISO</label><input asp-for="Metadata.WeeklyYear" type="number" min="2000" max="2200"/>
 <label asp-for="Metadata.WeeklyWeek">Tuần ISO</label><input asp-for="Metadata.WeeklyWeek" type="number" min="1" max="53"/>
 <input asp-for="Metadata.WeeklyOriginalAssetId" type="hidden" />
-@if(Model.Metadata.WeeklyOriginalAssetId != null){<p>Word gốc gắn với phiên bản sau khi lưu. <a href="/admin/documents/file/@Model.Metadata.WeeklyOriginalAssetId">Tải riêng tư để rà soát</a></p><label asp-for="Metadata.WeeklyOriginalReviewEvidence">Xác nhận đã rà soát thông tin ẩn và nhận xét và được phép công khai Word gốc (nội bộ)</label><textarea asp-for="Metadata.WeeklyOriginalReviewEvidence" maxlength="2000"></textarea>}
+<div id="weekly-original-review" hidden="@(Model.Metadata.WeeklyOriginalAssetId == null)"><p>Word gốc gắn với phiên bản sau khi lưu. <a id="weekly-original-link" href="/admin/documents/file/@Model.Metadata.WeeklyOriginalAssetId">Tải riêng tư để rà soát</a></p><label asp-for="Metadata.WeeklyOriginalReviewEvidence">Xác nhận đã rà soát thông tin ẩn, nhận xét và được phép công khai Word gốc (nội bộ)</label><textarea asp-for="Metadata.WeeklyOriginalReviewEvidence" maxlength="2000"></textarea></div>
 <label asp-for="Metadata.WeeklyChangeNote">Ghi chú thay đổi</label><input asp-for="Metadata.WeeklyChangeNote" maxlength="1000"/>
 <p>Điền từng dòng lịch và đối chiếu tài liệu gốc. Dòng để trống được bỏ qua. Lịch chỉ hiển thị công khai sau khi xuất bản; các phiên bản cũ được giữ trong lịch sử.</p>
 @for(var i=0;i<Model.ScheduleRows.Count;i++){
-<details open="@(i<2||Model.ScheduleRows[i].Date!=null)"><summary>Dòng @(i+1)</summary>
+<details data-weekly-row hidden="@(i>=2 && Model.ScheduleRows[i].Date==null && new[]{Model.ScheduleRows[i].Content,Model.ScheduleRows[i].Period,Model.ScheduleRows[i].Time,Model.ScheduleRows[i].Chair,Model.ScheduleRows[i].Attendees,Model.ScheduleRows[i].Location,Model.ScheduleRows[i].Note}.All(string.IsNullOrWhiteSpace))" open="@(i<2||Model.ScheduleRows[i].Date!=null)"><summary>Buổi @(i+1)</summary><button type="button" class="button secondary" data-copy-weekly>Sao chép buổi này</button>
 <label asp-for="ScheduleRows[i].Date">Ngày</label><input asp-for="ScheduleRows[i].Date" type="date"/>
 <label asp-for="ScheduleRows[i].Period">Buổi</label><select asp-for="ScheduleRows[i].Period"><option value="">Chọn buổi</option><option>Sáng</option><option>Chiều</option><option>Cả ngày</option><option>Chưa xác định</option></select>
 <label asp-for="ScheduleRows[i].Time">Thời gian (giữ ký hiệu nguyên bản)</label><textarea asp-for="ScheduleRows[i].Time" rows="2" maxlength="2000"></textarea>
@@ -31,5 +31,5 @@
 <label asp-for="ScheduleRows[i].Attendees">Thành phần ghi rõ trong nguồn</label><textarea asp-for="ScheduleRows[i].Attendees" rows="2" maxlength="2000"></textarea>
 <label asp-for="ScheduleRows[i].Location">Địa điểm</label><textarea asp-for="ScheduleRows[i].Location" rows="2" maxlength="2000"></textarea>
 <label asp-for="ScheduleRows[i].Note">Ghi chú</label><textarea asp-for="ScheduleRows[i].Note" rows="2" maxlength="2000"></textarea>
-</details>}
+</details>}<button type="button" class="button secondary" data-add-weekly>Thêm buổi</button><p class="form-help">Đính kèm Word ở trên, rồi chọn “Nhập lịch từ Word”. Kiểm tra các dòng trước khi lưu.</p>
 </fieldset>}

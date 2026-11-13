@@ -11,7 +11,8 @@ namespace LandPortal.Infrastructure;
 // Every identity mutation uses the same database transaction/application lock.
 // The final administrator check therefore also covers requests changing shared roles.
 public sealed class AccountAdministrationService(PortalDbContext db, UserManager<PortalUser> users,
-    RoleManager<IdentityRole> roles, CurrentPermissionService current, TemporaryPasswordDelivery? delivery = null)
+    RoleManager<IdentityRole> roles, CurrentPermissionService current, TemporaryPasswordDelivery? delivery = null,
+    CmsTemporaryPasswordDelivery? cmsDelivery = null)
 {
     public static readonly IReadOnlySet<string> PrivilegedPermissions = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -25,7 +26,7 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
         permission.StartsWith("site.", StringComparison.Ordinal) || permission.StartsWith("schedule.", StringComparison.Ordinal) ||
         permission == Permissions.PublishDirect || permission == Permissions.PublishApproved || permission == Permissions.Schedule;
 
-    public async Task<TemporaryPasswordReceipt> CreateUserAsync(string actorId, string userName, string? email, string displayName)
+    public async Task<TemporaryPasswordReceipt> CreateUserAsync(string actorId, string userName, string? email, string displayName, bool cmsHandoff = false)
     {
         return await Mutate(actorId, Permissions.ManageUsers, async actor =>
         {
@@ -35,26 +36,45 @@ public sealed class AccountAdministrationService(PortalDbContext db, UserManager
             var user = new PortalUser { UserName = userName.Trim(), Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(), DisplayName = displayName.Trim(),
                 EmailConfirmed = !string.IsNullOrWhiteSpace(email), LockoutEnabled = true, MustChangePassword = true };
             var temporaryPassword=PortalIdentityPolicy.NewTemporaryPassword();
-            var file=(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa tạo tài khoản.")).Write(user.Id,user.UserName!,temporaryPassword);
+            if(cmsHandoff&&cmsDelivery is null)throw new InvalidOperationException("Chưa cấu hình bàn giao mật khẩu một lần trong CMS; chưa tạo tài khoản.");
+            var file=cmsHandoff?"":(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa tạo tài khoản.")).Write(user.Id,user.UserName!,temporaryPassword);
             Check(await users.CreateAsync(user, temporaryPassword));
+            var handoff=cmsHandoff?cmsDelivery!.Write(actorId,user.Id,user.UserName!,temporaryPassword,user.SecurityStamp!):null;
             Audit(actorId, "AccountCreated", new { user.Id, user.UserName, user.Email, user.DisplayName, user.MustChangePassword });
-            return new TemporaryPasswordReceipt(user.Id,file);
+            return new TemporaryPasswordReceipt(user.Id,file,handoff);
         });
     }
 
-    public Task<TemporaryPasswordReceipt> ResetPasswordAsync(string actorId,string targetId,string concurrencyStamp) =>
+    public Task<TemporaryPasswordReceipt> ResetPasswordAsync(string actorId,string targetId,string concurrencyStamp,bool cmsHandoff=false) =>
         Mutate(actorId,Permissions.ManageUsers,async actor =>
         {
             var user=await User(targetId,concurrencyStamp);await ProtectTarget(actor,user);
             if(user.Id==actorId)throw new UnauthorizedAccessException("Dùng chức năng đổi mật khẩu của bạn; không tự reset mật khẩu quản trị.");
             if(user.IsDisabled)throw new InvalidOperationException("Tài khoản đang vô hiệu hóa; chưa đặt lại mật khẩu.");
             var password=PortalIdentityPolicy.NewTemporaryPassword();
-            var file=(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa reset tài khoản.")).Write(user.Id,user.UserName!,password);
+            if(cmsHandoff&&cmsDelivery is null)throw new InvalidOperationException("Chưa cấu hình bàn giao mật khẩu một lần trong CMS; chưa reset tài khoản.");
+            var file=cmsHandoff?"":(delivery??throw new InvalidOperationException("Chưa cấu hình kênh bàn giao mật khẩu private; chưa reset tài khoản.")).Write(user.Id,user.UserName!,password);
             var token=await users.GeneratePasswordResetTokenAsync(user);
             Check(await users.ResetPasswordAsync(user,token,password));
             user.MustChangePassword=true;Check(await users.UpdateAsync(user));
+            var handoff=cmsHandoff?cmsDelivery!.Write(actorId,user.Id,user.UserName!,password,user.SecurityStamp!):null;
             Audit(actorId,"AccountPasswordReset",new {user.Id,mustChangePassword=true,sessionsRevoked=true});
-            return new TemporaryPasswordReceipt(user.Id,file);
+            return new TemporaryPasswordReceipt(user.Id,file,handoff);
+        });
+
+    // Recheck current delegation and target state while holding the existing
+    // identity administration transaction/lock. Reauthentication is mandatory at
+    // the HTTPS controller before this single-use delivery action is called.
+    public Task<CmsCredentialDisplay> RevealTemporaryPasswordAsync(string actorId,string targetId,Guid deliveryId,string authenticatedActorStamp) =>
+        Mutate(actorId,Permissions.ManageUsers,async actor=>
+        {
+            if(!await db.Users.AsNoTracking().AnyAsync(x=>x.Id==actorId&&x.SecurityStamp==authenticatedActorStamp))throw new UnauthorizedAccessException();
+            var target=await db.Users.SingleOrDefaultAsync(x=>x.Id==targetId)??throw new UnauthorizedAccessException();
+            await ProtectTarget(actor,target);
+            if(target.Id==actorId||target.IsDisabled||!target.MustChangePassword||string.IsNullOrWhiteSpace(target.SecurityStamp))throw new UnauthorizedAccessException();
+            var value=(cmsDelivery??throw new InvalidOperationException("Bàn giao một lần chưa sẵn sàng.")).Consume(deliveryId,actorId,targetId,target.SecurityStamp);
+            Audit(actorId,"AccountTemporaryCredentialDelivered",new{target.Id,deliveryId,oneTime=true});
+            return value;
         });
 
     public async Task UpdateProfileAsync(string actorId, string targetId, string concurrencyStamp, string? email, string displayName)

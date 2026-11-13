@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 [Authorize(Policy = "EditorAccess")]
-public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser> signIn, WorkflowService workflow, HtmlPolicy htmlPolicy, CurrentPermissionService permissions, PublicCaptchaService captcha, StorageOptions storage, IWebHostEnvironment environment, MediaUploadOptions mediaOptions) : Controller
+public sealed partial class AdminController(PortalDbContext db, SignInManager<PortalUser> signIn, WorkflowService workflow, HtmlPolicy htmlPolicy, CurrentPermissionService permissions, PublicCaptchaService captcha, StorageOptions storage, IWebHostEnvironment environment, MediaUploadOptions mediaOptions) : Controller
 {
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException();
     private Task<ContentActor> Actor() => permissions.GetAsync(UserId);
@@ -87,7 +87,6 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         var actor = await Actor();
         var pendingCount = actor.Has(Permissions.Review) ? await PendingReviewQuery.CountAsync(db, permissions, actor) : (int?)null;
         var contents = ReadScope(actor);
-        if(status == nameof(WorkflowState.PendingReview)) contents = PendingReviewQuery.Filter(contents, db);
         if (!string.IsNullOrWhiteSpace(kind)) { if (!Enum.TryParse<ContentKind>(kind, out var k) || !Enum.IsDefined(k)) return BadRequest(); contents = contents.Where(x => x.Kind == k); }
         var rows = from c in contents
                    join revision in db.Revisions.AsNoTracking() on c.CurrentRevisionId equals (Guid?)revision.Id into revisions
@@ -96,9 +95,29 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
                    from draft in drafts.DefaultIfEmpty()
                    select new AdminQueryRow { Id = c.Id, Title = draft == null ? (revision == null ? "(Bản nháp chưa đặt tiêu đề)" : revision.Title) : draft.Title, CategoryId = draft == null ? (revision == null ? null : revision.PrimaryCategoryId) : draft.PrimaryCategoryId, OwnerId = c.OwnerUserId, State = c.State, IsPublic = c.IsPublic, IsTrashed = c.IsTrashed, UpdatedUtc = draft == null ? (revision == null ? c.CreatedUtc : revision.CreatedUtc) : draft.UpdatedUtc };
         if (!string.IsNullOrWhiteSpace(q)) { var title = q.Trim(); rows = rows.Where(x => EF.Functions.Collate(x.Title, "Vietnamese_100_CI_AI").Contains(title)); }
-        if (!string.IsNullOrWhiteSpace(status)) { if (!Enum.TryParse<WorkflowState>(status, out var state) || !Enum.IsDefined(state)) return BadRequest(); rows = rows.Where(x => x.State == state); }
         if (categoryId is not null) rows = rows.Where(x => x.CategoryId == categoryId || db.DraftCategories.Any(c => c.ContentId == x.Id && c.CategoryId == categoryId));
         if (!string.IsNullOrWhiteSpace(owner)) rows = rows.Where(x => x.OwnerId == owner);
+        // Counts share the exact permission and search scope. Public state is
+        // independent of a newer draft; trash is excluded except in its own tab.
+        var groups = await rows.GroupBy(x => new { x.State, x.IsPublic, x.IsTrashed }).Select(g => new { g.Key.State, g.Key.IsPublic, g.Key.IsTrashed, Count = g.Count() }).ToListAsync();
+        var eligibleReview = PendingReviewQuery.Filter(contents, db).Select(x => x.Id);
+        var scheduled = db.PublicationJobs.Where(x => x.IsActive).Select(x => x.ContentId);
+        var counts = new Dictionary<string, int> {
+            [""] = groups.Where(x => !x.IsTrashed).Sum(x => x.Count),
+            ["Draft"] = groups.Where(x => !x.IsTrashed && x.State == WorkflowState.Draft).Sum(x => x.Count),
+            ["PendingReview"] = await rows.CountAsync(x => !x.IsTrashed && eligibleReview.Contains(x.Id)),
+            ["Scheduled"] = await rows.CountAsync(x => !x.IsTrashed && scheduled.Contains(x.Id)),
+            ["Published"] = groups.Where(x => !x.IsTrashed && x.IsPublic).Sum(x => x.Count),
+            ["Archived"] = groups.Where(x => x.IsTrashed).Sum(x => x.Count)
+        };
+        if (status == "Archived") rows = rows.Where(x => x.IsTrashed);
+        else {
+            rows = rows.Where(x => !x.IsTrashed);
+            if (status == "Scheduled") rows = rows.Where(x => scheduled.Contains(x.Id));
+            else if (status == "Published") rows = rows.Where(x => x.IsPublic);
+            else if (status == "PendingReview") rows = rows.Where(x => eligibleReview.Contains(x.Id));
+            else if (!string.IsNullOrWhiteSpace(status)) { if (!Enum.TryParse<WorkflowState>(status, out var state) || !Enum.IsDefined(state)) return BadRequest(); rows = rows.Where(x => x.State == state); }
+        }
         page = Math.Clamp(page, 1, 10000);
         var total = await rows.CountAsync();
         // Sort/page identifiers and ordering keys only. Materialize titles after
@@ -106,9 +125,26 @@ public sealed class AdminController(PortalDbContext db, SignInManager<PortalUser
         var ids = await rows.OrderByDescending(x => x.UpdatedUtc).ThenBy(x => x.Id).Skip((page - 1) * 15).Take(15).Select(x=>x.Id).ToArrayAsync();
         var byId = await rows.Where(x=>ids.Contains(x.Id)).ToDictionaryAsync(x=>x.Id);
         var items = ids.Where(byId.ContainsKey).Select(id=>byId[id]).ToList();
+        var weeks = new Dictionary<Guid, AdminWeeklyInfo>();
+        if (kind == nameof(ContentKind.StaticPage) && categoryId == 76 && ids.Length != 0)
+        {
+            // Read only the authorized page. The public version comes from the
+            // actual release, never from a count of mutable draft saves.
+            var weeklyRows = await (from c in db.Contents.AsNoTracking()
+                where ids.Contains(c.Id)
+                join r in db.Revisions.AsNoTracking() on c.CurrentRevisionId equals (Guid?)r.Id into revisionRows
+                from r in revisionRows.DefaultIfEmpty()
+                join d in db.ContentDrafts.AsNoTracking() on c.Id equals d.ContentId into draftRows
+                from d in draftRows.DefaultIfEmpty()
+                select new { c.Id, Year = d == null ? (r == null ? null : r.Metadata.WeeklyYear) : d.Metadata.WeeklyYear,
+                    Week = d == null ? (r == null ? null : r.Metadata.WeeklyWeek) : d.Metadata.WeeklyWeek,
+                    PublishedVersion = db.WeeklyScheduleReleases.Where(v => v.ContentId == c.Id && v.RevisionId == c.PublishedRevisionId)
+                        .OrderByDescending(v => v.Version).Select(v => (int?)v.Version).FirstOrDefault() }).ToListAsync();
+            weeks = weeklyRows.ToDictionary(x => x.Id, x => new AdminWeeklyInfo(x.Year, x.Week, x.PublishedVersion));
+        }
         var categories = await Categories(actor);
         var owners = await (from u in db.Users.AsNoTracking() where contents.Any(c => c.OwnerUserId == u.Id) orderby u.UserName select new AdminOwner(u.Id, u.UserName ?? u.Id)).ToListAsync();
-        return View(new AdminListModel { PendingReviewCount = pendingCount, Kind = kind, Query = q, Status = status, CategoryId = categoryId, Owner = owner, Page = page, Total = total, Categories = categories, Owners = owners, CanCreate = actor.Has(Permissions.Create), Items = items.Select(x => new AdminRow(x.Id, x.Title, StateLabel(x.State), categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm"), x.IsPublic && !x.IsTrashed, x.IsTrashed, owners.FirstOrDefault(o => o.Id == x.OwnerId)?.Name ?? "Dữ liệu nguồn")).ToList() });
+        return View(new AdminListModel { StatusCounts = counts, CanManageVideos = actor.Has(Permissions.ManageVideos), PendingReviewCount = pendingCount, Kind = kind, Query = q, Status = status, CategoryId = categoryId, Owner = owner, Page = page, Total = total, Categories = categories, Owners = owners, CanCreate = actor.Has(Permissions.Create), Items = items.Select(x => new AdminRow(x.Id, x.Title, StateLabel(x.State), categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm"), x.IsPublic && !x.IsTrashed, x.IsTrashed, owners.FirstOrDefault(o => o.Id == x.OwnerId)?.Name ?? "Dữ liệu nguồn", weeks.GetValueOrDefault(x.Id))).ToList() });
     }
     private IQueryable<Content> ReadScope(ContentActor actor)
     {

@@ -27,7 +27,7 @@ public sealed class TemporaryPasswordDelivery(string privateTempRoot,string? web
         file.Flush(true);
         return path;
     }
-    private static FileStream CreatePrivate(string path)
+    internal static FileStream CreatePrivate(string path)
     {
         if(OperatingSystem.IsWindows())
         {
@@ -42,4 +42,4 @@ public sealed class TemporaryPasswordDelivery(string privateTempRoot,string? web
 
 // Receipt intentionally contains no plaintext credential. File survives uncertain
 // SQL commit outcomes, restricted to the operator, for reconcile/reset handling.
-public sealed record TemporaryPasswordReceipt(string UserId,string CredentialFile);
+public sealed record TemporaryPasswordReceipt(string UserId,string CredentialFile, CmsCredentialReceipt? CmsDelivery = null);

@@ -353,7 +353,7 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         ValidatePrivateStorageRoot(storage.TempRoot,storage);
     }
 
-    private static void ValidatePrivateStorageRoot(string root,StorageOptions storage)
+    internal static void ValidatePrivateStorageRoot(string root,StorageOptions storage)
     {
         var segments = Path.GetFullPath(root).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (segments.Any(x => x.Equals("wwwroot", StringComparison.OrdinalIgnoreCase)) ||

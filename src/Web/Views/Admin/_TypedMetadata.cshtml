@@ -2,7 +2,7 @@
 @using LandPortal.Domain
 <fieldset class="settings-panel" disabled="@(!Model.CanSave)">
     <legend>Thông tin @LandPortal.Web.Services.PublicContentQuery.KindLabel(Model.Kind)</legend>
-    <div class="form-field"><label asp-for="Metadata.PublicationDate">Ngày hiển thị/ngày đăng (nếu xác nhận)</label><input asp-for="Metadata.PublicationDate" type="date" asp-format="{0:yyyy-MM-dd}" /><span asp-validation-for="Metadata.PublicationDate"></span></div>
+    <div class="form-field"><label asp-for="Metadata.PublicationDate">Ngày hiển thị của bài (không phải giờ tự xuất bản)</label><input asp-for="Metadata.PublicationDate" type="date" asp-format="{0:yyyy-MM-dd}" /><span asp-validation-for="Metadata.PublicationDate"></span><p class="form-help">Để đăng vào thời điểm tương lai, dùng Hẹn giờ xuất bản trong khối Hoàn tất bài viết.</p></div>
     @if (Model.Kind == ContentKind.Announcement) {
         <div class="form-field"><label asp-for="Metadata.Unit">Đơn vị</label><input asp-for="Metadata.Unit" maxlength="500" /></div>
     }

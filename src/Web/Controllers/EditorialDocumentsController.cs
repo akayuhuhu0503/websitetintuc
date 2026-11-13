@@ -35,13 +35,14 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         catch (InvalidOperationException error) { return BadRequest(error.Message); }
     }
     [HttpPost("admin/documents/{id:guid}"), RequestSizeLimit(11 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 11 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile? file, CancellationToken ct)
+    public async Task<IActionResult> Upload(Guid id, IFormFile? file, CancellationToken ct, string? format = null)
     {
         try
         {
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
             if (file == null || file.Length is < 1 or > EditorialDocumentService.Maximum || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu tối đa 10 MiB.");
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
+            if (format == "json") return Json(Describe(asset));
             TempData["Success"] = asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
                 ? "Đã lưu tài liệu và kiểm định định dạng (CHƯA quét antivirus). Chỉ phát hành theo quyền duyệt bài."
                 : "Đã lưu SQL và kho cách ly, trạng thái chưa quét an toàn. Chạy tác vụ nền quét thật trước khi đọc hoặc dùng tài liệu.";
@@ -54,6 +55,18 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         catch (MediaUploadException error) { return StatusCode(error.StatusCode,error.Message); }
         catch (DbUpdateException) { return StatusCode(503, "SQL chưa xác nhận lưu tài liệu. Kiểm tra trước khi gửi lại."); }
     }
+    [HttpGet("admin/documents/{id:guid}/items")]
+    public async Task<IActionResult> Items(Guid id)
+    {
+        var actor = await Actor(); var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
+        if (content == null || !actor.Has(Permissions.ManageMedia) || !await rights.CanReadAsync(actor, content)) return NotFound();
+        var assets = await db.MediaAssets.AsNoTracking().Where(a => db.EditorialDocuments.Any(d => d.ContentId == id && d.MediaAssetId == a.Id)).OrderByDescending(a => a.CreatedUtc).Take(100).ToListAsync();
+        return Json(new { items = assets.Select(Describe) });
+    }
+    private object Describe(MediaAsset asset) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
+        usable = !asset.IsQuarantined && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" || options.ApprovedManagedDocumentsWithoutAv && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation),
+        previewUrl = "/admin/documents/file/" + asset.Id, url = "/media/" + asset.Id,
+        notice = asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation ? "Đã kiểm tra định dạng; chưa quét antivirus. Chưa công khai." : "Tài liệu được giữ trong bài này; chỉ đính kèm khi đạt kiểm định." };
     [HttpGet("admin/documents/file/{id:guid}"), HttpHead("admin/documents/file/{id:guid}")]
     public async Task<IActionResult> Download(Guid id, Guid? contentId)
     {

@@ -78,7 +78,20 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
                 OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv: true);
                 if (mime == "application/pdf") ManagedPdfPolicy.Validate(path);
             }
-            if (await db.MediaAssets.AnyAsync(x => x.Sha256 == asset.Sha256, ct)) throw new InvalidOperationException("Tệp trùng đã có trong kho. Không cấp quyền bằng cách tải lại byte giống nhau.");
+            var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == asset.Sha256, ct);
+            if (duplicate != null)
+            {
+                // A retried editor upload may reuse only its own document on this article.
+                // A matching hash elsewhere never grants access to a private document.
+                if (duplicate.Origin == "EditorialDocument" && duplicate.MimeType == mime && duplicate.ByteLength == asset.ByteLength &&
+                    duplicate.UploadedByUserId == actor.UserId && await db.EditorialDocuments.AnyAsync(d => d.MediaAssetId == duplicate.Id && d.ContentId == contentId && d.OwnerId == actor.UserId, ct))
+                {
+                    actor = await rights.GetAsync(actor.UserId);
+                    if (!actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();
+                    return duplicate; // finally removes only the uncommitted temporary copy.
+                }
+                throw new InvalidOperationException("Tệp đã có trong kho. Chọn tài liệu của bài này; không thể lấy quyền truy cập bằng cách tải lại tệp.");
+            }
             // Fresh resource/category permission immediately before persistence.
             actor = await rights.GetAsync(actor.UserId);
             if (!actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();
