@@ -163,9 +163,25 @@ public sealed class EditorModel
 public sealed record EditorCategory(int Id, string Name);
 public sealed record EditorMedia(Guid Id, string Name, string MimeType, long Bytes);
 public sealed class EditorAssetInput { public Guid Id { get; set; } public string Usage { get; set; } = "Inline"; [StringLength(1000), DisplayFormat(ConvertEmptyStringToNull = false)] public string Caption { get; set; } = ""; public int SortOrder { get; set; } }
-public sealed record AdminRow(Guid Id, string Title, string Status, string? CategoryName, string UpdatedAt, bool IsPublished = false, bool IsTrashed = false, string? Owner = null);
+public sealed record AdminRow(Guid Id, string Title, string Status, string? CategoryName, string UpdatedAt, bool IsPublished = false, bool IsTrashed = false, string? Owner = null, AdminWeeklyInfo? Weekly = null);
+public sealed record AdminWeeklyInfo(int? Year, int? Week, int? PublishedVersion)
+{
+    private bool ValidWeek => Year is >= 2000 and <= 2200 && Week is >= 1 and <= 53 && Week <= System.Globalization.ISOWeek.GetWeeksInYear(Year.GetValueOrDefault());
+    public string Label => ValidWeek ? $"Tuần {Week}/{Year}" : "Chưa xác định tuần";
+    public string DateRange
+    {
+        get
+        {
+            if (!ValidWeek) return "Bổ sung tuần trong bản nháp";
+            var monday = System.Globalization.ISOWeek.ToDateTime(Year.GetValueOrDefault(), Week.GetValueOrDefault(), DayOfWeek.Monday);
+            return $"{monday:dd/MM/yyyy} – {monday.AddDays(6):dd/MM/yyyy}";
+        }
+    }
+}
 public sealed class AdminListModel
 {
+    public IReadOnlyDictionary<string, int> StatusCounts { get; init; } = new Dictionary<string, int>();
+    public bool CanManageVideos { get; init; }
     public int? PendingReviewCount { get; init; }
     public string? Kind { get; init; }
     public IReadOnlyList<AdminRow> Items { get; init; } = [];

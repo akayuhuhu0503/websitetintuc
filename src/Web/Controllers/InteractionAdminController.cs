@@ -28,7 +28,33 @@ public sealed class InteractionAdminController(PortalDbContext db,InteractionSer
         var now=DateTimeOffset.UtcNow;if(due=="late")rows=rows.Where(x=>x.InquiryDueUtc<now&&x.State!=InteractionState.Closed&&x.State!=InteractionState.Rejected);else if(due=="soon")rows=rows.Where(x=>x.InquiryDueUtc>=now&&x.InquiryDueUtc<now.AddDays(2)&&x.State!=InteractionState.Closed&&x.State!=InteractionState.Rejected);
         var total=await rows.CountAsync();var items=await rows.OrderByDescending(x=>x.CreatedUtc).ThenBy(x=>x.Id).Skip((page-1)*20).Take(20).ToListAsync();
         var names=await db.Users.AsNoTracking().Where(x=>items.Select(i=>i.AssigneeId).Contains(x.Id)).ToDictionaryAsync(x=>x.Id,x=>x.DisplayName==""?"Cán bộ xử lý":x.DisplayName);
-        return View(new InteractionInbox(kind,total,page,items,pending){ContentId=contentId,Field=field,CanReadOriginal=actor.Has(InteractionPermissions.Read(kind)),Due=due,State=state,Assignees=names});
+        var titleScope = service.Inbox(actor, kind);
+        var selectedTitle = contentId.HasValue ? await (from c in db.Contents.AsNoTracking()
+            join r in db.Revisions.AsNoTracking() on c.PublishedRevisionId equals (Guid?)r.Id
+            where c.Id == contentId.Value && titleScope.Any(s => s.ContentId == c.Id)
+            select r.Title).FirstOrDefaultAsync() : null;
+        return View(new InteractionInbox(kind,total,page,items,pending){ContentId=contentId,ContentTitle=selectedTitle,
+            CanBulkPublish=actor.Has(kind==InteractionKind.Comment?Permissions.CommentModerate:Permissions.InquiryPublish),
+            CanBulkProcess=actor.Has(InteractionPermissions.Process(kind)),
+            Field=field,CanReadOriginal=actor.Has(InteractionPermissions.Read(kind)),Due=due,State=state,Assignees=names});
+    }
+    [HttpGet("articles")]
+    public async Task<IActionResult> Articles(string q = "", int page = 1)
+    {
+        q ??= "";
+        var actor = await Actor();
+        if (!InteractionPermissions.CanList(actor, InteractionKind.Comment)) return Forbid();
+        if (q.Length > 200 || page is < 1 or > 10000) return BadRequest();
+        // Titles are selected only for comments this actor may list; a picker
+        // does not grant access to another category or to private draft text.
+        var visible = service.Inbox(actor, InteractionKind.Comment);
+        var rows = from c in db.Contents.AsNoTracking()
+                   join r in db.Revisions.AsNoTracking() on c.PublishedRevisionId equals (Guid?)r.Id
+                   where visible.Any(s => s.ContentId == c.Id)
+                   select new { c.Id, r.Title };
+        if (!string.IsNullOrWhiteSpace(q)) rows = rows.Where(x => EF.Functions.Collate(x.Title, "Vietnamese_100_CI_AI").Contains(q.Trim()));
+        var items = await rows.OrderBy(x => x.Title).ThenBy(x => x.Id).Skip((page - 1) * 20).Take(21).ToListAsync();
+        return Json(new { page, hasMore = items.Count > 20, items = items.Take(20).Select(x => new { value = x.Id, label = x.Title }) });
     }
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Detail(Guid id)

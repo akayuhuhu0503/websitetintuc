@@ -14,6 +14,9 @@ public sealed class InteractionForm
 }
 public sealed record InteractionInbox(InteractionKind Kind,int Total,int Page,IReadOnlyList<InteractionSubmission> Items,IReadOnlyDictionary<InteractionKind,int> Pending)
 {
+    public string? ContentTitle { get; init; }
+    public bool CanBulkPublish { get; init; }
+    public bool CanBulkProcess { get; init; }
     public Guid? ContentId { get; init; }
     public string? Field { get; init; }
     public bool CanReadOriginal { get; init; }=true;

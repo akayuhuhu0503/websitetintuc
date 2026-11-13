@@ -5,6 +5,8 @@
     if (!foundForm || !source || typeof Jodit === 'undefined')
         return;
     const form = foundForm;
+    const returnToList = document.querySelector('.back-link')?.getAttribute('href');
+    const editorUrl = (id) => '/admin/edit/' + id + (returnToList?.startsWith('/admin?') ? '?returnUrl=' + encodeURIComponent(returnToList) : '');
     const feedback = document.querySelector('#editor-feedback');
     const field = (name) => form.elements.namedItem(name);
     let csrf = field('__RequestVerificationToken').value;
@@ -57,6 +59,8 @@
     showDisclosureFields();
     let dirty = false, bodyDirty = false, userBodyInteraction = false, generation = 0, saving = false, conflicted = false, navigating = false;
     let timer;
+    let externalBusy = false;
+    let readinessRequest = 0;
     let activeSave = null;
     let uncertainSave = null;
     let initialBody = source.value;
@@ -110,8 +114,13 @@
             return;
         dirty = true;
         generation++;
+        form.querySelectorAll('[data-readiness-blocked]').forEach(b => { b.disabled = false; delete b.dataset.readinessBlocked; });
         notify('Có thay đổi chưa lưu. Hệ thống sẽ tự lưu sau khi bạn ngừng nhập.');
         window.clearTimeout(timer);
+        // An upload may finish while a video is being attached server-side.
+        // Retain its selection as dirty; save after the new rowversion arrives.
+        if (externalBusy)
+            return;
         timer = window.setTimeout(() => { void save('Save', true); }, 1600);
     };
     editor.editor.addEventListener('input', () => { userBodyInteraction = true; bodyDirty = true; changed(); });
@@ -128,10 +137,13 @@
         bodyDirty = true;
         changed();
     } });
-    form.addEventListener('input', event => { if (event.target.closest('.jodit-container') || event.target.id === 'review-reason')
-        return; changed(); });
-    form.addEventListener('change', event => { if (event.target.closest('.jodit-container'))
-        return; changed(); });
+    function isDraftField(event) { const target = event.target; return !target.closest('.jodit-container') && !target.matches('input[type=file],#review-reason,#editor-due'); }
+    // Choosing a local file is not yet a draft change. Mark dirty only when its
+    // verified server ID is attached; otherwise this event races the first save.
+    form.addEventListener('input', event => { if (isDraftField(event))
+        changed(); });
+    form.addEventListener('change', event => { if (isDraftField(event))
+        changed(); });
     function data(intent, autosave) {
         const result = new FormData(form);
         result.set('BodyHtml', bodyDirty ? rewrite(editor.value, false) : initialBody);
@@ -175,14 +187,35 @@
         return 'Không lưu được (HTTP ' + response.status + '). Nội dung đang nhập vẫn được giữ.';
     }
     function update(result) {
+        const previousState = form.dataset.state;
         field('Id').value = result.contentId;
         field('RowVersion').value = result.rowVersion;
         field('CurrentRevisionId').value = result.currentRevisionId || '';
         form.dataset.state = result.state;
+        if (previousState !== result.state && result.state === 'Approved') {
+            form.querySelectorAll('[data-workflow="ApprovePublish"],[data-workflow="Approve"],[data-workflow="Reject"]').forEach(x => x.hidden = true);
+            let recovery = document.querySelector('#editor-state-recovery');
+            if (!recovery) {
+                recovery = document.createElement('a');
+                recovery.id = 'editor-state-recovery';
+                recovery.className = 'outline-link';
+                feedback.after(recovery);
+            }
+            recovery.href = editorUrl(result.contentId);
+            recovery.textContent = 'Bài đã được duyệt. Mở lại phiên bản này để tiếp tục xuất bản hoặc đặt lịch.';
+        }
+        if (window.location.pathname === '/admin/create') {
+            window.history.replaceState(null, '', editorUrl(result.contentId));
+        }
+        const preview = document.querySelector('#preview-link');
+        if (preview)
+            preview.href = '/admin/preview/' + result.contentId;
+        window.dispatchEvent(new CustomEvent('cms:draft-saved', { detail: result }));
+        void refreshReadiness();
     }
     async function save(intent, autosave = false) {
         window.clearTimeout(timer);
-        if (!canSave || conflicted || sessionPaused)
+        if (!canSave || conflicted || sessionPaused || externalBusy)
             return null;
         if (activeSave) {
             await activeSave;
@@ -230,9 +263,9 @@
                     conflicted = true;
                     notify('Thao tác trước đã được xác nhận, nhưng còn thay đổi mới chưa lưu. Nội dung vẫn ở đây; giữ lại nội dung và đối chiếu bài trước khi mở bản sửa mới.', true);
                 }
-                else if (intent !== 'Save' || (wasNew && !dirty)) {
+                else if (intent !== 'Save') {
                     navigating = true;
-                    window.location.assign('/admin/edit/' + result.contentId);
+                    window.location.assign(editorUrl(result.contentId));
                 }
                 else if (dirty)
                     timer = window.setTimeout(() => { void save('Save', true); }, 1600);
@@ -259,7 +292,7 @@
         const submitter = event.submitter;
         void save(submitter?.value || 'Save');
     });
-    window.addEventListener('beforeunload', event => { if ((dirty || saving) && !navigating) {
+    window.addEventListener('beforeunload', event => { if ((dirty || saving || externalBusy) && !navigating) {
         event.preventDefault();
         event.returnValue = '';
     } });
@@ -289,7 +322,7 @@
         payload.set('Reason', reason);
         payload.set('RequestId', button.dataset.commandId);
         try {
-            const response = await fetch('/admin/workflow/' + field('Id').value, { method: 'POST', body: payload, headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' }, credentials: 'same-origin' });
+            const response = await fetch((button.dataset.workflow === 'ApprovePublish' ? '/admin/approve-publish/' : '/admin/workflow/') + field('Id').value, { method: 'POST', body: payload, headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' }, credentials: 'same-origin' });
             if (response.status === 401) {
                 requireSession();
                 notify('Cần xác thực lại. Thao tác xử lý bài chưa được xác nhận.', true);
@@ -305,7 +338,7 @@
             }
             const result = await response.json();
             navigating = true;
-            window.location.assign('/admin/edit/' + result.contentId);
+            window.location.assign(editorUrl(result.contentId));
         }
         catch {
             notify('Mất kết nối; chưa xác nhận thao tác thành công.', true);
@@ -314,6 +347,170 @@
             button.disabled = false;
         }
     }));
+    async function refreshReadiness() {
+        const panel = document.querySelector('#editor-workflow-readiness');
+        if (!panel || !field('Id').value)
+            return;
+        const seq = ++readinessRequest;
+        try {
+            const response = await fetch('/admin/editor-readiness/' + field('Id').value, { credentials: 'same-origin' });
+            if (!response.ok || seq !== readinessRequest)
+                return;
+            const state = await response.json();
+            if (seq !== readinessRequest || dirty)
+                return;
+            panel.replaceChildren();
+            const list = document.createElement('ul');
+            for (const message of Object.values(state.errors)) {
+                const item = document.createElement('li');
+                item.textContent = message;
+                list.append(item);
+            }
+            if (list.children.length)
+                panel.append(list);
+            const note = document.createElement('p');
+            note.textContent = state.fileNotice;
+            panel.append(note);
+            for (const button of Array.from(form.querySelectorAll('[data-save-submit],[data-save-publish],[data-workflow="PublishApproved"],[data-workflow="ApprovePublish"]'))) {
+                const allowed = button.hasAttribute('data-save-submit') ? state.canSubmit : state.canPublish;
+                button.disabled = !allowed;
+                if (!allowed)
+                    button.dataset.readinessBlocked = 'true';
+                else
+                    delete button.dataset.readinessBlocked;
+            }
+        }
+        catch {
+            panel.textContent = 'Chưa kiểm tra được điều kiện phát hành. Bản nháp vẫn giữ nguyên; thử lại khi có mạng.';
+        }
+    }
+    async function ensureSavedDraft() {
+        if (externalBusy || sessionPaused || conflicted)
+            return null;
+        if (activeSave)
+            await activeSave;
+        if (!dirty && !uncertainSave && field('Id').value && !sessionPaused && !conflicted)
+            return { id: field('Id').value, rowVersion: field('RowVersion').value };
+        const result = await save('Save');
+        if (!result || dirty || sessionPaused || conflicted)
+            return null;
+        return { id: result.contentId, rowVersion: result.rowVersion };
+    }
+    let externalPreparing = false;
+    async function withSavedDraft(operation) {
+        if (externalBusy || externalPreparing)
+            return null;
+        externalPreparing = true;
+        const draft = await ensureSavedDraft();
+        externalPreparing = false;
+        if (!draft)
+            return null;
+        externalBusy = true;
+        window.clearTimeout(timer);
+        form.inert = true;
+        try {
+            const result = await operation(draft);
+            if (!result)
+                return null;
+            update(result);
+            if (result.videoAssetId && !form.querySelector('input[name="VideoAssetIds"][value="' + result.videoAssetId + '"]')) {
+                const row = document.createElement('div');
+                row.dataset.videoReference = result.videoAssetId;
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'VideoAssetIds';
+                input.value = result.videoAssetId;
+                row.append(input);
+                const label = document.createElement('label');
+                label.textContent = 'Chú thích video vừa đính kèm';
+                label.htmlFor = 'video-caption-' + result.videoAssetId;
+                const caption = document.createElement('input');
+                caption.id = label.htmlFor;
+                caption.name = 'AttachmentLabels[' + result.videoAssetId + ']';
+                caption.maxLength = 2000;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'link-button';
+                remove.dataset.removeVideo = result.videoAssetId;
+                remove.textContent = 'Gỡ video và các phụ đề khỏi nháp';
+                row.append(label, caption, remove);
+                form.querySelector('.editor-video-references').append(row);
+            }
+            window.dispatchEvent(new CustomEvent('cms:external-saved', { detail: result }));
+            return result;
+        }
+        finally {
+            externalBusy = false;
+            form.inert = false;
+            if (dirty && !conflicted && !sessionPaused)
+                timer = window.setTimeout(() => { void save('Save', true); }, 1600);
+        }
+    }
+    window.landPortalEditor = { ensureSavedDraft, withSavedDraft };
+    document.querySelector('#preview-link')?.addEventListener('click', async (event) => {
+        if (!canSave)
+            return;
+        event.preventDefault();
+        const preview = window.open('about:blank', '_blank');
+        if (preview)
+            preview.opener = null;
+        const result = await save('Save');
+        if (!result || dirty) {
+            preview?.close();
+            notify('Chưa mở xem trước vì bản soạn chưa lưu thành công. Nội dung vẫn ở trang này.', true);
+            return;
+        }
+        if (preview)
+            preview.location.href = '/admin/preview/' + result.contentId;
+        else
+            notify('Đã lưu. Trình duyệt chặn cửa sổ xem trước; cho phép cửa sổ mới rồi thử lại.', true);
+    });
+    document.querySelector('[data-editor-schedule]')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        const due = document.querySelector('#editor-due').value;
+        if (!due) {
+            notify('Chọn thời điểm đăng theo giờ Việt Nam.', true);
+            return;
+        }
+        button.disabled = true;
+        try {
+            if (canSave && (!(await save('Save')) || dirty))
+                return;
+            if (form.dataset.state === 'PendingReview') {
+                const p = new FormData();
+                p.set('Action', 'Approve');
+                p.set('RowVersion', field('RowVersion').value);
+                p.set('RevisionId', field('CurrentRevisionId').value);
+                p.set('RequestId', uuid());
+                const approved = await fetch('/admin/workflow/' + field('Id').value, { method: 'POST', body: p, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' } });
+                if (!approved.ok) {
+                    notify(await errorMessage(approved), true);
+                    return;
+                }
+                update(await approved.json());
+                notify('Đã duyệt; đang đặt lịch cho phiên bản này…');
+            }
+            const p = new FormData();
+            p.set('ContentId', field('Id').value);
+            p.set('RevisionId', field('CurrentRevisionId').value);
+            p.set('ContentVersion', field('RowVersion').value);
+            p.set('DueVietnam', due);
+            p.set('Direct', button.dataset.direct || 'false');
+            const response = await fetch('/admin/editor-schedule/' + field('Id').value, { method: 'POST', body: p, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' } });
+            if (!response.ok) {
+                notify((form.dataset.state === 'Approved' ? 'Bài đã duyệt nhưng chưa đặt lịch. ' : '') + await errorMessage(response), true);
+                return;
+            }
+            notify((await response.json()).message);
+        }
+        catch {
+            notify('Chưa xác nhận lịch đã lưu. Kiểm tra Lịch xuất bản trước khi thử lại; bản soạn vẫn được giữ.', true);
+        }
+        finally {
+            button.disabled = false;
+        }
+    });
+    void refreshReadiness();
     const dialog = document.querySelector('#media-dialog');
     let mode = 'inline', mediaPage = 1, mediaRequest = 0;
     const mediaItems = document.querySelector('#media-items');
@@ -339,12 +536,20 @@
         li.append(captionLabel, caption);
         const name = document.createElement('span');
         name.textContent = asset.originalName;
+        const detail = document.createElement('small');
+        const kind = asset.mimeType === 'application/pdf' ? 'PDF' : asset.mimeType.includes('wordprocessingml') ? 'Word' : asset.mimeType.includes('spreadsheetml') ? 'Excel' : 'Tài liệu';
+        detail.textContent = kind + ' · ' + (asset.byteLength >= 1048576 ? (asset.byteLength / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' MB' : Math.max(1, Math.ceil(asset.byteLength / 1024)) + ' KB');
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'link-button';
         remove.textContent = 'Gỡ khỏi bản nháp';
         remove.dataset.removeAttachment = '';
-        li.append(input, name, remove);
+        const view = document.createElement('a');
+        view.href = asset.previewUrl;
+        view.target = '_blank';
+        view.rel = 'noopener';
+        view.textContent = 'Xem tệp';
+        li.append(input, name, detail, view, remove);
         list.append(li);
         changed();
     }
@@ -504,8 +709,8 @@
                     uploadFeedback.textContent = payload.message || payload.error || 'Tải tệp không thành công (HTTP ' + request.status + ').';
                     return;
                 }
-                uploadFeedback.textContent = payload.notice || 'Đã lưu tệp vào kho riêng. Tệp chưa được công khai.';
-                void loadMedia(mediaPage);
+                uploadFeedback.textContent = payload.notice || 'Đã tải ảnh. Chưa công khai.';
+                selectMedia(payload);
             }
             catch {
                 uploadFeedback.textContent = 'Tải tệp không thành công; máy chủ chưa xác nhận.';
@@ -515,6 +720,127 @@
         const payload = new FormData();
         payload.append('file', file);
         request.send(payload);
+    });
+    const documentFeedback = document.querySelector('#document-feedback');
+    async function loadDocuments() {
+        const draft = await ensureSavedDraft();
+        if (!draft)
+            return;
+        const response = await fetch('/admin/documents/' + draft.id + '/items', { credentials: 'same-origin' });
+        if (!response.ok) {
+            documentFeedback.textContent = await errorMessage(response);
+            return;
+        }
+        const payload = await response.json();
+        const list = document.querySelector('#document-library');
+        list.replaceChildren();
+        for (const item of payload.items) {
+            const row = document.createElement('div');
+            row.className = 'editor-document-row';
+            const name = document.createElement('span');
+            name.textContent = item.originalName + ' · ' + Math.ceil(item.byteLength / 1024) + ' KB';
+            row.append(name);
+            if (item.usable) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'button secondary';
+                button.textContent = 'Đính kèm vào bài';
+                button.onclick = () => { addAttachment(item); void save('Save'); };
+                row.append(button);
+                if (item.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && field('Metadata.WeeklyYear')) {
+                    const importButton = document.createElement('button');
+                    importButton.type = 'button';
+                    importButton.className = 'button secondary';
+                    importButton.textContent = 'Nhập lịch từ Word';
+                    importButton.onclick = async () => { importButton.disabled = true; try {
+                        const current = await ensureSavedDraft();
+                        if (!current)
+                            return;
+                        const response = await fetch('/admin/editor-weekly/' + current.id + '/' + item.id, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf, 'X-Editor-Request': 'true' } });
+                        if (!response.ok) {
+                            documentFeedback.textContent = await errorMessage(response);
+                            return;
+                        }
+                        const preview = await response.json();
+                        addAttachment(item);
+                        window.dispatchEvent(new CustomEvent('cms:weekly-import', { detail: preview }));
+                    }
+                    catch {
+                        documentFeedback.textContent = 'Chưa đọc được Word; các dòng lịch đang soạn vẫn giữ nguyên.';
+                    }
+                    finally {
+                        importButton.disabled = false;
+                    } };
+                    row.append(importButton);
+                }
+            }
+            else {
+                const note = document.createElement('span');
+                note.textContent = 'Chưa đủ điều kiện đính kèm. Tệp vẫn được giữ riêng cho bài này.';
+                row.append(note);
+            }
+            list.append(row);
+        }
+        if (!payload.items.length)
+            list.textContent = 'Bài này chưa có tài liệu đã tải.';
+    }
+    document.querySelector('[data-document-library]')?.addEventListener('click', () => void loadDocuments());
+    document.querySelector('#editor-document-file')?.addEventListener('change', async (event) => {
+        const input = event.currentTarget;
+        const file = input.files?.[0];
+        if (!file)
+            return;
+        if (!/\.(pdf|docx|xlsx)$/i.test(file.name) || file.size > 10 * 1024 * 1024) {
+            documentFeedback.textContent = 'Chọn PDF, DOCX hoặc XLSX không quá 10 MB.';
+            return;
+        }
+        input.disabled = true;
+        const draft = await ensureSavedDraft();
+        if (!draft) {
+            input.disabled = false;
+            return;
+        }
+        const progress = document.querySelector('#document-progress');
+        progress.hidden = false;
+        progress.value = 0;
+        documentFeedback.textContent = 'Đang tải ' + file.name + '…';
+        const request = new XMLHttpRequest();
+        request.open('POST', '/admin/documents/' + draft.id + '?format=json');
+        request.setRequestHeader('X-CSRF-TOKEN', csrf);
+        request.setRequestHeader('X-Editor-Request', 'true');
+        request.upload.onprogress = e => { if (e.lengthComputable)
+            progress.value = e.loaded / e.total * 100; };
+        request.onload = async () => {
+            progress.hidden = true;
+            input.disabled = false;
+            if (request.status === 401) {
+                requireSession();
+                documentFeedback.textContent = 'Phiên đăng nhập đã hết hạn. Tài liệu chưa được xác nhận; bản soạn vẫn được giữ.';
+                return;
+            }
+            try {
+                if (request.status < 200 || request.status >= 300) {
+                    documentFeedback.textContent = request.getResponseHeader('content-type')?.includes('text/plain') ? request.responseText : 'Chưa tải được tài liệu. Kiểm tra loại tệp, dung lượng và quyền của bạn.';
+                    return;
+                }
+                const asset = JSON.parse(request.responseText);
+                if (!asset.usable) {
+                    documentFeedback.textContent = asset.notice || 'Tệp đã tải nhưng chưa đạt kiểm định. Chọn lại từ tài liệu của bài sau khi kiểm tra xong.';
+                    return;
+                }
+                addAttachment(asset);
+                const saved = await save('Save');
+                documentFeedback.textContent = saved ? 'Đã đính kèm ' + asset.originalName + ' vào bản nháp. ' + (asset.notice || '') : 'Tệp đã lưu riêng cho bài này nhưng chưa xác nhận gắn vào nháp. Bấm Lưu hoặc chọn lại từ tài liệu của bài.';
+                input.value = '';
+            }
+            catch {
+                documentFeedback.textContent = 'Chưa xác nhận kết quả. Chọn “Tài liệu đã tải” trước khi thử lại để tránh trùng.';
+            }
+        };
+        request.onerror = () => { progress.hidden = true; input.disabled = false; documentFeedback.textContent = 'Mất kết nối. Chọn “Tài liệu đã tải” để kiểm tra kết quả; nội dung đang soạn vẫn giữ nguyên.'; };
+        const data = new FormData();
+        data.append('file', file);
+        request.send(data);
     });
     document.querySelector('[data-close-reauth]')?.addEventListener('click', () => reauth?.close());
     document.querySelector('[data-refresh-reauth]')?.addEventListener('click', () => { void loadReauthChallenge(); });

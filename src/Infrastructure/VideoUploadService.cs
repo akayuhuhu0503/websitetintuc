@@ -9,6 +9,7 @@ namespace LandPortal.Infrastructure;
 
 public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions,TimeProvider? clock=null,MediaService? media=null)
 {
+    public const string EditorAttachRequested = "video.editor.attach.requested";
     private DateTimeOffset Now=>(clock??TimeProvider.System).GetUtcNow();
     public string ChunkPath(Guid session,int index)=>MediaService.ResolveMediaPath(storage,$"video-upload/{session:N}/{index:D6}.chunk");
     public async Task<ContentActor> AuthorizeAsync(string userId,Guid contentId,bool write,CancellationToken ct=default)
@@ -35,16 +36,14 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource={resource},@LockMode=N'Exclusive',@LockOwner=N'Transaction',@LockTimeout=3000; IF @r<0 THROW 51000,'Video busy; retry safely.',1;",ct);
     }
-    public async Task<VideoUploadSession> CreateAsync(Guid contentId,string user,string name,string mime,long bytes,string chunkManifestHash,CancellationToken ct=default)
+    public async Task<VideoUploadSession> CreateAsync(Guid contentId,string user,string name,string mime,long bytes,string chunkManifestHash,CancellationToken ct=default,bool autoAttach=false)
     {
         if(!options.ApprovedManagedVideoWithoutAv && media!=null)await media.RequireUploadScannerAsync(ct);
         await AuthorizeAsync(user,contentId,true,ct);
         if(!IsHash(chunkManifestHash))throw new MediaUploadException("Cần SHA-256 của manifest chunk trước khi tạo phiên.");
         if(bytes<1||bytes>options.MaxFileBytes)throw new MediaUploadException("Dung lượng video vượt giới hạn cấu hình hoặc tệp rỗng.",413);
         if((bytes+options.ChunkBytes-1)/options.ChunkBytes>8192)throw new MediaUploadException("Quá nhiều chunk; tăng kích thước chunk trong cấu hình trước khi nhận tệp lớn.",413);
-        if(string.IsNullOrWhiteSpace(name)||name.Length>160||name.Any(char.IsControl)||name.IndexOfAny(['/','\\',':'])>=0||name.Count(x=>x=='.')!=1)throw new MediaUploadException("Tên tệp video không hợp lệ.");
-        var ext=Path.GetExtension(name).ToLowerInvariant();var expected=ext switch{".mp4"=>"video/mp4",".mov"=>"video/quicktime",".webm"=>"video/webm",_=>""};
-        if(expected==""||mime!=expected)throw new MediaUploadException("Chỉ nhận MP4, MOV, WebM đúng MIME; định dạng thực còn phải qua scanner/probe.");
+        var ext=ValidateFileName(name,mime);
         Disk(checked(bytes*5));
         await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);await Lock("video:quota",ct);
         var active=db.Set<VideoUploadSession>().Where(x=>x.State==VideoUploadState.Uploading&&x.ExpiresUtc>Now);
@@ -54,7 +53,21 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
         if(reserved*4+originals*4+storedChunks+VideoDiskBudget.StoredBytes(storage)+bytes*5>options.QuotaBytes)throw new MediaUploadException("Đã đạt quota video gồm bản gốc, output và vùng tạm; chunk đã hủy vẫn tính đến khi dọn TTL.",507);
         var session=new VideoUploadSession{ContentId=contentId,OwnerUserId=user,Extension=ext,Mime=mime,ExpectedBytes=bytes,ChunkBytes=options.ChunkBytes,ChunkCount=(int)((bytes+options.ChunkBytes-1)/options.ChunkBytes),CreatedUtc=Now,UpdatedUtc=Now,ExpiresUtc=Now.AddHours(options.SessionHours)};
         session.ChunkManifestSha256=chunkManifestHash;
-        db.Add(session);db.AuditLogs.Add(new(){Actor=user,Action="video.upload.created",ContentId=contentId,Detail=JsonSerializer.Serialize(new{session.Id,bytes,session.ChunkBytes,chunkManifestHash})});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return session;
+        db.Add(session);db.AuditLogs.Add(new(){Actor=user,Action="video.upload.created",ContentId=contentId,Detail=JsonSerializer.Serialize(new{session.Id,bytes,session.ChunkBytes,chunkManifestHash})});
+        if(autoAttach)db.AuditLogs.Add(new(){Actor=user,Action=EditorAttachRequested,ContentId=contentId,Detail=session.Id.ToString("D")});
+        await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return session;
+    }
+    public static string ValidateFileName(string name,string mime)
+    {
+        // The display name never becomes a storage path. Validate its final extension,
+        // while keeping ordinary spaces, Vietnamese characters and multiple dots.
+        if(string.IsNullOrWhiteSpace(name)||name.Length>160||name.Any(c=>char.IsControl(c)||char.GetUnicodeCategory(c)==System.Globalization.UnicodeCategory.Format)
+            ||name.IndexOfAny(['/','\\',':','<','>','"','|','?','*'])>=0||name.EndsWith(' ')||name.EndsWith('.')||name.StartsWith('.'))
+            throw new MediaUploadException("Tên tệp video không hợp lệ. Không dùng đường dẫn hoặc ký tự đặc biệt của tên tệp.");
+        var ext=Path.GetExtension(name).ToLowerInvariant();
+        var expected=ext switch{".mp4"=>"video/mp4",".mov"=>"video/quicktime",".webm"=>"video/webm",_=>""};
+        if(expected==""||mime!=expected)throw new MediaUploadException("Chỉ nhận MP4, MOV hoặc WebM đúng định dạng. Hệ thống vẫn kiểm định nội dung tệp trước khi sử dụng.");
+        return ext;
     }
     private async Task<VideoUploadSession> Locked(Guid id,string user,CancellationToken ct)
     {

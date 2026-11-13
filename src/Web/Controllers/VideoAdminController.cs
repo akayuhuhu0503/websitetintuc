@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 [Authorize]
-public sealed class VideoAdminController(PortalDbContext db,VideoOptions options,VideoUploadService uploads,CurrentPermissionService permissions,WorkflowService workflow,VideoProcessor processor,VideoSubtitleService subtitles):Controller
+public sealed class VideoAdminController(PortalDbContext db,VideoOptions options,VideoUploadService uploads,CurrentPermissionService permissions,WorkflowService workflow,VideoProcessor processor,VideoSubtitleService subtitles,StorageOptions storage,IHostEnvironment environment):Controller
 {
     private string UserId=>User.FindFirstValue(ClaimTypes.NameIdentifier)??"";
     [HttpGet("admin/videos")]
@@ -16,6 +16,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     {
         ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         var actor=await permissions.GetAsync(UserId);if(!actor.Has(Permissions.ManageVideos)||!new[]{Permissions.ViewOwn,Permissions.ViewAll,Permissions.EditOwn,Permissions.EditAll,Permissions.Review}.Any(actor.Has))return Forbid();if(q?.Length>200)return BadRequest();
+        ViewData["CanViewVideoDiagnostics"]=actor.Has(Permissions.ManageSettings);
         ViewData["VideoTools"]=await processor.HealthAsync(HttpContext.RequestAborted);
         var workerStatus=processor.WorkerStatus();
         ViewData["VideoWorkerCode"]=workerStatus.Code;
@@ -26,11 +27,15 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
         var rows=from c in contents join r in db.Revisions on c.CurrentRevisionId equals (Guid?)r.Id select new{c.Id,r.Title,c.State,c.IsPublic,c.CreatedUtc};
         if(!string.IsNullOrWhiteSpace(q))rows=rows.Where(x=>EF.Functions.Collate(x.Title,"Vietnamese_100_CI_AI").Contains(q));page=Math.Clamp(page,1,10000);var total=await rows.CountAsync();
         var pageRows=await rows.OrderByDescending(x=>x.CreatedUtc).ThenBy(x=>x.Id).Skip((page-1)*15).Take(15).ToListAsync();var items=pageRows.Select(x=>new VideoListItem(x.Id,x.Title,x.State.ToString(),x.IsPublic,x.CreatedUtc)).ToList();
-        if(options.Enabled)
         {
             var ids=items.Select(x=>x.Id).ToArray();
             var latest=await db.Set<VideoUploadSession>().AsNoTracking().Where(s=>ids.Contains(s.ContentId)&&s.Id==db.Set<VideoUploadSession>().Where(t=>t.ContentId==s.ContentId).OrderByDescending(t=>t.CreatedUtc).ThenBy(t=>t.Id).Select(t=>t.Id).First()).Select(s=>new{s.ContentId,s.MediaAssetId,s.State,FileState=db.Set<VideoFile>().Where(v=>v.MediaAssetId==s.MediaAssetId).Select(v=>(VideoState?)v.State).FirstOrDefault(),Uploader=db.Users.Where(u=>u.Id==s.OwnerUserId).Select(u=>u.DisplayName).FirstOrDefault()}).ToListAsync();
-            items=items.Select(item=>{var file=latest.SingleOrDefault(x=>x.ContentId==item.Id);return file==null?item:item with{FileState=file.FileState?.ToString()??file.State.ToString(),AssetId=file.MediaAssetId,Uploader=file.Uploader??"Tài khoản không còn hoạt động"};}).ToList();
+            var assetIds=latest.Where(x=>x.MediaAssetId!=null).Select(x=>x.MediaAssetId!.Value).ToArray();
+            var proofs=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).Where(x=>assetIds.Contains(x.MediaAssetId)&&x.State==VideoState.Ready).ToListAsync();
+            items=items.Select(item=>{var file=latest.SingleOrDefault(x=>x.ContentId==item.Id);if(file==null)return item;
+                var fileStatus=file.FileState?.ToString()??file.State.ToString();
+                if(fileStatus=="Ready"&&(!options.Enabled||!proofs.Any(v=>v.MediaAssetId==file.MediaAssetId&&VideoReadiness.HasProof(v,environment.IsDevelopment(),options))))fileStatus="PolicyBlocked";
+                return item with{FileState=fileStatus,AssetId=file.MediaAssetId,Uploader=file.Uploader??"Tài khoản không còn hoạt động"};}).ToList();
         }
         return View("~/Views/VideoAdmin/Index.cshtml",new VideoIndexModel{Items=items,Query=q,State=state,Page=page,Total=total,Enabled=options.Enabled,CanCreate=actor.Has(Permissions.Create),Processor=processor.LastHealth!.Code});
     }
@@ -41,9 +46,66 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
         try{await uploads.AuthorizeAsync(UserId,contentId,false);var c=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==contentId);var title=await db.Revisions.Where(x=>x.Id==c.CurrentRevisionId).Select(x=>x.Title).SingleAsync();return View("~/Views/VideoAdmin/Upload.cshtml",new VideoUploadModel(contentId,title,Convert.ToBase64String(c.RowVersion),options.MaxFileBytes,options.ChunkBytes,(await processor.HealthAsync()).Code));}
         catch(BadHttpRequestException e)when(e.StatusCode==413){return StatusCode(413,new{error="Chunk vượt giới hạn request của web server."});}catch(MediaUploadException e){return StatusCode(e.StatusCode,new{error=e.Message});}
     }
-    public sealed record CreateRequest(Guid ContentId,string Name,string Mime,long Bytes,string ChunkManifestSha256);
+    public sealed record CreateRequest(Guid ContentId,string Name,string Mime,long Bytes,string ChunkManifestSha256,bool AutoAttach=false);
     [HttpPost("admin/videos/sessions"),RequestSizeLimit(4096)]
-    public Task<IActionResult> Create([FromBody] CreateRequest request,CancellationToken ct)=>Guard(async()=>{var s=await uploads.CreateAsync(request.ContentId,UserId,request.Name,request.Mime,request.Bytes,request.ChunkManifestSha256,ct);return Json(new{s.Id,s.ChunkBytes,s.ChunkCount,s.ExpectedBytes,s.ExpiresUtc});});
+    public Task<IActionResult> Create([FromBody] CreateRequest request,CancellationToken ct)=>Guard(async()=>{var s=await uploads.CreateAsync(request.ContentId,UserId,request.Name,request.Mime,request.Bytes,request.ChunkManifestSha256,ct,request.AutoAttach);return Json(new{s.Id,s.ChunkBytes,s.ChunkCount,s.ExpectedBytes,s.ExpiresUtc});});
+    [HttpGet("admin/videos/editor/{contentId:guid}")]
+    public Task<IActionResult> EditorState(Guid contentId,CancellationToken ct)=>Guard(async()=>
+    {
+        var actor=await uploads.AuthorizeAsync(UserId,contentId,false,ct);
+        var content=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==contentId,ct);
+        var sessions=await db.Set<VideoUploadSession>().AsNoTracking().Where(x=>x.ContentId==contentId&&x.OwnerUserId==UserId)
+            .OrderByDescending(x=>x.CreatedUtc).Take(20).ToListAsync(ct);
+        var ids=sessions.Select(x=>x.Id).ToArray();var assetIds=sessions.Where(x=>x.MediaAssetId!=null).Select(x=>x.MediaAssetId!.Value).ToArray();
+        var requested=(await db.AuditLogs.AsNoTracking().Where(x=>x.ContentId==contentId&&x.Actor==UserId&&x.Action==VideoUploadService.EditorAttachRequested)
+            .OrderByDescending(x=>x.Id).Select(x=>x.Detail).Take(100).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+        var consumed=(await db.ContentCommands.AsNoTracking().Where(x=>ids.Contains(x.Id)).Select(x=>x.Id).ToListAsync(ct)).ToHashSet();
+        var historical=(await db.ContentAssets.AsNoTracking().Where(x=>assetIds.Contains(x.MediaAssetId)&&db.Revisions.Any(r=>r.Id==x.RevisionId&&r.ContentId==contentId)).Select(x=>x.MediaAssetId).Distinct().ToListAsync(ct)).ToHashSet();
+        var attachedIds=await db.DraftAssets.AsNoTracking().Where(x=>x.ContentId==contentId&&x.Usage=="Video").Select(x=>x.MediaAssetId).ToListAsync(ct);
+        var videos=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).Where(x=>assetIds.Contains(x.MediaAssetId)||attachedIds.Contains(x.MediaAssetId)).ToListAsync(ct);
+        var editable=!content.IsTrashed&&(content.State is WorkflowState.Draft or WorkflowState.Rejected)&&await permissions.CanEditAsync(actor,content);
+        return Json(new{enabled=options.Enabled,maxBytes=options.MaxFileBytes,chunkBytes=options.ChunkBytes,managedVideoNoAv=options.ApprovedManagedVideoWithoutAv,
+            articleStatus=VideoCmsLabels.Article(content.State.ToString(),content.IsPublic),canUpload=editable,
+            sessions=sessions.Select(s=>{var video=videos.SingleOrDefault(x=>x.MediaAssetId==s.MediaAssetId);var ready=video!=null&&VideoReadiness.HasProof(video,environment.IsDevelopment(),options);
+                return new{s.Id,state=s.State.ToString(),s.ExpectedBytes,s.ReceivedBytes,s.ExpiresUtc,s.MediaAssetId,
+                    fileState=video?.State.ToString(),status=VideoCmsLabels.File(video?.State==VideoState.Ready&&!ready?"PolicyBlocked":video?.State.ToString()??s.State.ToString()),ready,
+                    attached=s.MediaAssetId!=null&&attachedIds.Contains(s.MediaAssetId.Value),
+                    autoAttach=editable&&ready&&requested.Contains(s.Id.ToString("D"))&&!consumed.Contains(s.Id)&&!historical.Contains(s.MediaAssetId!.Value),
+                    retryAllowed=editable&&video is {Attempts:<3,State:VideoState.Blocked or VideoState.ScanFailed or VideoState.Failed}};}),
+            attached=videos.Where(x=>attachedIds.Contains(x.MediaAssetId)).Select(v=>new{v.MediaAssetId,ready=VideoReadiness.HasProof(v,environment.IsDevelopment(),options),status=VideoCmsLabels.File(v.State==VideoState.Ready&&!VideoReadiness.HasProof(v,environment.IsDevelopment(),options)?"PolicyBlocked":v.State.ToString())})});
+    });
+    public sealed record AttachReadyRequest(Guid SessionId,string RowVersion);
+    [HttpPost("admin/videos/{contentId:guid}/attach-ready"),RequestSizeLimit(4096)]
+    public Task<IActionResult> AttachReady(Guid contentId,[FromBody] AttachReadyRequest request,CancellationToken ct)=>Guard(async()=>
+    {
+        var session=await uploads.GetAsync(request.SessionId,UserId,true,ct);
+        if(session.ContentId!=contentId||session.State!=VideoUploadState.Completed||session.MediaAssetId==null)throw new MediaUploadException("Video chưa hoàn tất tải cho bản nháp này.",409);
+        var actor=await uploads.AuthorizeAsync(UserId,contentId,true,ct);
+        var intent=request.SessionId.ToString("D");
+        if(!await db.AuditLogs.AnyAsync(x=>x.ContentId==contentId&&x.Actor==UserId&&x.Action==VideoUploadService.EditorAttachRequested&&x.Detail==intent,ct))
+            throw new MediaUploadException("Lần tải này chưa yêu cầu gắn tự động; chọn video qua bộ chọn đã có.",409);
+        var content=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==contentId,ct);
+        var version=Convert.FromBase64String(request.RowVersion);
+        if(version.Length!=8||!content.RowVersion.AsSpan().SequenceEqual(version))throw new DbUpdateConcurrencyException();
+        var draft=await db.ContentDrafts.AsNoTracking().Include(x=>x.Categories).Include(x=>x.Assets).SingleAsync(x=>x.ContentId==contentId,ct);
+        // A workflow receipt is committed atomically with the revision. It consumes this
+        // request once, including after a lost HTTP response. Never reattach a removed video.
+        var receipt=await db.ContentCommands.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==session.Id,ct);
+        var wasAttached=await db.ContentAssets.AnyAsync(x=>x.MediaAssetId==session.MediaAssetId&&db.Revisions.Any(r=>r.Id==x.RevisionId&&r.ContentId==contentId),ct);
+        if(receipt!=null||wasAttached)
+        {
+            if(receipt!=null&&(receipt.ContentId!=contentId||receipt.ActorUserId!=UserId||receipt.Action!="SaveDraft"))throw new MediaUploadException("Mã thao tác không khớp bản nháp.",409);
+            return EditorSaved(new(content.Id,content.CurrentRevisionId,content.PublishedRevisionId,content.RowVersion,content.State,content.IsPublic,content.IsTrashed,true,DateTimeOffset.UtcNow),draft.Assets.Any(x=>x.MediaAssetId==session.MediaAssetId&&x.Usage=="Video")?session.MediaAssetId:null);
+        }
+        var asset=await db.MediaAssets.AsNoTracking().SingleAsync(x=>x.Id==session.MediaAssetId,ct);
+        if(asset.UploadedByUserId!=UserId||!await VideoReadiness.ReadyAsync(db,storage,asset,environment.IsDevelopment(),ct,options))
+            throw new MediaUploadException("Video chưa đạt kiểm định MP4, ảnh đại diện hoặc tính toàn vẹn. Bản nháp được giữ nguyên.",409);
+        var linked=draft.Assets.Select(x=>new AssetSelection{MediaAssetId=x.MediaAssetId,Usage=x.Usage,Caption=x.Caption,SortOrder=x.SortOrder}).ToList();
+        if(!linked.Any(x=>x.MediaAssetId==asset.Id))linked.Add(new(){MediaAssetId=asset.Id,Usage="Video",SortOrder=linked.Count});
+        var result=await workflow.SaveAsync(contentId,new(){Kind=content.Kind,Title=draft.Title,Summary=draft.Summary,BodyHtml=draft.BodyHtml,Author=draft.Author,SourceCredit=draft.SourceCredit,Metadata=draft.Metadata,PrimaryCategoryId=draft.PrimaryCategoryId,SecondaryCategoryIds=draft.Categories.Select(x=>x.CategoryId).Where(x=>x!=draft.PrimaryCategoryId).ToList(),CoverAssetId=draft.CoverAssetId,Assets=linked},actor,version,session.Id);
+        return EditorSaved(result,asset.Id);
+    });
+    private JsonResult EditorSaved(WorkflowResult result,Guid? asset)=>Json(new{contentId=result.ContentId,currentRevisionId=result.CurrentRevisionId,publishedRevisionId=result.PublishedRevisionId,rowVersion=Convert.ToBase64String(result.RowVersion),state=result.State.ToString(),result.IsPublic,result.IsTrashed,result.AlreadyApplied,savedUtc=result.SavedUtc,videoAssetId=asset});
     [HttpGet("admin/videos/sessions")]
     public Task<IActionResult> Sessions(Guid contentId)=>Guard(async()=>{await uploads.AuthorizeAsync(UserId,contentId,false);return Json(await db.Set<VideoUploadSession>().AsNoTracking().Where(x=>x.ContentId==contentId&&x.OwnerUserId==UserId).OrderByDescending(x=>x.CreatedUtc).Select(x=>new{x.Id,state=x.State.ToString(),x.ExpectedBytes,x.ReceivedBytes,x.ExpiresUtc}).Take(20).ToListAsync());});
     [HttpGet("admin/videos/sessions/{id:guid}")]
@@ -51,7 +113,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     [HttpPut("admin/videos/sessions/{id:guid}/chunks/{index:int}"),RequireUploadAntiforgeryHeader,DisableUploadFormValueModelBinding,RequestSizeLimit(8*1024*1024)]
     public Task<IActionResult> Chunk(Guid id,int index,CancellationToken ct)=>Guard(async()=>{var reused=await uploads.ChunkAsync(id,UserId,index,Request.Headers["X-Chunk-SHA256"].ToString(),Request.Body,ct);return Json(new{confirmed=true,reused});});
     [HttpPost("admin/videos/sessions/{id:guid}/complete"),RequestSizeLimit(1024)]
-    public Task<IActionResult> Complete(Guid id,CancellationToken ct)=>Guard(async()=>{var s=await uploads.CompleteAsync(id,UserId,ct);return Json(new{s.Id,s.MediaAssetId,s.Sha256,state=s.State.ToString(),notice="Đủ byte đã xác nhận; tệp đang cách ly, chưa sẵn sàng phát."});});
+    public Task<IActionResult> Complete(Guid id,CancellationToken ct)=>Guard(async()=>{var s=await uploads.CompleteAsync(id,UserId,ct);return Json(new{s.Id,s.MediaAssetId,s.Sha256,state=s.State.ToString(),notice="Đã tải xong. Tệp đang chờ kiểm định và xử lý, chưa công khai."});});
     [HttpPost("admin/videos/sessions/{id:guid}/cancel")]
     public Task<IActionResult> Cancel(Guid id,CancellationToken ct)=>Guard(async()=>{await uploads.CancelAsync(id,UserId,ct);return Json(new{cancelled=true});});
     [HttpPut("admin/videos/{videoId:guid}/subtitle"),RequireUploadAntiforgeryHeader,DisableUploadFormValueModelBinding,RequestSizeLimit(VideoSubtitleService.MaximumBytes)]

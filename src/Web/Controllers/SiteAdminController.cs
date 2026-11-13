@@ -53,6 +53,30 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         await PopulateAsync(model, r, await ActorAsync()); return View(model);
     }
 
+    [HttpGet("admin/site/picker"), Authorize(Policy = Permissions.ManageSite), ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> Picker(string type = "image", string q = "", int page = 1)
+    {
+        q ??= "";
+        if (q.Length > 200 || page is < 1 or > 10000 || type is not ("image" or "content")) return BadRequest();
+        var actor = await ActorAsync();
+        if (type == "content")
+        {
+            var rows = query.Published();
+            if (!string.IsNullOrWhiteSpace(q)) rows = query.Filter(rows, q.Trim());
+            var choices = await PublicContentQuery.Recent(rows).Skip((page - 1) * 20).Take(21).Select(x => new { x.Id, x.Kind, x.Title }).ToListAsync();
+            return Json(new { page, hasMore = choices.Count > 20, items = choices.Take(20).Select(x => new { value = x.Id, label = PublicContentQuery.KindLabel(x.Kind) + " · " + x.Title }) });
+        }
+        var images = ImageChoices(actor);
+        if (!string.IsNullOrWhiteSpace(q)) images = images.Where(x => x.OriginalName.Contains(q.Trim()));
+        var candidates = await images.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Skip((page - 1) * 20).Take(21).ToListAsync();
+        return Json(new { page, hasMore = candidates.Count > 20, items = candidates.Take(20).Where(options.CanServe).Select(x => new { value = x.Id, label = x.OriginalName, preview = "/admin/site/media/" + x.Id }) });
+    }
+
+    private IQueryable<MediaAsset> ImageChoices(ContentActor actor) => db.MediaAssets.AsNoTracking().Where(x =>
+        !x.IsQuarantined && (x.MimeType == "image/jpeg" || x.MimeType == "image/png" || x.MimeType == "image/gif" || x.MimeType == "image/webp") &&
+        (x.UploadedByUserId == actor.UserId || db.ContentAssets.Any(a => a.MediaAssetId == x.Id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) ||
+         db.Set<SiteConfigurationRevision>().Any(v => v.LogoAssetId == x.Id) || db.Set<SiteBanner>().Any(b => b.MediaAssetId == x.Id)));
+
     [HttpPost("admin/site/disclosure-menu"), Authorize(Policy = Permissions.ManageSite)]
     public async Task<IActionResult> DisclosureMenu(string rowVersion)
     {
@@ -205,9 +229,15 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
             : [];
         var chosenIds = choices.Select(x => x.Id).ToArray(); if (selected.Length > 0) choices.AddRange(await query.Published().Where(x => selected.Contains(x.Id) && !chosenIds.Contains(x.Id)).Take(12).Select(x=>new{x.Id,x.Kind,x.Title}).ToListAsync());
         model.Contents = choices.Select(x => new SiteSelectItem(x.Id.ToString(), PublicContentQuery.KindLabel(x.Kind) + " · " + x.Title)).ToList();
-        var images = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && x.MimeType.StartsWith("image/") && (x.UploadedByUserId == actor.UserId || db.ContentAssets.Any(a => a.MediaAssetId == x.Id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) || db.Set<SiteConfigurationRevision>().Any(v => v.LogoAssetId == x.Id) || db.Set<SiteBanner>().Any(b => b.MediaAssetId == x.Id)));
+        var images = ImageChoices(actor);
         if (model.MediaSearch.Length > 0) images = images.Where(x => x.OriginalName.Contains(model.MediaSearch));
         model.Images = model.Section is "contact" or "banners" ? (await images.OrderByDescending(x => x.CreatedUtc).ThenBy(x => x.Id).Take(60).ToListAsync()).Where(options.CanServe).Select(x => new SiteSelectItem(x.Id.ToString(), x.OriginalName + " · " + x.ScanStatus)).ToList() : [];
+        var selectedImage = model.Section == "banners" ? model.Banner.MediaAssetId : model.Contact.LogoAssetId;
+        if (selectedImage.HasValue && !model.Images.Any(x => x.Value == selectedImage.Value.ToString()))
+        {
+            var chosen = await ImageChoices(actor).SingleOrDefaultAsync(x => x.Id == selectedImage.Value);
+            if (chosen != null && options.CanServe(chosen)) model.Images = model.Images.Append(new SiteSelectItem(chosen.Id.ToString(), chosen.OriginalName)).ToList();
+        }
         if (model.Section == "categories" && model.CategoryId.HasValue) model.SystemProtected = await db.Categories.AnyAsync(x => x.Id == model.CategoryId && x.SourceUrl != "");
         if (model.Section == "menus" && model.ItemId.HasValue) model.SystemProtected = false;
     }

@@ -8,6 +8,24 @@ namespace LandPortal.Infrastructure;
 
 public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null, VideoOptions? videoOptions = null)
 {
+    public async Task<IReadOnlyDictionary<string,string>> InspectRequirementsAsync(Guid id)
+    {
+        var content = await db.Contents.AsNoTracking().SingleAsync(x => x.Id == id);
+        var draft = await DraftAsync(id);
+        var revision = draft == null ? await RevisionAsync(id, content.CurrentRevisionId) : null;
+        try
+        {
+            var metadata = draft?.Metadata ?? revision!.Metadata;
+            V05ContentPolicy.Validate(metadata, content.Kind); ValidateDisclosureRequired(metadata);
+            await ValidateRequiredAsync(content, draft?.Title ?? revision!.Title, draft?.BodyHtml ?? revision!.BodyHtml,
+                draft == null ? revision!.PrimaryCategoryId : draft.PrimaryCategoryId, draft?.Assets.Count ?? revision!.Assets.Count,
+                draft?.Summary ?? revision!.Summary, draft?.Author ?? revision!.Author, draft == null ? revision!.CoverAssetId : draft.CoverAssetId,
+                draft != null ? draft.Assets.Where(x => x.Usage == "Attachment").Select(x => x.MediaAssetId).ToArray() : revision!.Assets.Where(x => x.Usage == "Attachment").Select(x => x.MediaAssetId).ToArray());
+            return new Dictionary<string,string>();
+        }
+        catch (EditorialValidationException error) { return error.Errors; }
+        catch (InvalidOperationException error) { return new Dictionary<string,string> { ["Metadata"] = error.Message }; }
+    }
     public Task<WorkflowResult> SaveAsync(Guid? id, DraftInput input, ContentActor actor, byte[]? version, Guid commandId, bool autosave = false)
     {
         var action = autosave ? "Autosave" : "SaveDraft";
