@@ -36,7 +36,8 @@ Check(workerLayout==layout,"Worker and Web resolve identical configuration and s
 workerLayout.VerifyBinding();
 var iis=XDocument.Load(Path.Combine(web,"web.config"));
 Check(iis.Descendants("hiddenSegments").Elements("add").Any(x=>(string?)x.Attribute("segment")==".runtime"),"Published IIS request filter hides embedded runtime");
-Check(new VideoToolLocator(web).FixedDirectory==new VideoToolLocator(Path.Combine(layout.Root,"worker")).FixedDirectory,"Web/Video Worker use same external FFmpeg tools directory");
+Check(new VideoToolLocator(web).FixedDirectory==new VideoToolLocator(Path.Combine(layout.Root,"worker")).FixedDirectory,"Web/legacy CLI resolve the same FFmpeg directory");
+Check(new VideoToolLocator(web).Find(new VideoOptions{Enabled=true}).Ffmpeg==Path.Combine(layout.Root,"tools","ffmpeg","ffmpeg.exe"),"Actual published tools are manifest-bound inside web");
 var old=Environment.GetEnvironmentVariable("Media__AllowManagedImageWithoutAv");
 try {Environment.SetEnvironmentVariable("Media__AllowManagedImageWithoutAv","false");Check(layout.LoadBoundSettings()["Media:AllowManagedImageWithoutAv"]=="true","Old ambient upload=false cannot override published env");}
 finally {Environment.SetEnvironmentVariable("Media__AllowManagedImageWithoutAv",old);}
@@ -76,7 +77,7 @@ builder.Services.AddAntiforgery(o=>o.HeaderName="X-CSRF-TOKEN");builder.Services
 await using var app=builder.Build();app.UsePrivateRuntimeProtection();app.UseStaticFiles();app.UseAuthentication();app.UseAuthorization();app.MapControllers();
 app.MapGet("/fixture-token",(HttpContext ctx,IAntiforgery anti)=>anti.GetAndStoreTokens(ctx).RequestToken!);await app.StartAsync();
 using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false,CookieContainer=new()}){BaseAddress=new(app.Urls.Single())};
-foreach(var path in new[]{"/.runtime/private/uat.json","/.runtime/manifest.json","/.runtime/worker/Worker.dll","/.runtime/ops/ttdl.env.example","/.RUNTIME/private/uat.json","/%2eruntime/private/uat.json","/%252eruntime/private/uat.json","/x/.runtime/private/uat.json","/.runtime%2fprivate%2fuat.json","/.runtime./private/uat.json","/.env","/appsettings.json","/web.config","/Infrastructure.dll","/private/uat.json"}){
+foreach(var path in new[]{"/.runtime/private/uat.json","/.runtime/manifest.json","/.runtime/worker/Worker.dll","/.runtime/tools/ffmpeg/ffmpeg.exe","/.runtime/tools/ffmpeg/ffprobe.exe","/.runtime/tools/ffmpeg/package-origin.json","/.runtime/ops/ttdl.env.example","/.RUNTIME/private/uat.json","/%2eruntime/private/uat.json","/%252eruntime/private/uat.json","/x/.runtime/private/uat.json","/.runtime%2fprivate%2fuat.json","/.runtime./private/uat.json","/.env","/appsettings.json","/web.config","/Infrastructure.dll","/private/uat.json"}){
  using var response=await http.GetAsync(path);Check(response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest,"HTTP secret/artifact blocked: "+path);
 }
 var token=await http.GetStringAsync("/fixture-token");

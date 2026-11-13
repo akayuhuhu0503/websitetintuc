@@ -1,40 +1,33 @@
-# IIS: một file .env, một lệnh Publish, chỉ copy web
+# IIS: pull → build → thay web
 
-Giữ `.env` private tại gốc source, pull code đã được duyệt và chạy:
+Giữ file .env private đã được cấu hình một lần tại gốc source:
 
-```powershell
+`powershell
+git pull --ff-only
 powershell -NoProfile -File scripts/build-for-iis.ps1
-```
+`
 
-Gói mặc định **WebBundle**: chỉ lấy toàn bộ `.local/publish/TTDL-IIS/web`, gồm
-`.runtime`. Dừng IIS/Worker, giữ bản web cũ ngoài webroot để rollback, thay web
-và restart. IIS vẫn trỏ vào web. Không merge từng DLL hoặc chỉnh JSON/manifest.
+Dừng ứng dụng IIS, giữ nguyên bản web cũ ngoài webroot để rollback, thay **toàn bộ**
+.local\publish\TTDL-IIS\web (gồm .runtime), rồi khởi động lại. Không trộn DLL,
+không sửa JSON/manifest và không chép đè TTDL-IIS\private đang giữ dữ liệu.
 
-Web chứa cấu hình private đã bind hash và Worker độc lập. Không có secret trong
-wwwroot; IIS và middleware chặn truy cập HTTP vào `.runtime`. Gói web có secret,
-chỉ chuyển bằng kênh riêng, không đưa lên Git hoặc URL tải công khai.
+Web tự chạy hàng đợi video, lịch xuất bản và các hàng đợi phụ theo chính sách hiện có.
+Không cần tạo Task Scheduler, Windows Service hoặc tài khoản Worker mới. Khi video
+được bật, build tự lấy bản FFmpeg cố định đã kiểm tra từ nhà phát hành, giữ giấy phép,
+và đưa vào .runtime/tools/ffmpeg. Các lần build sau dùng bộ nhớ đệm đã kiểm tra.
+Máy build cần truy cập HTTPS tới GitHub lần đầu; máy IIS không tự tải công cụ.
 
-Dữ liệu mặc định giữ nguyên ở `TTDL-IIS/private/{media,snapshots,temp,keys}`,
-FFmpeg giữ ở `TTDL-IIS/tools/ffmpeg` hoặc PATH. Không xóa/copy đè các thư mục này.
-Web/Worker đọc cùng cấu hình mới sinh từ `.env`, không lấy cờ upload cũ từ
-biến môi trường ứng dụng. Staging/UAT, HTTPS, SQL identity/Runtime18, Application
-Role và kiểm định file vẫn bắt buộc. Chưa quét vẫn là NotScanned, không giả Clean.
+Ảnh/tài liệu CMS theo chính sách no-AV đã duyệt được kiểm định ngay trong Web.
+Tệp chưa quét vẫn là NotScanned. Tệp công dân/phụ đề và dữ liệu cách ly cũ giữ
+đúng yêu cầu quét hiện có; không tự mở ngoại lệ. SMTP Disabled vẫn không gửi thư.
 
-**Chuyển đổi lần đầu:** đổi Action của trình giám sát Worker hiện có sang
-`web/.runtime/run-worker.ps1 -Mode Video` (các mode khác giữ đúng mode).
-Giữ nguyên tài khoản, lịch và quyền; không tạo Worker trùng hoặc bật Mail.
-Tài khoản pool/Worker cần đọc gói mới và ghi bốn kho dữ liệu cũ.
+**IIS nghỉ hoặc dừng:** xử lý nền tạm dừng. Hàng đợi SQL vẫn còn; Web hoạt động lại
+thì tiếp tục. Trước khi trả trang công khai, Web xử lý lịch đến hạn qua đúng quy trình
+xuất bản và phiên bản đã duyệt. Không hứa xử lý nền liên tục khi IIS đã dừng.
 
-[Hướng dẫn chuyển đổi, cập nhật và rollback](iis-web-only.md).
-Trong gói chỉ-copy-web, hướng dẫn nằm tại `.runtime/README.md`.
+Kiểm tra /, /tin-tuc, /admin/login, /health, upload CMS và /admin/videos.
+Nếu cập nhật lỗi, trả nguyên web cũ và khởi động lại; không rollback SQL/storage.
 
-Build không mở SQL, chạy migration, cấp quyền hoặc deploy. Gói build cũ chưa
-triển khai được giữ lại với tên `.previous-<timestamp>`; gói đang chạy/IIS tham
-chiếu hoặc không có build receipt hợp lệ sẽ bị từ chối ghi đè. Không cần đổi
-lệnh build mỗi lần. `-PrivateMode Portable` vẫn dành cho gói legacy đầy đủ;
-không áp dụng hướng dẫn chỉ-copy-web cho gói legacy.
-
-Nếu khởi động bị chặn, đọc mã cụ thể: `PRIVATE_HASH` có thể do trộn config/binary;
-`IDENTITY` cần tài khoản dịch vụ ít quyền; `STORAGE_BOUNDARY` cần kho nằm ngoài
-ứng dụng/IIS mappings; `HTTPS` cần đúng HTTPS origin. Không tắt guard để khởi động.
-Publish PASS không thay nghiệm thu trên IIS thật.
+Gói web có cấu hình bí mật: chỉ chuyển qua kênh riêng; không đưa lên Git hoặc URL
+tải công khai. Runtime18, HTTPS, SQL identity, Application Role, hash gói và ranh giới
+kho private vẫn bắt buộc. [Chi tiết giới hạn và chuyển đổi](iis-web-only.md).

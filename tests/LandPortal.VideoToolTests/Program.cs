@@ -4,6 +4,12 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using LandPortal.Infrastructure;
 
+if(args.Length==2 && args[0]=="--bundled-tools")
+{
+    await BundledToolChecks.RunAsync(args[1]);
+    return;
+}
+
 if(args.Length==1 && args[0]=="--worker-status")
 {
     WorkerStatusChecks.Run();

@@ -17,7 +17,7 @@ internal static class LocatorRuntimeChecks
         var data = Path.Combine(package, "private");
         foreach (var path in new[] { web, runtime, worker, fixedTools, data }) Directory.CreateDirectory(path);
         // Discovery reads only the existence of this marker; authorization still belongs to the package validator.
-        File.WriteAllText(Path.Combine(runtime, "manifest.json"), "{}");
+        File.WriteAllText(Path.Combine(runtime, "manifest.json"), "{\"files\":[]}");
         var checks = new List<string>();
         void Check(bool ok, string name)
         {

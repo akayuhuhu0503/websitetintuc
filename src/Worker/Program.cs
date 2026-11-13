@@ -4,6 +4,20 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 // Explicit independent modes: scheduler, mail, inquiry scanner, or video; never crawl.
+if(args.Contains("--verify-package")&&(args.Length!=1||args[0]!="--verify-package"))
+    throw new InvalidOperationException("Offline package verification cannot be combined with Worker execution options.");
+var bundledWorker = Environment.GetEnvironmentVariable("LANDPORTAL_WEB_BUNDLE")=="1" ||
+    new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Parent?.Name==".runtime";
+if(!args.Contains("--verify-package")&&bundledWorker)
+{
+    // Existing WebBundle tasks can keep their Action during rollout. They must not
+    // open SQL or read global IIS metadata once jobs are owned by the Web host.
+    var bundle=PortablePackageLayout.Resolve(AppContext.BaseDirectory);
+    if(!bundle.WebBundle)throw new InvalidOperationException("WebBundle worker handover requires the bound package layout.");
+    bundle.VerifyBinding();
+    Console.WriteLine("Background jobs are processed by the Web application. No separate Worker is started.");
+    return 0;
+}
 if(args.Length==1&&args[0]=="--verify-package")
 {
     // Offline packaging check only: exits before SQL, queues, scanner, or writing storage.

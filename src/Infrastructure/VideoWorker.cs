@@ -14,7 +14,9 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
         // A no-AV worker must not consume attempts or relabel legacy quarantined jobs
         // when no scanner is available. Only new explicitly enrolled uploads proceed.
         var onlyManaged=options.ApprovedManagedVideoWithoutAv && !(await scanner.HealthAsync(ct)).Ready;
-        Guid id,lease;byte[] version;
+        Guid id=Guid.Empty,lease=Guid.Empty;byte[] version=[];
+        try
+        {
         await using(var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct))
         {
             await db.Database.ExecuteSqlRawAsync("DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource=N'video:worker',@LockMode=N'Exclusive',@LockOwner=N'Transaction',@LockTimeout=3000; IF @r<0 THROW 51000,'Video worker busy.',1;",ct);
@@ -33,6 +35,29 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
             {job.State=VideoState.Blocked;job.Error="VIDEO_DISK_BUDGET_UNAVAILABLE";db.AuditLogs.Add(new(){Actor="video-worker",Action="video.processing.blocked",Detail=JsonSerializer.Serialize(new{job.MediaAssetId,job.Error,Utc=Now})});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return true;}
             job.State=VideoState.Scanning;job.Attempts++;job.LeaseToken=lease=Guid.NewGuid();job.LeaseUntilUtc=Now.AddSeconds(options.ProcessSeconds*2+180);id=job.MediaAssetId;await db.SaveChangesAsync(ct);version=job.RowVersion.ToArray();await tx.CommitAsync(ct);
         }
+        return await ProcessClaimAsync(id,lease,version,ct);
+        }
+        catch(OperationCanceledException)when(ct.IsCancellationRequested)
+        {
+            // A graceful host recycle is not a failed upload. Only this exact lease
+            // may be released; a killed process still recovers through lease expiry.
+            using var cleanup=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                db.ChangeTracker.Clear();
+                if(id!=Guid.Empty&&lease!=Guid.Empty)await db.Set<VideoFile>().Where(x=>x.MediaAssetId==id&&x.LeaseToken==lease&&(x.State==VideoState.Scanning||x.State==VideoState.Processing))
+                    .ExecuteUpdateAsync(s=>s.SetProperty(x=>x.State,VideoState.Pending)
+                        .SetProperty(x=>x.Error,"VIDEO_HOST_STOPPED")
+                        .SetProperty(x=>x.LeaseToken,(Guid?)null).SetProperty(x=>x.LeaseUntilUtc,(DateTimeOffset?)null)
+                        .SetProperty(x=>x.AvailableUtc,Now).SetProperty(x=>x.Attempts,x=>x.Attempts>0?x.Attempts-1:0),cleanup.Token);
+            }
+            catch(Exception e)when(e is OperationCanceledException or Microsoft.Data.SqlClient.SqlException or InvalidOperationException)
+            { /* Bounded shutdown: durable lease remains recoverable if SQL is unavailable. */ }
+            throw;
+        }
+    }
+    private async Task<bool> ProcessClaimAsync(Guid id,Guid lease,byte[] version,CancellationToken ct)
+    {
         var watch=Stopwatch.StartNew();InquiryScanResult? scan=null;VideoOutput? output=null;var state=VideoState.Failed;var error="VIDEO_UNKNOWN_FAILURE";
         var file=await db.Set<VideoFile>().Include(x=>x.Original).AsNoTracking().SingleAsync(x=>x.MediaAssetId==id,ct);var session=await db.Set<VideoUploadSession>().AsNoTracking().SingleAsync(x=>x.Id==file.UploadSessionId,ct);
         var noAv=options.ApprovedManagedVideoWithoutAv && file.Original.ValidationStatus==VideoOptions.NoAvPending && file.Original.ScanStatus=="NotScanned" && file.ScannedUtc==null && file.ScannerProvider==null;
@@ -59,6 +84,7 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
         catch(VideoProcessingException e){state=e.Blocked?VideoState.Blocked:VideoState.Failed;error=e.Message;}
         catch(MediaUploadException){state=VideoState.Failed;error="VIDEO_PERMISSION_OR_POLICY_REVOKED";}
         catch(Exception e)when(e is IOException or UnauthorizedAccessException or OperationCanceledException or JsonException or InvalidOperationException or FormatException or System.ComponentModel.Win32Exception){state=VideoState.Failed;error="VIDEO_"+e.GetType().Name;}
+        ct.ThrowIfCancellationRequested();
         db.ChangeTracker.Clear();await using(var tx=await db.Database.BeginTransactionAsync(CancellationToken.None))
         {
             var current=await db.Set<VideoFile>().Include(x=>x.Original).SingleAsync(x=>x.MediaAssetId==id,CancellationToken.None);

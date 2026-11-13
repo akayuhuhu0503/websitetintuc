@@ -152,13 +152,16 @@ OUTPUT INSERTED.*;").ToListAsync(ct);
         db.ChangeTracker.Clear(); return new(job.Id, job.ContentId, job.Generation, token, workerId);
     }
 
-    public async Task<SchedulerOutcome> ExecuteAsync(PublicationLease lease, CancellationToken ct = default)
+    public async Task<SchedulerOutcome> ExecuteAsync(PublicationLease lease, CancellationToken ct = default, bool allowLateWebCatchUp = false)
     {
         var job = await db.PublicationJobs.AsNoTracking().SingleAsync(x => x.Id == lease.JobId, ct);
         if (job.State == PublicationJobState.Completed) return new("Completed", "Hiệu ứng đã commit; không đăng lại.");
         if (!Fence(job, lease)) return new("Superseded", "Lease/generation không còn hiệu lực.");
         if (job.AttemptCount > settings.MaxAttempts) return await FinishFailure(lease, true, "Đã vượt số lần thực thi cho phép; cần người có quyền xem xét.", ct);
-        if (time.GetUtcNow() - job.DueUtc > TimeSpan.FromMinutes(settings.CatchUpMinutes))
+        // The Web host can sleep under IIS. On its next request/startup, an unchanged
+        // active schedule is still checked through the complete publication workflow.
+        // Legacy standalone workers retain their configured lateness cutoff.
+        if (!allowLateWebCatchUp && time.GetUtcNow() - job.DueUtc > TimeSpan.FromMinutes(settings.CatchUpMinutes))
             return await FinishFailure(lease, false, "Lịch quá ngưỡng chạy bù; cần người có quyền đặt lịch mới.", ct);
         try
         {
