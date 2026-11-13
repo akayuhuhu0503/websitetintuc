@@ -1,6 +1,6 @@
 @model CreateAccountModel
 @{ Layout = "_AdminLayout"; ViewData["Title"] = "Tạo tài khoản nội bộ"; }
-<p><a href="/admin/users">← Danh sách tài khoản</a></p><h1>Tạo tài khoản nội bộ</h1><p>Hệ thống tự sinh mật khẩu tạm ngẫu nhiên, riêng cho mỗi tài khoản. Người vận hành nhận mật khẩu qua tệp private trên máy chủ và bàn giao qua kênh an toàn; mật khẩu không được gửi qua trang LAN hoặc email từ cổng thông tin. Người dùng phải đổi mật khẩu khi đăng nhập lần đầu.</p>
+<p><a href="/admin/users">← Danh sách tài khoản</a></p><h1>Tạo tài khoản nội bộ</h1><p>Hệ thống tự sinh mật khẩu tạm ngẫu nhiên, riêng cho mỗi tài khoản. Sau khi tạo, xác thực lại bằng mật khẩu của bạn để xem mật khẩu tạm một lần qua HTTPS trong vòng 10 phút. Bàn giao trực tiếp qua kênh an toàn; website không gửi email. Người dùng phải đổi mật khẩu khi đăng nhập lần đầu.</p>
 <form method="post" action="/admin/users/create" class="account-card">@Html.AntiForgeryToken()<div asp-validation-summary="All" class="validation-summary" role="alert"></div>
 <div class="form-field"><label asp-for="UserName"></label><input asp-for="UserName" autocomplete="off" maxlength="256" /><span asp-validation-for="UserName"></span></div>
 <div class="form-field"><label asp-for="Email"></label><input asp-for="Email" autocomplete="off" maxlength="256" /><span asp-validation-for="Email"></span></div>

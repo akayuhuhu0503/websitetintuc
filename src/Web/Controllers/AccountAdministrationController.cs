@@ -2,15 +2,19 @@ using System.Security.Claims;
 using LandPortal.Application;
 using LandPortal.Infrastructure;
 using LandPortal.Web.Models;
+using LandPortal.Web.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace LandPortal.Web.Controllers;
 
 [Authorize(Policy = Permissions.ManageUsers)]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class AccountAdministrationController(PortalDbContext db, AccountAdministrationService administration, CurrentPermissionService permissions) : Controller
+public sealed class AccountAdministrationController(PortalDbContext db, AccountAdministrationService administration, CurrentPermissionService permissions,
+    SignInManager<PortalUser> signIn, PublicCaptchaService captcha) : Controller
 {
     private string ActorId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException();
     [HttpGet("admin/users")]
@@ -33,8 +37,8 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
         {
             try
             {
-                var receipt = await administration.CreateUserAsync(ActorId, model.UserName, model.Email, model.DisplayName);
-                TempData["CredentialFile"] = receipt.CredentialFile;
+                var receipt = await administration.CreateUserAsync(ActorId, model.UserName, model.Email, model.DisplayName,cmsHandoff:true);
+                RememberDelivery(receipt);
                 TempData["Success"] = "Đã tạo tài khoản với mật khẩu tạm ngẫu nhiên riêng. Tài khoản phải đổi mật khẩu trước khi quản trị; chưa được gán nhóm quyền.";
                 return Redirect("/admin/users/" + Uri.EscapeDataString(receipt.UserId));
             }
@@ -65,14 +69,52 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
     {
         try
         {
-            var receipt=await administration.ResetPasswordAsync(ActorId,id,concurrencyStamp);
-            TempData["CredentialFile"]=receipt.CredentialFile;
+            var receipt=await administration.ResetPasswordAsync(ActorId,id,concurrencyStamp,cmsHandoff:true);
+            RememberDelivery(receipt);
             TempData["Success"]="Đã tạo mật khẩu tạm ngẫu nhiên mới và thu hồi các phiên cũ. Người dùng phải đổi mật khẩu khi đăng nhập tiếp theo.";
             return Redirect("/admin/users/"+Uri.EscapeDataString(id));
         }
         catch(UnauthorizedAccessException){return Forbid();}
         catch(DbUpdateConcurrencyException){return await Failure(id,409,"Tài khoản đã thay đổi; tải lại trước khi reset mật khẩu.");}
         catch(InvalidOperationException error){return await Failure(id,400,error.Message);}
+    }
+    [HttpPost("admin/users/{id}/temporary-credential"),ValidateAntiForgeryToken,EnableRateLimiting("login")]
+    public async Task<IActionResult> RevealCredential(string id,RevealCredentialModel model)
+    {
+        PrivateResponse();
+        var password=model.CurrentPassword;model.CurrentPassword="";ModelState.Remove(nameof(RevealCredentialModel.CurrentPassword));
+        if(!Request.IsHttps)return await Failure(id,400,"Chỉ bàn giao mật khẩu trên kết nối HTTPS. Không gửi mật khẩu quản trị qua HTTP.");
+        if(!ModelState.IsValid||string.IsNullOrEmpty(password)||password.Length>256)return await Failure(id,400,"Nhập mật khẩu hiện tại của bạn và trả lời câu hỏi xác thực.");
+        try
+        {
+            await captcha.ConsumeAsync(model.CaptchaId,model.CaptchaAnswer,InteractionBrowserSession.Get(HttpContext),CredentialAddress(),"CmsCredentialDelivery",model.DeliveryId);
+            var actor=await signIn.UserManager.FindByIdAsync(ActorId);
+            if(actor is null||actor.IsDisabled||actor.MustChangePassword||string.IsNullOrWhiteSpace(actor.SecurityStamp))return Forbid();
+            var authenticated=await signIn.CheckPasswordSignInAsync(actor,password,lockoutOnFailure:true);
+            if(!authenticated.Succeeded)
+            {
+                db.AuditLogs.Add(new(){Actor=ActorId,Action="AccountCredentialReauthenticationFailed",Detail="Password confirmation rejected; no credential delivered"});
+                await db.SaveChangesAsync();
+                return await Failure(id,400,"Không xác thực được. Kiểm tra mật khẩu hiện tại của chính bạn và trả lời câu hỏi mới.");
+            }
+            var value=await administration.RevealTemporaryPasswordAsync(ActorId,id,model.DeliveryId,actor.SecurityStamp);
+            TempData.Remove("CmsCredentialTarget");TempData.Remove("CmsCredentialId");TempData.Remove("CmsCredentialExpiry");
+            return View("~/Views/Accounts/CredentialOnce.cshtml",new CredentialOnceModel(id,value.UserName,value.Password));
+        }
+        catch(PublicCaptchaException error){return await Failure(id,error.StatusCode,error.Message);}
+        catch(UnauthorizedAccessException){return Forbid();}
+        catch(InvalidOperationException error){return await Failure(id,400,error.Message);}
+    }
+    private string CredentialAddress()=>"cms-credential:"+(HttpContext.Connection.RemoteIpAddress?.ToString()??"unknown");
+    private void PrivateResponse()
+    {
+        Response.Headers.CacheControl="no-store, private";Response.Headers.Pragma="no-cache";Response.Headers.Expires="0";
+        Response.Headers["Referrer-Policy"]="no-referrer";Response.Headers["X-Robots-Tag"]="noindex, nofollow";
+    }
+    private void RememberDelivery(TemporaryPasswordReceipt receipt)
+    {
+        var handoff=receipt.CmsDelivery??throw new InvalidOperationException("Phiên bàn giao mật khẩu chưa được tạo.");
+        TempData["CmsCredentialTarget"]=receipt.UserId;TempData["CmsCredentialId"]=handoff.DeliveryId.ToString("D");TempData["CmsCredentialExpiry"]=handoff.ExpiresUtc.ToString("O");
     }
     [Authorize(Policy = Permissions.GrantPermissions), HttpPost("admin/users/{id}/roles")]
     public Task<IActionResult> Roles(string id, string concurrencyStamp, List<string> roleIds) => Operation(id,
@@ -107,10 +149,24 @@ public sealed class AccountAdministrationController(PortalDbContext db, AccountA
         var scopeClaims=await db.UserClaims.AsNoTracking().Where(x=>x.UserId==id&&(x.ClaimType=="content.category.scope"||x.ClaimType=="content.category")).ToListAsync();
         var assignedCategories=scopeClaims.Where(x=>x.ClaimType=="content.category"&&int.TryParse(x.ClaimValue,out _)).Select(x=>int.Parse(x.ClaimValue!)).ToHashSet();
         var scopeChoices=await db.Categories.AsNoTracking().OrderBy(x=>x.SortOrder).Select(x=>new EditorCategory(x.Id,x.Name)).ToListAsync();
-        return new AccountDetailModel { Id = user.Id, UserName = user.UserName ?? "", Email = user.Email ?? "", DisplayName = user.DisplayName,
+        var model=new AccountDetailModel { Id = user.Id, UserName = user.UserName ?? "", Email = user.Email ?? "", DisplayName = user.DisplayName,
             ConcurrencyStamp = user.ConcurrencyStamp ?? "", Disabled = user.IsDisabled, MustChangePassword = user.MustChangePassword,
             UnrestrictedCategories=scopeClaims.Count==0,CategoryIds=assignedCategories,Categories=scopeChoices.Where(x=>actor.CategoryIds==null||actor.CategoryIds.Contains(x.Id)).ToArray(),RoleIds = roleIds, EffectivePermissions = effective, CanGrant = actor.Has(Permissions.GrantPermissions) && actor.UserId != id,
             CanChangeSensitive = !effective.Any(AccountAdministrationService.IsSensitive) || actor.Has(Permissions.GrantPrivileged),
             Roles = roles.Select(r => new RoleChoice(r.Id, r.Name ?? "", roleClaims.Any(c => c.RoleId == r.Id && c.ClaimValue is not null && AccountAdministrationService.IsSensitive(c.ClaimValue)))).ToArray() };
+        // MVC's TempData JSON serializer can restore GUID-looking strings as
+        // Guid values. Accept its typed round trip instead of losing the handoff.
+        if(TempData.Peek("CmsCredentialTarget")?.ToString()==id&&Guid.TryParse(TempData.Peek("CmsCredentialId")?.ToString(),out var handoff))
+        {
+            model.CredentialDeliveryId=handoff;model.SecureCredentialTransport=Request.IsHttps;
+            if(DateTimeOffset.TryParse(TempData.Peek("CmsCredentialExpiry")?.ToString(),out var expiry))model.CredentialExpiresUtc=expiry;
+            if(Request.IsHttps)
+            {
+                PrivateResponse();
+                try{model.CredentialCaptcha=await captcha.IssueAsync(InteractionBrowserSession.Get(HttpContext),CredentialAddress(),"CmsCredentialDelivery",handoff);}
+                catch(PublicCaptchaException error){ModelState.AddModelError("",error.Message);}
+            }
+        }
+        return model;
     }
 }
