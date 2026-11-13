@@ -43,7 +43,7 @@ Fixture cũng đã sửa: đọc đúng envelope JSON của thư viện, giữ c
 ## Giới hạn cần hiểu đúng
 
 - Word/Excel thông thường là tài liệu đính kèm; không tự chuyển toàn bộ bố cục Word thành HTML. Riêng lịch tuần dùng bộ đọc bảng Word hiện có, vẫn yêu cầu cán bộ rà soát nội dung và quyền công khai bản gốc.
-- Video gắn tự động khi editor mở hoặc mở lại. Hàng đợi xử lý vẫn theo cơ chế Web đã có; IIS dừng thì không hứa xử lý liên tục. Các kiểm tra mới không thay thế kiểm định FFmpeg hoặc cho video đang cách ly thành Ready.
+- Video gắn tự động ở server sau khi Ready, kể cả đã đóng tab hoặc đăng xuất; khi Web hoạt động lại sẽ tiếp tục các yêu cầu còn hợp lệ. Chỉ gắn vào đúng vòng đời bản nháp đã yêu cầu, kiểm tra lại quyền và byte/hash, không gắn lại video đã gỡ. IIS dừng thì không hứa xử lý liên tục. Các kiểm tra mới không thay thế kiểm định FFmpeg hoặc cho video đang cách ly thành Ready.
 - Bộ kiểm tra SQL video mới dùng byte/hash giả lập riêng để thử ràng buộc attach, phiên bản và quyền; không tuyên bố đó là lần chạy FFmpeg thực mới. Pipeline chuyển mã không được sửa trong đợt này.
 - Poster vẫn do bộ xử lý hiện có tạo; chưa bổ sung chọn khung hình hoặc thay poster thủ công. Đề xuất này nằm ngoài các lỗi gắn tệp/quy trình đã sửa và sẽ cần kiểm định đầu ra riêng nếu triển khai.
 - Người chỉ có quyền duyệt không có nút xuất bản. “Duyệt và xuất bản” có thể duyệt thành công nhưng bị chặn ở bước phát hành nếu điều kiện thay đổi; màn hình phản ánh chính xác phần đã thực hiện.
@@ -54,8 +54,16 @@ Fixture cũng đã sửa: đọc đúng envelope JSON của thư viện, giữ c
 ## Thao tác cho cán bộ
 
 1. **Bài viết → Tạo nội dung**: nhập tiêu đề, chuyên mục và nội dung; nháp được tự lưu. Chọn ảnh hoặc tài liệu ngay tại bài.
-2. Nếu có video, chọn tệp trong **Video của bài viết**, chờ xử lý và gắn xong. Mở xem trước, bổ sung các mục còn thiếu, bấm **Gửi duyệt**.
-3. Người duyệt mở **Chờ duyệt**, xem trước rồi **Chỉ duyệt**, **Duyệt và xuất bản** nếu được cấp quyền, hoặc **Trả bài kèm lý do**. Hẹn giờ chọn thời điểm ngay tại bài; sửa/hủy lịch ở Lịch xuất bản.
+2. Nếu có video, chọn tệp trong **Video của bài viết**. Sau khi tải xong có thể đóng tab; server tiếp tục xử lý và gắn vào nháp. Khi mở lại, xem trước, bổ sung các mục còn thiếu, bấm **Gửi duyệt**. Nếu đang sửa chưa lưu khi video được gắn, nội dung nhập vẫn giữ nguyên và tự lưu tạm dừng để đối chiếu bản mới, không ghi đè video vừa gắn.
+3. Người duyệt mở **Chờ duyệt**, xem trước rồi **Chỉ duyệt**, **Duyệt và xuất bản** nếu được cấp quyền, hoặc **Trả bài kèm lý do**. Hẹn giờ chọn **Duyệt và hẹn giờ** hoặc **Hẹn giờ bản đã duyệt**. Nút **Hẹn giờ đăng trực tiếp (không qua duyệt)** là lựa chọn riêng theo quyền, không được tự suy ra từ tài khoản. Sửa/hủy lịch ở Lịch xuất bản.
+
+## Bổ sung trước khi merge PR #11
+
+- Gắn video dùng yêu cầu tải và biên nhận lệnh đã có trong SQL, không thêm schema. Worker và Web dùng chung thao tác khóa nội dung, kiểm tra quyền hiện hành, Ready/byte/hash và phiên bản; chỉ thêm video vào bản nháp mới nhất, giữ nguyên chữ và tệp khác. Xử lý lại sau mất phản hồi hoặc khởi động không tạo bản gắn/revision trùng; yêu cầu đã qua gửi duyệt/mở bản sửa khác không được gắn vào vòng đời mới.
+- Editor nhận biết server đổi phiên bản: tải lại toàn bộ bản nháp khi không có sửa chưa lưu; nếu đang soạn hoặc chọn tệp thì giữ nội dung, tạm dừng tự lưu và cho đối chiếu. Không chỉ thay rowversion rồi ghi đè danh sách tệp cũ.
+- Hẹn giờ đã duyệt lưu đúng revision, hash và người duyệt. Thử lại cùng lịch và thực thi lịch đều kiểm tra lại quyền người yêu cầu/người duyệt; quyền đăng trực tiếp không thay thế quyền duyệt đã mất. Chế độ trực tiếp chỉ được gửi từ lựa chọn riêng và xác minh lại tại server.
+- Kiểm chứng bổ sung: video phía server **22/22 PASS** trên SQL Server LocalDB mới; hẹn giờ **20/20 PASS** qua HTTP/SQL. Không cộng 18 kiểm tra dựng host/Identity mỗi lượt vào hai nhóm nghiệp vụ. Bao gồm gỡ video chỉ qua autosave chưa có revision, thử lại/đồng thời, khởi động lại, mất quyền, sai hash, đổi vòng đời nháp và giới hạn 100 tệp.
+- Browser: đồng bộ video nền **12/12**, video editor hiện có **12/12**, hẹn giờ **20/20 PASS**. Hẹn giờ dùng Razor render thật của fixture; video dùng DOM fixture, tất cả chạy editor/Jodit thật với HTTP giả lập. Release Web/Worker và runner không lỗi/cảnh báo; TypeScript PASS. Không chạy lại các E2E không liên quan hoặc kiểm định FFmpeg.
 
 ## Cập nhật sau khi duyệt PR
 

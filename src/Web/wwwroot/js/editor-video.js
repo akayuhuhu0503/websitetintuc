@@ -82,6 +82,14 @@
     polling = true;
     try {
       const state = await api(`/admin/videos/editor/${contentId}`); editable = state.canUpload;
+      const reconciliation = bridge()?.acceptServerVideoState?.(state) || 'current';
+      if (reconciliation !== 'current') {
+        if (reconciliation === 'conflict') {
+          editable = false; controls();
+          processing('Video được xử lý và gắn ở máy chủ kể cả khi đóng trang. Bản nháp trong tab này đã cũ; giữ phần chưa lưu và đối chiếu bản mới theo hướng dẫn phía trên.');
+        }
+        return;
+      }
       if (!session && state.sessions.length) session = state.sessions.find(x => !['Cancelled', 'Expired'].includes(x.state)) || state.sessions[0];
       const current = state.sessions.find(x => x.id === session?.id);
       if (current) {
@@ -125,7 +133,11 @@
       await api(`/admin/videos/sessions/${session.id}/chunks/${index}`, 'PUT', part, { 'Content-Type': 'application/octet-stream', 'X-Chunk-SHA256': hash }, abort.signal);
       session = await api(`/admin/videos/sessions/${session.id}`); showProgress(session); processing('Đang tải video. Các phần đã nhận được giữ để tiếp tục khi cần.');
     }
-    if (!paused) { await api(`/admin/videos/sessions/${session.id}/complete`, 'POST'); processing('Đã tải xong. Hệ thống đang kiểm định và xử lý video.'); }
+    if (!paused) {
+      await api(`/admin/videos/sessions/${session.id}/complete`, 'POST');
+      fileInput.value = ''; file = null;
+      processing('Đã tải xong. Hệ thống sẽ kiểm định, xử lý và tự gắn vào bản nháp. Bạn có thể đóng trang; bài chưa được công khai.');
+    }
   }
   async function upload(create) {
     if (busy || attaching || !editable) return;

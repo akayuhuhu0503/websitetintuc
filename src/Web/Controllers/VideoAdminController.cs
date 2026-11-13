@@ -64,7 +64,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
         var attachedIds=await db.DraftAssets.AsNoTracking().Where(x=>x.ContentId==contentId&&x.Usage=="Video").Select(x=>x.MediaAssetId).ToListAsync(ct);
         var videos=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).Where(x=>assetIds.Contains(x.MediaAssetId)||attachedIds.Contains(x.MediaAssetId)).ToListAsync(ct);
         var editable=!content.IsTrashed&&(content.State is WorkflowState.Draft or WorkflowState.Rejected)&&await permissions.CanEditAsync(actor,content);
-        return Json(new{enabled=options.Enabled,maxBytes=options.MaxFileBytes,chunkBytes=options.ChunkBytes,managedVideoNoAv=options.ApprovedManagedVideoWithoutAv,
+        return Json(new{enabled=options.Enabled,rowVersion=Convert.ToBase64String(content.RowVersion),currentRevisionId=content.CurrentRevisionId,maxBytes=options.MaxFileBytes,chunkBytes=options.ChunkBytes,managedVideoNoAv=options.ApprovedManagedVideoWithoutAv,
             articleStatus=VideoCmsLabels.Article(content.State.ToString(),content.IsPublic),canUpload=editable,
             sessions=sessions.Select(s=>{var video=videos.SingleOrDefault(x=>x.MediaAssetId==s.MediaAssetId);var ready=video!=null&&VideoReadiness.HasProof(video,environment.IsDevelopment(),options);
                 return new{s.Id,state=s.State.ToString(),s.ExpectedBytes,s.ReceivedBytes,s.ExpiresUtc,s.MediaAssetId,
@@ -80,30 +80,9 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     {
         var session=await uploads.GetAsync(request.SessionId,UserId,true,ct);
         if(session.ContentId!=contentId||session.State!=VideoUploadState.Completed||session.MediaAssetId==null)throw new MediaUploadException("Video chưa hoàn tất tải cho bản nháp này.",409);
-        var actor=await uploads.AuthorizeAsync(UserId,contentId,true,ct);
-        var intent=request.SessionId.ToString("D");
-        if(!await db.AuditLogs.AnyAsync(x=>x.ContentId==contentId&&x.Actor==UserId&&x.Action==VideoUploadService.EditorAttachRequested&&x.Detail==intent,ct))
-            throw new MediaUploadException("Lần tải này chưa yêu cầu gắn tự động; chọn video qua bộ chọn đã có.",409);
-        var content=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==contentId,ct);
-        var version=Convert.FromBase64String(request.RowVersion);
-        if(version.Length!=8||!content.RowVersion.AsSpan().SequenceEqual(version))throw new DbUpdateConcurrencyException();
-        var draft=await db.ContentDrafts.AsNoTracking().Include(x=>x.Categories).Include(x=>x.Assets).SingleAsync(x=>x.ContentId==contentId,ct);
-        // A workflow receipt is committed atomically with the revision. It consumes this
-        // request once, including after a lost HTTP response. Never reattach a removed video.
-        var receipt=await db.ContentCommands.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==session.Id,ct);
-        var wasAttached=await db.ContentAssets.AnyAsync(x=>x.MediaAssetId==session.MediaAssetId&&db.Revisions.Any(r=>r.Id==x.RevisionId&&r.ContentId==contentId),ct);
-        if(receipt!=null||wasAttached)
-        {
-            if(receipt!=null&&(receipt.ContentId!=contentId||receipt.ActorUserId!=UserId||receipt.Action!="SaveDraft"))throw new MediaUploadException("Mã thao tác không khớp bản nháp.",409);
-            return EditorSaved(new(content.Id,content.CurrentRevisionId,content.PublishedRevisionId,content.RowVersion,content.State,content.IsPublic,content.IsTrashed,true,DateTimeOffset.UtcNow),draft.Assets.Any(x=>x.MediaAssetId==session.MediaAssetId&&x.Usage=="Video")?session.MediaAssetId:null);
-        }
-        var asset=await db.MediaAssets.AsNoTracking().SingleAsync(x=>x.Id==session.MediaAssetId,ct);
-        if(asset.UploadedByUserId!=UserId||!await VideoReadiness.ReadyAsync(db,storage,asset,environment.IsDevelopment(),ct,options))
-            throw new MediaUploadException("Video chưa đạt kiểm định MP4, ảnh đại diện hoặc tính toàn vẹn. Bản nháp được giữ nguyên.",409);
-        var linked=draft.Assets.Select(x=>new AssetSelection{MediaAssetId=x.MediaAssetId,Usage=x.Usage,Caption=x.Caption,SortOrder=x.SortOrder}).ToList();
-        if(!linked.Any(x=>x.MediaAssetId==asset.Id))linked.Add(new(){MediaAssetId=asset.Id,Usage="Video",SortOrder=linked.Count});
-        var result=await workflow.SaveAsync(contentId,new(){Kind=content.Kind,Title=draft.Title,Summary=draft.Summary,BodyHtml=draft.BodyHtml,Author=draft.Author,SourceCredit=draft.SourceCredit,Metadata=draft.Metadata,PrimaryCategoryId=draft.PrimaryCategoryId,SecondaryCategoryIds=draft.Categories.Select(x=>x.CategoryId).Where(x=>x!=draft.PrimaryCategoryId).ToList(),CoverAssetId=draft.CoverAssetId,Assets=linked},actor,version,session.Id);
-        return EditorSaved(result,asset.Id);
+        var result=await new VideoDraftAttachmentService(db,storage,options,permissions,workflow,environment.IsDevelopment())
+            .AttachAsync(session.Id,UserId,Convert.FromBase64String(request.RowVersion),ct);
+        return EditorSaved(result.Workflow,result.AssetId);
     });
     private JsonResult EditorSaved(WorkflowResult result,Guid? asset)=>Json(new{contentId=result.ContentId,currentRevisionId=result.CurrentRevisionId,publishedRevisionId=result.PublishedRevisionId,rowVersion=Convert.ToBase64String(result.RowVersion),state=result.State.ToString(),result.IsPublic,result.IsTrashed,result.AlreadyApplied,savedUtc=result.SavedUtc,videoAssetId=asset});
     [HttpGet("admin/videos/sessions")]

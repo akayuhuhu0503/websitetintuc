@@ -94,7 +94,7 @@ if(args.Contains("--video"))
                 Observe("Running");
                 await using var db=new PortalDbContext(DatabaseSettings.Options(config));var rights=new CurrentPermissionService(db);
                 await new VideoUploadService(db,storage,video,rights).SweepAsync(stop.Token);
-                await new VideoWorker(db,storage,video,scanner,processor,rights).RunOnceAsync(only,stop.Token);
+                await new VideoWorker(db,storage,video,scanner,processor,rights,development:environment=="Development").RunOnceAsync(only,stop.Token);
                 await new VideoSubtitleService(db,storage,video,rights).ScanOnceAsync(scanner,only,stop.Token);
                 Observe("Running");
             }

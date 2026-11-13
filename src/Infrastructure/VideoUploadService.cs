@@ -46,6 +46,14 @@ public sealed class VideoUploadService(PortalDbContext db,StorageOptions storage
         var ext=ValidateFileName(name,mime);
         Disk(checked(bytes*5));
         await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);await Lock("video:quota",ct);
+        // Serialize intent creation with editorial lifecycle changes. Otherwise a
+        // Submit/reopen could race the initial authorization and make an old upload
+        // appear to have been requested for the newly opened draft.
+        if(autoAttach)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT Id FROM dbo.Contents WITH (UPDLOCK, ROWLOCK) WHERE Id={contentId}",ct);
+            await AuthorizeAsync(user,contentId,true,ct);
+        }
         var active=db.Set<VideoUploadSession>().Where(x=>x.State==VideoUploadState.Uploading&&x.ExpiresUtc>Now);
         if(await active.CountAsync(x=>x.OwnerUserId==user,ct)>=options.MaxSessions)throw new MediaUploadException("Đã đạt số phiên tải đang hoạt động.",429);
         var reserved=await active.SumAsync(x=>(long?)x.ExpectedBytes,ct)??0;var originals=await db.Set<VideoFile>().SumAsync(x=>(long?)x.Original.ByteLength,ct)??0;

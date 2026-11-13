@@ -32,6 +32,15 @@ public sealed class WebVideoProcessingService(
             {
                 try
                 {
+                    // A previously verified Ready output can be attached after a
+                    // recycle even if FFmpeg/scanner is currently unavailable.
+                    await using(var scope=scopes.CreateAsyncScope())
+                    {
+                        var db=scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                        await new VideoDraftAttachmentService(db,storage,options,
+                            scope.ServiceProvider.GetRequiredService<CurrentPermissionService>(),
+                            scope.ServiceProvider.GetRequiredService<WorkflowService>(),environment.IsDevelopment()).ProcessReadyAsync(stoppingToken);
+                    }
                     scanner ??= InquiryScannerFactory.Create(configuration, environment.EnvironmentName, options.MaxFileBytes);
                     if (DateTimeOffset.UtcNow - lastHealth >= TimeSpan.FromSeconds(30))
                     {
@@ -51,7 +60,7 @@ public sealed class WebVideoProcessingService(
                             await new VideoUploadService(db, storage, options, rights).SweepAsync(stoppingToken);
                             lastSweep = DateTimeOffset.UtcNow;
                         }
-                        await new VideoWorker(db, storage, options, scanner, processor, rights).RunOnceAsync(ct: stoppingToken);
+                        await new VideoWorker(db, storage, options, scanner, processor, rights,development:environment.IsDevelopment()).RunOnceAsync(ct: stoppingToken);
                         // Subtitle policy stays scanner-required, even when video no-AV is enabled.
                         if (scannerReady)
                             await new VideoSubtitleService(db, storage, options, rights).ScanOnceAsync(scanner, ct: stoppingToken);

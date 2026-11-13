@@ -44,6 +44,8 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         panel.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>('input,textarea').forEach(e=>e.disabled=!canSave||panel.hidden);
         const direct=form.querySelector<HTMLButtonElement>('[data-save-publish]');
         if(direct){direct.hidden=!!disclosure?.value;direct.disabled=!canSave||!!disclosure?.value;}
+        const directSchedule=form.querySelector<HTMLButtonElement>('[data-editor-schedule="direct"]');
+        if(directSchedule)directSchedule.hidden=!!disclosure?.value;
     }
     disclosure?.addEventListener('change',showDisclosureFields);showDisclosureFields();
     let dirty = false, bodyDirty = false, userBodyInteraction = false, generation = 0, saving = false, conflicted = false, navigating = false;
@@ -268,7 +270,24 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
             window.dispatchEvent(new CustomEvent('cms:external-saved',{detail:result}));return result;
         }finally{externalBusy=false;form.inert=false;if(dirty&&!conflicted&&!sessionPaused)timer=window.setTimeout(()=>{void save('Save',true);},1600);}
     }
-    (window as unknown as {landPortalEditor:unknown}).landPortalEditor={ensureSavedDraft,withSavedDraft};
+    function acceptServerVideoState(state:{rowVersion?:string}):'current'|'deferred'|'conflict'|'reloading'{
+        if(!state.rowVersion||state.rowVersion===field('RowVersion').value)return 'current';
+        // A background attachment creates a real revision. Never advance only the
+        // version token: that would let this tab silently remove the new video.
+        if(saving||activeSave||externalBusy||externalPreparing||uncertainSave||sessionPaused)return 'deferred';
+        window.clearTimeout(timer);
+        const selectedFile=Array.from(document.querySelectorAll<HTMLInputElement>('input[type=file]')).some(input=>!!input.files?.length);
+        if(dirty||conflicted||selectedFile){
+            conflicted=true;
+            notify('Máy chủ đã cập nhật bản nháp trong lúc xử lý video. Nội dung đang nhập vẫn được giữ và tự lưu đã tạm dừng. Sao chép phần chưa lưu rồi mở bản nháp mới để đối chiếu trước khi tiếp tục.',true);
+            let link=document.querySelector<HTMLAnchorElement>('#editor-video-reconcile');
+            if(!link){link=document.createElement('a');link.id='editor-video-reconcile';link.className='outline-link';link.target='_blank';link.rel='noopener';feedback.after(link);}
+            link.href=editorUrl(field('Id').value);link.textContent='Mở bản nháp mới trong tab khác để đối chiếu';
+            return 'conflict';
+        }
+        navigating=true;window.location.assign(editorUrl(field('Id').value));return 'reloading';
+    }
+    (window as unknown as {landPortalEditor:unknown}).landPortalEditor={ensureSavedDraft,withSavedDraft,acceptServerVideoState};
     document.querySelector<HTMLAnchorElement>('#preview-link')?.addEventListener('click',async event=>{
         if(!canSave)return;
         event.preventDefault();const preview=window.open('about:blank','_blank');if(preview)preview.opener=null;
@@ -276,24 +295,28 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         if(!result||dirty){preview?.close();notify('Chưa mở xem trước vì bản soạn chưa lưu thành công. Nội dung vẫn ở trang này.',true);return;}
         if(preview)preview.location.href='/admin/preview/'+result.contentId;else notify('Đã lưu. Trình duyệt chặn cửa sổ xem trước; cho phép cửa sổ mới rồi thử lại.',true);
     });
-    document.querySelector<HTMLButtonElement>('[data-editor-schedule]')?.addEventListener('click',async event=>{
+    document.querySelectorAll<HTMLButtonElement>('[data-editor-schedule]').forEach(scheduleButton=>scheduleButton.addEventListener('click',async event=>{
         const button=event.currentTarget as HTMLButtonElement;const due=document.querySelector<HTMLInputElement>('#editor-due')!.value;
+        const mode=button.dataset.editorSchedule;
+        if(mode!=='approved'&&mode!=='direct'){notify('Chọn cách hẹn giờ xuất bản.',true);return;}
         if(!due){notify('Chọn thời điểm đăng theo giờ Việt Nam.',true);return;}
-        button.disabled=true;
+        if(externalBusy||saving){notify('Chờ lưu bài hoặc gắn video hoàn tất trước khi hẹn giờ.',true);return;}
+        const scheduleButtons=document.querySelectorAll<HTMLButtonElement>('[data-editor-schedule]');scheduleButtons.forEach(b=>b.disabled=true);
         try{
-            if(canSave&&(!(await save('Save'))||dirty))return;
-            if(form.dataset.state==='PendingReview'){
+            if(mode==='direct'&&canSave&&(!(await save('Save'))||dirty))return;
+            if(mode==='approved'&&form.dataset.state==='PendingReview'){
                 const p=new FormData();p.set('Action','Approve');p.set('RowVersion',field('RowVersion').value);p.set('RevisionId',field('CurrentRevisionId').value);p.set('RequestId',uuid());
                 const approved=await fetch('/admin/workflow/'+field('Id').value,{method:'POST',body:p,credentials:'same-origin',headers:{'X-CSRF-TOKEN':csrf,'X-Editor-Request':'true'}});
                 if(!approved.ok){notify(await errorMessage(approved),true);return;}update(await approved.json());
                 notify('Đã duyệt; đang đặt lịch cho phiên bản này…');
             }
-            const p=new FormData();p.set('ContentId',field('Id').value);p.set('RevisionId',field('CurrentRevisionId').value);p.set('ContentVersion',field('RowVersion').value);p.set('DueVietnam',due);p.set('Direct',button.dataset.direct||'false');
+            if(mode==='approved'&&form.dataset.state!=='Approved'){notify('Phiên bản này chưa được duyệt. Gửi duyệt trước khi hẹn giờ bản đã duyệt.',true);return;}
+            const p=new FormData();p.set('ContentId',field('Id').value);p.set('RevisionId',field('CurrentRevisionId').value);p.set('ContentVersion',field('RowVersion').value);p.set('DueVietnam',due);p.set('Direct',mode==='direct'?'true':'false');p.set('EditorMode',mode);
             const response=await fetch('/admin/editor-schedule/'+field('Id').value,{method:'POST',body:p,credentials:'same-origin',headers:{'X-CSRF-TOKEN':csrf,'X-Editor-Request':'true'}});
             if(!response.ok){notify((form.dataset.state==='Approved'?'Bài đã duyệt nhưng chưa đặt lịch. ':'')+await errorMessage(response),true);return;}
             notify((await response.json() as {message:string}).message);
-        }catch{notify('Chưa xác nhận lịch đã lưu. Kiểm tra Lịch xuất bản trước khi thử lại; bản soạn vẫn được giữ.',true);}finally{button.disabled=false;}
-    });
+        }catch{notify('Chưa xác nhận lịch đã lưu. Kiểm tra Lịch xuất bản trước khi thử lại; bản soạn vẫn được giữ.',true);}finally{scheduleButtons.forEach(b=>b.disabled=false);}
+    }));
     void refreshReadiness();
 
     const dialog = document.querySelector<HTMLDialogElement>('#media-dialog');

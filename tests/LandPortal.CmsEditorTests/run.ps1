@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$DotnetPath,[ValidateSet('All','VideoAndScreens','Screens','WeeklyOnly')][string]$Focus='All')
+﻿param([Parameter(Mandatory=$true)][string]$DotnetPath,[ValidateSet('All','VideoAndScreens','Screens','WeeklyOnly','Followup','VideoFollowup','ScheduleOnly')][string]$Focus='All')
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $root

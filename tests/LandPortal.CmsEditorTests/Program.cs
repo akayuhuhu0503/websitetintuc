@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
-if(args.Length!=5 || !Regex.IsMatch(args[0],"^LPCms_[a-f0-9]{12}$") || args[4] is not ("All" or "VideoAndScreens" or "Screens" or "WeeklyOnly"))throw new ArgumentException("New isolated LocalDB instance/run/host and explicit focus required");
+if(args.Length!=5 || !Regex.IsMatch(args[0],"^LPCms_[a-f0-9]{12}$") || args[4] is not ("All" or "VideoAndScreens" or "Screens" or "WeeklyOnly" or "Followup" or "VideoFollowup" or "ScheduleOnly"))throw new ArgumentException("New isolated LocalDB instance/run/host and explicit focus required");
 var root=Directory.GetCurrentDirectory();var run=Path.GetFullPath(args[1]);var host=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests","cms-editor-"),StringComparison.OrdinalIgnoreCase)||!host.StartsWith(run+Path.DirectorySeparatorChar)||!File.Exists(host)||File.Exists(Path.Combine(run,"result.json")))throw new Exception("New exact test run required");
 var cs=new SqlConnectionStringBuilder{DataSource=@"(localdb)\"+args[0],InitialCatalog="LandPortal_Test",IntegratedSecurity=true,Encrypt=true,TrustServerCertificate=true,Pooling=false};
@@ -70,6 +70,12 @@ try {
  using var r=await c.PostAsync("/admin/login",new FormUrlEncodedContent(new Dictionary<string,string>{{"__RequestVerificationToken",p.QuerySelector("input[name=__RequestVerificationToken]")!.GetAttribute("value")!},{"CaptchaId",p.QuerySelector("input[name=CaptchaId]")!.GetAttribute("value")!},{"CaptchaAnswer",(question.Contains("cộng")?numbers[0]+numbers[1]:numbers[0]-numbers[1]).ToString()},{"UserName",accounts[who].User.UserName!},{"Password",accounts[who].Password}}));Check(r.StatusCode==HttpStatusCode.Redirect,"HTTP Identity/CAPTCHA login "+who);return c;}
  using var writer=await Login("writer");using var reviewer=await Login("reviewer");using var publisher=await Login("publisher");using var outsider=await Login("outsider");using var dual=await Login("dual");
  foreach(var client in new[]{writer,reviewer,publisher,outsider,dual})client.DefaultRequestHeaders.Add("X-Editor-Request","true");
+ if(args[4] is "Followup" or "VideoFollowup" or "ScheduleOnly"){
+  var followupStorage=new StorageOptions{MediaRoot=Path.Combine(run,"media"),TempRoot=Path.Combine(run,"temp"),SnapshotRoot=Path.Combine(run,"snapshots"),KeysRoot=Path.Combine(run,"keys")};
+  if(args[4]!="ScheduleOnly"){stage="video-background-followup";await VideoBackgroundAttachmentChecks.RunAsync(options,followupStorage,Check);}
+  if(args[4]!="VideoFollowup"){stage="schedule-followup";await ScheduleFollowupChecks.RunAsync(options,followupStorage,dual,writer,accounts["dual"].User.Id,accounts["reviewer"].User.Id,c=>Token(c),Check);}
+  stage="COMPLETE";return;
+ }
  async Task<JsonElement> Post(HttpClient c,string route,Dictionary<string,string> fields,string form="/admin"){
  fields["__RequestVerificationToken"]=await Token(c,form);using var r=await c.PostAsync(route,new FormUrlEncodedContent(fields));var body=await r.Content.ReadAsStringAsync();if(r.StatusCode!=HttpStatusCode.OK){await File.WriteAllTextAsync(Path.Combine(run,"last-response.txt"),body);throw new Exception("POST "+route+" status "+(int)r.StatusCode);}return JsonDocument.Parse(body).RootElement.Clone();}
  Guid Id(JsonElement x)=>x.GetProperty("contentId").GetGuid();Guid Rev(JsonElement x)=>x.GetProperty("currentRevisionId").GetGuid();
@@ -163,7 +169,7 @@ try {
  stage="cms-schedule";
  var scheduled=await SaveContent(null,title:"SCHEDULE FIXTURE");scheduled=await Act(writer,scheduled,"Submit");scheduled=await Act(reviewer,scheduled,"Approve");
  var due=DateTime.UtcNow.AddHours(9).ToString("yyyy-MM-ddTHH:mm");
- Dictionary<string,string> Schedule(JsonElement s)=>new(){{"ContentId",Id(s).ToString()},{"RevisionId",Rev(s).ToString()},{"ContentVersion",s.GetProperty("rowVersion").GetString()!},{"DueVietnam",due},{"Direct","false"}};
+ Dictionary<string,string> Schedule(JsonElement s)=>new(){{"ContentId",Id(s).ToString()},{"RevisionId",Rev(s).ToString()},{"ContentVersion",s.GetProperty("rowVersion").GetString()!},{"DueVietnam",due},{"Direct","false"},{"EditorMode","approved"}};
  var job=await Post(dual,"/admin/editor-schedule/"+Id(scheduled),Schedule(scheduled));
  var jobAgain=await Post(dual,"/admin/editor-schedule/"+Id(scheduled),Schedule(scheduled));
  Check(job.GetProperty("jobId").GetGuid()==jobAgain.GetProperty("jobId").GetGuid(),"Editor schedule retries one exact approved-revision job");

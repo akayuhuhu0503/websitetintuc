@@ -65,17 +65,18 @@ public sealed partial class AdminController
     {
         var actor = await Actor(); var content = await Find(id);
         if (content == null) return NotFound();
+        if (model.EditorMode is not ("approved" or "direct") || model.Direct != (model.EditorMode == "direct"))
+            return BadRequest(new { message = "Chọn rõ hẹn giờ phiên bản đã duyệt hoặc đăng trực tiếp. Quyền tài khoản không tự quyết định cách đăng." });
         if (!actor.Has(Permissions.Schedule) || !actor.Has(model.Direct ? Permissions.PublishDirect : Permissions.PublishApproved) || !await permissions.CanReadAsync(actor, content)) return Forbid();
         if (!ModelState.IsValid || id != model.ContentId || model.RevisionId == Guid.Empty) return BadRequest(new { message = "Chọn thời điểm đăng theo giờ Việt Nam và lưu đúng phiên bản trước khi hẹn giờ." });
         try
         {
             var due = SchedulerService.VietnamToUtc(model.DueVietnam!.Value);
-            var active = await db.PublicationJobs.AsNoTracking().SingleOrDefaultAsync(x => x.ContentId == id && x.IsActive);
-            // A retry may acknowledge exactly the same owned schedule, never replace another schedule.
-            if (active == null || active.RevisionId != model.RevisionId || active.DueUtc != due || active.Direct != model.Direct || active.RequestedByUserId != actor.UserId)
-                active = await scheduler.ScheduleAsync(id, model.RevisionId, due, model.Direct, actor, Convert.FromBase64String(model.ContentVersion));
-            else if (content.CurrentRevisionId != model.RevisionId || !content.RowVersion.SequenceEqual(Convert.FromBase64String(model.ContentVersion))) throw new DbUpdateConcurrencyException();
-            return Json(new { jobId = active.Id, message = "Đã hẹn giờ đúng phiên bản đã lưu. Bạn có thể sửa hoặc hủy tại Lịch xuất bản.", url = "/admin/schedules" });
+            // Repeated submissions go through the same locked permission/approval
+            // checks as a new schedule, including the original reviewer's rights.
+            var active = await scheduler.ScheduleAsync(id, model.RevisionId, due, model.Direct, actor,
+                Convert.FromBase64String(model.ContentVersion), acknowledgeIdentical: true);
+            return Json(new { jobId = active.Id, message = model.Direct ? "Đã hẹn giờ đăng trực tiếp theo lựa chọn của bạn. Có thể sửa hoặc hủy tại Lịch xuất bản." : "Đã hẹn giờ đúng phiên bản đã duyệt. Có thể sửa hoặc hủy tại Lịch xuất bản.", url = "/admin/schedules" });
         }
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (FormatException) { return BadRequest(new { message = "Phiên bản đã thay đổi. Mở lại bài trước khi đặt lịch." }); }
