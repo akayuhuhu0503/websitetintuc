@@ -1,7 +1,7 @@
 @model IReadOnlyList<MenuCategory>
-<nav class="main-nav" aria-label="Điều hướng chính">
+<nav class="main-nav" aria-label="Điều hướng chính" data-portal-navigation>
     <div class="container nav-inner">
-        <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links">☰ <span>Danh mục</span></button>
+        <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="primary-links"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg><span>Danh mục</span></button>
         <div id="primary-links" class="primary-links">
             <a class="nav-home" href="/" aria-label="Trang chủ"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="m12 3 10 8h-3v10h-5v-6h-4v6H5V11H2z"/></svg><span>Trang chủ</span></a>
             <details class="nav-dropdown"><summary>Giới thiệu</summary><div class="nav-panel introduction-menu"><a href="/gioi-thieu/lanh-dao-cuc">Lãnh đạo cục</a><a href="/gioi-thieu/chuc-nang-nhiem-vu">Chức năng nhiệm vụ</a><a href="/gioi-thieu/co-cau-to-chuc">Cơ cấu tổ chức</a></div></details>

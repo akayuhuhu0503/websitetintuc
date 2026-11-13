@@ -4,7 +4,7 @@
 @{ var site = await Sites.GetAsync(); var englishName=LandPortal.Infrastructure.SitePresentation.EnglishName(site?.Revision.EnglishName); var canonical=PublicUrls.Absolute(ViewData["CanonicalPath"] as string ?? Context.Request.Path.Value ?? "/");var publicPage=site?.IsPreview != true && !Context.Request.Path.StartsWithSegments("/admin") && !Context.Request.Path.StartsWithSegments("/tuong-tac") && !Context.Request.Path.StartsWithSegments("/tra-cuu-ho-so"); }
 @{LandPortal.Web.Services.PublicTrafficCounts? traffic=null;if(publicPage){Traffic.RegisterSuccessfulPage(Context);traffic=await Traffic.ReadAsync();}}
 
-@{var adminPage=Context.Request.Path.StartsWithSegments("/admin");var organization=site?.Revision.OrganizationName??"Cục Quản lý đất đai";var footerLinks=site?.Menus.Where(x=>x.Position=="footer"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();var agencyLinks=site?.Menus.Where(x=>x.Position=="links"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();}
+@{var adminPage=Context.Request.Path.StartsWithSegments("/admin");var publicSurface=!adminPage||site?.IsPreview==true;var homeSurface=publicSurface&&ViewData["HomeNewsHero"] is true;var organization=site?.Revision.OrganizationName??"Cục Quản lý đất đai";var footerLinks=site?.Menus.Where(x=>x.Position=="footer"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();var agencyLinks=site?.Menus.Where(x=>x.Position=="links"&&FooterLink(x)).ToArray()??Array.Empty<LandPortal.Web.Services.SiteNavigationItem>();}
 @functions {
     private static bool KnownText(string? value)=>!string.IsNullOrWhiteSpace(value)&&!System.Text.RegularExpressions.Regex.IsMatch(value,@"chưa|chờ xác|cần xác|REPLACE|UNALLOCATED|example\.|đang cập nhật",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static bool DeploymentCopy(string? value)=>!string.IsNullOrWhiteSpace(value)&&System.Text.RegularExpressions.Regex.IsMatch(value,@"bản thử nghiệm|bản chạy thử|dành cho BA|phục vụ kiểm tra|chưa phải website vận hành chính thức|môi trường phát triển|LAN_DEMO",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -32,21 +32,34 @@
     <link rel="stylesheet" href="~/css/site-config.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/interactions.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/public-reflow.css" asp-append-version="true" />
-    @await RenderSectionAsync("Styles", required: false)
+    @if(!homeSurface){@await RenderSectionAsync("Styles", required: false)}
     <link rel="stylesheet" href="~/css/portal-design.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/font-faces.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/typography.css" asp-append-version="true" />
+    @if(publicSurface){
+        <link rel="stylesheet" href="~/css/public-design.css" asp-append-version="true" />
+        <link rel="stylesheet" href="~/css/public-shell.css" asp-append-version="true" />
+        @if(homeSurface){@await RenderSectionAsync("Styles", required: false)}
+    }
 </head>
-<body class="public-portal portal-shell @(adminPage?"portal-admin":"portal-public") @(Context.Request.Path=="/"?"is-home":"")">
+<body class="public-portal portal-shell @(publicSurface?"portal-public":"portal-admin") @(Context.Request.Path=="/"?"is-home":"")">
 <a class="skip-link" href="#main-content">Chuyển đến nội dung chính</a>
-<div class="utility-bar"><div class="container utility-inner"><span>BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG</span><div class="utility-tools"><time data-vietnam-clock datetime="@DateTimeOffset.UtcNow.ToString("O")">@DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).ToString("dddd, dd/MM/yyyy HH:mm:ss",System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</time><a href="/admin">Dành cho biên tập viên <span aria-hidden="true">↗</span></a></div></div></div>
+<div class="utility-bar">
+    <div class="container utility-inner">
+        <span class="utility-agency">BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG
+            @if(publicSurface){<span class="utility-agency-unit"> · @organization</span>}
+        </span>
+        <div class="utility-tools"><time data-vietnam-clock data-clock-precision="@(publicSurface?"minute":"second")" datetime="@DateTimeOffset.UtcNow.ToString("O")">@DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).ToString(publicSurface?"dddd, dd/MM/yyyy HH:mm":"dddd, dd/MM/yyyy HH:mm:ss",System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</time><a href="/admin">Dành cho biên tập viên <span aria-hidden="true">↗</span></a></div>
+    </div>
+</div>
 <header class="masthead">
     <div class="container masthead-inner">
         <a class="brand" href="/" aria-label="Cục Quản lý đất đai — Trang chủ">
-            @if (site?.LogoUrl != null) { <img class="brand-logo" src="@site.LogoUrl" alt="@site.Revision.OrganizationName" /> } else { <span class="brand-rule" aria-hidden="true"></span> }<span><span class="brand-eyebrow">CỔNG THÔNG TIN ĐIỆN TỬ</span><strong>@(site?.Revision.OrganizationName ?? "CỤC QUẢN LÝ ĐẤT ĐAI")</strong><span class="brand-subtitle" lang="en">@englishName</span><span class="brand-subtitle">Thông tin · Chính sách · Quản lý đất đai</span></span>
+            @if(!publicSurface){if (site?.LogoUrl != null) { <img class="brand-logo" src="@site.LogoUrl" alt="@site.Revision.OrganizationName" /> } else { <span class="brand-rule" aria-hidden="true"></span> }}<span class="brand-text"><span class="brand-eyebrow">CỔNG THÔNG TIN ĐIỆN TỬ</span><strong>@(site?.Revision.OrganizationName ?? "CỤC QUẢN LÝ ĐẤT ĐAI")</strong><span class="brand-subtitle" lang="en">@englishName</span><span class="brand-subtitle">Thông tin · Chính sách · Quản lý đất đai</span></span>
         </a>
         <form class="header-search" action="/tim-kiem" method="get" role="search">
             <label class="sr-only" for="header-query">Tìm kiếm trên cổng thông tin</label>
+            @if(publicSurface){<span class="header-search-icon"><partial name="_PortalIcon" model='"search"' /></span>}
             <input id="header-query" name="q" type="search" placeholder="Tìm tin tức, văn bản..." maxlength="200" />
             <button type="submit" aria-label="Tìm kiếm"><partial name="_PortalIcon" model='"search"' /></button>
         </form>
@@ -58,14 +71,14 @@
     @RenderBody()
 </main>
 <footer class="site-footer">
-    <div class="container footer-main">
-        <div class="footer-identity"><p class="footer-kicker">CỔNG THÔNG TIN ĐIỆN TỬ</p><h2>@organization</h2><p lang="en">@englishName</p><p>Bộ Nông nghiệp và Môi trường</p>
-        @if(site is not null){<address class="footer-contact">
+    <div class="container footer-main footer-main--@(1+(footerLinks.Length>0?1:0)+(agencyLinks.Length>0?1:0))">
+        <div class="footer-identity"><div class="footer-brand"><p class="footer-kicker">CỔNG THÔNG TIN ĐIỆN TỬ</p><h2>@organization</h2><p lang="en">@englishName</p><p>Bộ Nông nghiệp và Môi trường</p></div>
+        @if(site is not null){<div class="footer-details"><address class="footer-contact">
             @if(KnownText(site.Revision.ContactAddress)){<p>@site.Revision.ContactAddress</p>}
             @if(KnownText(site.Revision.ContactPhone)){<p>Điện thoại: @site.Revision.ContactPhone</p>}
             @if(KnownText(site.Revision.ContactHotline)){<p>Đường dây nóng: @site.Revision.ContactHotline</p>}
             @if(KnownText(site.Revision.ContactEmail)){<p>Email: @site.Revision.ContactEmail</p>}
-        </address><p class="footer-note">@(KnownText(site.Revision.FooterText) && !DeploymentCopy(site.Revision.FooterText) ? site.Revision.FooterText : "Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử Cục Quản lý đất đai.")</p>}
+        </address><p class="footer-note">@(KnownText(site.Revision.FooterText) && !DeploymentCopy(site.Revision.FooterText) ? site.Revision.FooterText : "Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử Cục Quản lý đất đai.")</p></div>}
         </div>
         @if(footerLinks.Length>0){<nav class="footer-navigation" aria-label="Thông tin và tra cứu"><h3>Thông tin &amp; tra cứu</h3>@foreach(var item in footerLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label</a>}</nav>}
         @if(agencyLinks.Length>0){<nav class="footer-navigation" aria-label="Liên kết cơ quan"><h3>Liên kết cơ quan</h3>@foreach(var item in agencyLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label <span aria-hidden="true">↗</span></a>}</nav>}
