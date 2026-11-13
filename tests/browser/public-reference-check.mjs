@@ -9,7 +9,7 @@ const modulePath=process.env.CMS_PLAYWRIGHT_MODULE||resolve(root,'tests/browser/
 const {chromium}=await import(pathToFileURL(modulePath));
 const base=process.argv[2]||'http://127.0.0.1:5407';
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(base))throw Error('Isolated loopback host only.');
-const evidence=resolve(root,'.local/tests/public-presentation');await mkdir(evidence,{recursive:true});
+const evidence=resolve(root,'.local/tests/public-design2');await mkdir(evidence,{recursive:true});
 const startedUtc=new Date().toISOString();
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const context=await browser.newContext();const page=await context.newPage();
@@ -24,21 +24,27 @@ async function load(query=''){
 async function measure(width,kind){
   const m=await page.evaluate(()=>{
     const rect=s=>{const e=document.querySelector(s);if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom};};
-    const overflow=[...document.querySelectorAll('.gdla-home article,.home-information-row>section,.home-top-utilities')].filter(e=>e.getBoundingClientRect().width>0&&e.scrollWidth>e.clientWidth+2).map(e=>e.className);
-    return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,main:rect('main'),header:rect('.masthead-inner'),footer:rect('.footer-main'),top:rect('.home-top-grid'),lead:rect('.reference-lead'),secondary:rect('.home-secondary-list'),utility:rect('.home-top-utilities'),info:rect('.home-information-row'),event:rect('.home-event-strip'),latest:rect('.home-latest'),category:rect('.category-sections'),video:rect('.home-video-section'),overflow,height:document.body.scrollHeight};
+    const overflow=[...document.querySelectorAll('.gdla-home article,.home-information-row>section,.home-highlights,.home-service-panel')].filter(e=>e.getBoundingClientRect().width>0&&e.scrollWidth>e.clientWidth+2).map(e=>e.className);
+    const panels=[...document.querySelectorAll('.home-information-row>section')].map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};});
+    return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,main:rect('main'),header:rect('.masthead-inner'),footer:rect('.footer-main'),quick:rect('.home-quick-lookup'),top:rect('.home-feature-grid'),lead:rect('.reference-lead'),secondary:rect('.home-secondary-list'),highlights:rect('.home-highlights'),services:rect('.home-service-panel'),info:rect('.home-information-row'),panels,event:rect('.home-event-strip'),latest:rect('.home-latest'),category:rect('.category-sections'),video:rect('.home-video-section'),overflow,height:document.body.scrollHeight};
   });
   metrics.push({width,kind,...m});
   check(m.scroll<=width+1,`${kind} ${width}px no page horizontal overflow`);
   check(m.overflow.length===0,`${kind} ${width}px cards/long titles fit within panels`);
-  check(m.main&&m.header&&m.footer&&Math.abs(m.main.x-m.header.x)<2&&Math.abs(m.main.w-m.header.w)<2&&Math.abs(m.main.x-m.footer.x)<2,`${kind} ${width}px header/content/footer share one frame`);
+  check(m.main&&m.header&&m.footer&&Math.abs(m.main.x-m.header.x)<2&&Math.abs(m.main.w-m.header.w)<2&&Math.abs(m.main.x-m.footer.x)<2&&Math.abs(m.main.w-m.footer.w)<2,`${kind} ${width}px header/content/footer share one frame`);
   check(m.height>1024,`${kind} ${width}px retained long-page content`);
+  check(m.quick&&m.top&&m.quick.bottom<=m.top.y+1,`${kind} ${width}px quick lookup precedes the lead news region`);
   if(width>=1200){
-    check(m.lead&&m.secondary&&m.utility&&Math.abs(m.lead.y-m.secondary.y)<3&&Math.abs(m.lead.y-m.utility.y)<3,`${kind} ${width}px three hero regions align`);
-    check(m.lead.w>m.secondary.w&&m.secondary.w>=200&&m.utility.w>=200,`${kind} ${width}px lead remains largest and side columns readable`);
-    check(m.video&&Math.abs(m.video.y-m.info.y)<3,`${kind} ${width}px video shares information row with documents/notices`);
+    check(m.lead&&m.secondary&&m.highlights&&Math.abs(m.lead.y-m.secondary.y)<3&&Math.abs(m.lead.y-m.highlights.y)<3,`${kind} ${width}px lead, secondary list and highlights align`);
+    check(m.lead.w>m.secondary.w&&m.secondary.w>=200&&m.highlights.w>=200,`${kind} ${width}px lead remains largest and side columns readable`);
+    check(m.services&&m.video&&Math.abs(m.video.y-m.services.y)<3&&Math.abs(m.video.x-m.highlights.x)<3,`${kind} ${width}px services and video share the next row`);
+    check(Math.abs(m.services.x-m.lead.x)<3&&Math.abs(m.services.right-m.secondary.right)<3,`${kind} ${width}px services span the two news columns`);
+    check(m.panels.length===4&&m.panels.every(p=>Math.abs(p.y-m.panels[0].y)<2)&&Math.max(...m.panels.map(p=>p.w))-Math.min(...m.panels.map(p=>p.w))<2,`${kind} ${width}px four information panels have equal widths and aligned tops`);
+    check(await page.locator('.home-secondary-story .item-meta,.home-highlights-list .item-meta').evaluateAll(es=>es.every(e=>parseFloat(getComputedStyle(e).marginBottom)===0&&parseFloat(getComputedStyle(e).fontSize)<=10)),`${kind} ${width}px compact news metadata is not expanded by legacy styles`);
+    check(await page.locator('.home-service-search input').evaluate(e=>{const h=e.getBoundingClientRect().height;return h>=28&&h<=34&&e.getBoundingClientRect().right<=e.parentElement.getBoundingClientRect().right;}),`${kind} ${width}px quick-search input retains compact height and fits its group`);
   }
   if(m.lead&&m.secondary&&Math.abs(m.lead.y-m.secondary.y)<3)check(m.lead.right<=m.secondary.x+1,`${kind} ${width}px primary and secondary news do not overlap`);
-  if(width<=768)check(m.lead&&m.utility&&m.utility.y>=m.lead.bottom-2,`${kind} ${width}px utilities stack after primary news`);
+  if(width<=768)check(m.lead&&m.highlights&&m.highlights.y>=m.lead.bottom-2,`${kind} ${width}px highlights stack after primary news`);
   if(m.event){check(Math.abs(m.event.h-m.event.w*10/117)<2,`${kind} ${width}px banner retains 117:10 without caption height`);}
 }
 try{
@@ -48,7 +54,8 @@ try{
       await load('?videos=1&banners=1'+(fallback?'&fallback=true':''));await measure(width,fallback?'fallback':'configured');
       check(await page.locator('.brand-logo,.footer-main img').count()===0,`${fallback?'fallback':'configured'} ${width}px no displayed logo`);
       check(await page.locator('.home-video-section').count()===1,`${fallback?'fallback':'configured'} ${width}px video rendered once`);
-      check(await page.locator('.home-information-row .home-notices').count()===1&&await page.locator('.home-information-row .document-preview').count()===1,`${fallback?'fallback':'configured'} ${width}px documents/notices in information row`);
+      check(await page.locator('.home-information-row .home-notices').count()===1&&await page.locator('.home-information-row .document-preview').count()===1&&await page.locator('.home-information-row .home-compact-category').count()===2,`${fallback?'fallback':'configured'} ${width}px documents/notices/two categories in information row`);
+      check(await page.locator('.home-secondary-story').count()===4,`${fallback?'fallback':'configured'} ${width}px four available secondary news items retained`);
       check(!(await page.locator('body').innerText()).match(/@if\s*\(|@await\s|@foreach\s*\(/),`${fallback?'fallback':'configured'} ${width}px no literal Razor expressions visible`);
     }
   }
@@ -59,16 +66,25 @@ try{
     check(await page.locator('[data-event-slide]').count()===count,`Banner ${count} data items retained`);
     check(await page.locator('[data-event-dot]').count()===(count>1?count:0),`Banner ${count} dots only when needed`);
     if(count===0){check(await page.locator('.home-video-section,.home-event-strip,.home-sidebar-banners').count()===0,'Absent video/banner leave no empty card');
-      const widths=await page.locator('.home-information-row>section').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().width));check(widths.length===2&&widths.every(x=>x>450),'Missing video redistributes information row');}
+      check(await page.locator('.home-information-row>section').count()===4,'Missing video does not remove the four information panels');
+      check(await page.locator('.home-feature-grid').evaluate(e=>Math.abs(e.getBoundingClientRect().width-e.querySelector('.home-service-panel').getBoundingClientRect().width)<2),'Missing video lets service panel use the available row');}
     if(count===3){await page.locator('[data-event-dot="2"]').click();await page.waitForTimeout(450);check(await page.locator('[data-event-dot="2"]').getAttribute('aria-current')==='true','Banner dots select requested CMS banner');}
   }
   await load('?hideFeatured=true&hideDocuments=true&hideNotices=true&hideVideo=true&banners=0');
   check(await page.locator('.reference-lead,.document-preview,.home-notices,.home-video-section').count()===0,'Disabled featured/documents/notices/video are not re-enabled by layout');
-  check(await page.locator('.home-category').count()===4,'Enabled configured categories remain available');
+  check(await page.locator('[data-block-type="Category"]').count()===4,'Enabled configured categories remain available exactly once');
+  for(const fallback of [false,true]){
+    await load('?noNews=true&noCategories=true&hideDocuments=true&hideNotices=true&hideVideo=true&banners=0'+(fallback?'&fallback=true':''));
+    check(await page.locator('.reference-lead,.home-secondary-list,.home-highlights,.home-video-section,.home-information-row>section').count()===0,`${fallback?'fallback':'configured'} missing data leaves no fabricated news/video/information panel`);
+    check(await page.locator('.home-service-panel').count()===1,`${fallback?'fallback':'configured'} real service links remain available without content`);
+    check(await page.locator('.home-feature-grid').evaluate(e=>Math.abs(e.getBoundingClientRect().width-e.querySelector('.home-service-panel').getBoundingClientRect().width)<2),`${fallback?'fallback':'configured'} missing news/video does not leave an empty feature column`);
+    check(await page.locator('.home-information-row').evaluate(e=>e.getBoundingClientRect().height===0),`${fallback?'fallback':'configured'} absent information has no empty row height`);
+    check(await page.evaluate(()=>document.documentElement.scrollWidth)<=1366,`${fallback?'fallback':'configured'} empty content state has no horizontal overflow`);
+  }
   await load('?noImages=true&videos=0&banners=0');
   check(await page.locator('.home-news-cluster img').count()===0,'No-image news does not fabricate image placeholders');
   check(await page.locator('.reference-lead').evaluate(e=>getComputedStyle(e).color)!=='rgb(255, 255, 255)','No-image primary news remains readable on light background');
-  const utilityLinks=await page.locator('.home-utility-grid>a').evaluateAll(es=>es.map(e=>e.getAttribute('href')));
+  const utilityLinks=await page.locator('.home-quick-lookup-links>a').evaluateAll(es=>es.map(e=>e.getAttribute('href')));
   check(utilityLinks.length===6&&new Set(utilityLinks).size===6&&utilityLinks.every(h=>h&&h.startsWith('/')&&!h.startsWith('//')&&!h.includes('#')),'Six distinct utility links retain local destinations');
   const clock=await page.locator('[data-vietnam-clock]').innerText();
   check(/\d{2}:\d{2}/.test(clock)&&!/\d{2}:\d{2}:\d{2}/.test(clock),'Public clock displays Vietnam date/time at minute precision');
@@ -87,6 +103,10 @@ try{
   await toggle.click();
   await page.locator('#header-query').fill('quản lý đất đai');await page.locator('.header-search button').click();
   check(new URL(page.url()).pathname==='/tim-kiem'&&new URL(page.url()).searchParams.get('q')==='quản lý đất đai','Search submits unchanged query to existing search route');
+  await load('?videos=0&banners=0');
+  const serviceSearch=page.locator('.home-service-panel form[action="/tim-kiem"]');
+  await serviceSearch.locator('input[name="q"]').fill('văn bản đất đai');await serviceSearch.locator('button[type="submit"]').click();
+  check(new URL(page.url()).pathname==='/tim-kiem'&&new URL(page.url()).searchParams.get('q')==='văn bản đất đai','Service-panel quick search uses the existing search endpoint');
   await load('?videos=1&banners=0');
   const article=await page.locator('.reference-lead h2 a').getAttribute('href');await page.locator('.reference-lead h2 a').click();
   check(new URL(page.url()).pathname===article,'Lead article retains its identity-route link (fixture destination)');

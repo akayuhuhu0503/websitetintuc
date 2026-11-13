@@ -1,13 +1,13 @@
 /* Public presentation tokens; CMS and stored article content retain their styles. */
 body.portal-public {
-    --gdla-container:1360px; --gdla-red:#8b2e2e; --gdla-red-dark:#702424;
+    --gdla-container:1216px; --gdla-red:#8b2e2e; --gdla-red-dark:#702424;
     --gdla-tint:#f7eeee; --gdla-border:#eadfdf; --gdla-radius:6px; --gdla-gap:16px;
     --gdla-ink:#183349; --gdla-muted:#63788d;
     --brand-primary:var(--gdla-red); --brand-hover:var(--gdla-red-dark);
     --brand-soft:var(--gdla-tint); --brand-border:var(--gdla-border);
     --green:var(--gdla-red); --navy:var(--gdla-ink); --ink:var(--gdla-ink);
     --muted:var(--gdla-muted); --line:var(--gdla-border); --radius:var(--gdla-radius);
-    background:#fafbfc; color:var(--gdla-ink); font:15px/1.55 var(--font-sans);
+    background:#fafbfc; color:var(--gdla-ink); font:14px/1.5 var(--font-sans);
 }
 .portal-public .container { width:calc(100% - 48px); max-width:var(--gdla-container); margin-inline:auto; padding-inline:0; }
 .portal-public .main-content { padding-block:20px 32px; }

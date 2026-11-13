@@ -1,42 +1,29 @@
-# Giao diện công khai theo ảnh tham chiếu — 13/11/2026
+# Giao diện công khai GDLA — thiết kế số 2
 
-Nhánh bắt đầu từ `main` sau khi PR #11 đã merge (`8db522401765641e96ac0a4b524e6e2ad8f736c1`). Chỉ thay trình bày công khai; không thay truy vấn xuất bản, CMS, cấu hình triển khai hay dữ liệu.
+PR #12 bắt đầu từ `main` sau PR #11 (`8db5224`). Bản đính chính ngày 13/11/2026 lấy **ảnh mới trong yêu cầu của chủ dự án làm chuẩn duy nhất**, thay thế bố cục 50:25:25 và hàng Văn bản–Thông báo–Video của bản trước.
 
-## Đối chiếu thiết kế
+## Bố cục
 
-Ảnh được hiển thị trong yêu cầu ở kích thước 1536 × 1024. Thư mục đính kèm trên máy chỉ có văn bản yêu cầu, không có tệp ảnh gốc để xác minh độ phân giải hoặc chồng pixel. Vì vậy không tuyên bố “99%”; số đo tham chiếu là xấp xỉ từ ảnh hiển thị và thông số người dùng chốt. Có đối chiếu hình render trình duyệt nội bộ.
+- Khung công khai tối đa 1216px, căn giữa; header/menu/footer cùng lề. Thanh đầu 28px, nhận diện 104px, menu desktop 36px. Bỏ logo/quốc huy hiển thị, không thêm biểu tượng thay thế; giữ dữ liệu logo trong CMS.
+- Dải tra cứu nhanh có sáu đường dẫn thật. Cụm tin có bài lớn bên trái, bốn bài phụ giữa và danh sách đánh số “Tin tức nổi bật” bên phải. Tiêu đề trên ảnh thật; bài không ảnh dùng trình bày chữ, không ảnh giả.
+- Hàng tiếp theo: “Dịch vụ công & Tiện ích” chiếm chiều rộng hai cột tin, VIDEO bên phải. Tiện ích dùng Hỏi đáp, văn bản, dự thảo, sổ tay và liên hệ; tìm kiếm gọi `/tim-kiem`. Không dựng nút nộp hồ sơ/thanh toán giả, không coi liên kết cơ quan trong CMS là dịch vụ công.
+- Bốn khối tiếp theo: văn bản, thông báo và hai chuyên mục thật đầu tiên theo thứ tự CMS. Giữ tên, URL và toàn bộ mục của các khối. Các chuyên mục còn lại, tin mới, banner, liên kết và thống kê tiếp tục phía dưới; trang không bị ép thành một màn hình.
+- Roboto tự phục vụ, đỏ `#8B2E2E`, hover `#702424`, nền nhấn `#F7EEEE`, viền mảnh và bo 6px. Mobile chuyển thành một cột, giữ chữ đọc được và điều hướng menu.
 
-| Vùng | Cách triển khai |
-| --- | --- |
-| Khung nội dung | Tối đa 1360px theo điểm xuất phát của yêu cầu; cùng lề header, tin, footer. Desktop 1536px: lề 88px; 1366px: lề 24px. |
-| Thanh thông tin/header/menu | Mục tiêu khoảng 30/112/44px; giữ tên cơ quan, ngày/phút giờ Việt Nam; bỏ logo hiển thị, không xóa cấu hình. |
-| Tìm kiếm | 400 × 40px desktop, bo 7px, viền mảnh, nút đỏ; mobile chuyển xuống dưới nhận diện. |
-| Cụm tin | Xấp xỉ 50:25:25, khoảng cách 16px; tiêu đề trắng trên ảnh thật, ba tin phụ, sáu tiện ích có đường dẫn thật. |
-| Văn bản/Thông báo/Video | 5:4:3, cùng hàng tiêu đề; danh sách gọn; video không kéo giãn thành ô rỗng. Thiếu khối thì tự chia lại. |
-| Chữ/màu/viền | Roboto tự phục vụ; đỏ `#8B2E2E`, hover `#702424`, nền nhấn `#F7EEEE`, viền `#EADFDF`, bo 6px. Tin phụ 14px; tiêu đề chuyên mục 18px. |
-| Trang dài | Tin còn lại → banner sự kiện → chuyên mục đang bật → các khối bổ sung → tin đọc nhiều/thống kê → tiện ích/footer. Không ép chiều cao màn hình. |
+Configured/fallback dùng các partial chung. Không đổi truy vấn xuất bản, giới hạn CMS, video readiness, workflow, SQL, migration, `.env` hoặc yêu cầu IIS. Banner giữ 117:10, autoplay 5 giây, dots và liên kết. Tin đọc nhiều 7/30 ngày vẫn dùng thống kê thật. VIDEO chỉ render một lần từ component hiện có.
 
-Khác biệt chủ động: không quốc huy/logo; tiện ích dùng chức năng thật; không bịa banner/video khi thiếu dữ liệu; giữ trang dài. Họa tiết masthead dùng đường đồng tâm CSS mờ vì không có tài nguyên trống đồng đã xác minh trong source, không tải ảnh ngoài. Nội dung và chiều dài tiêu đề thực tế có thể làm chiều cao khối khác ảnh minh họa.
+## Đối chiếu và khác biệt có chủ đích
 
-## Phạm vi thay đổi
+Đối chiếu trực quan render với ảnh mới hiển thị 1536×1024 trong yêu cầu. Không có tệp raster gốc trong thư mục attachment nên không tuyên bố tỷ lệ giống theo pixel. Không dùng lại ảnh cũ làm chuẩn.
 
-- `public-design.css`: biến thiết kế và khung công khai; `public-shell.css`: header/menu/footer; `home.css`: thay bộ quy tắc trang chủ, giới hạn trong `.portal-public .gdla-home`.
-- Hai trang chủ Configured/fallback và partial tin, văn bản, tiện ích, video dùng chung bố cục. Tiêu đề/URL/ảnh vẫn lấy từ read model hiện có.
-- Gộp các bài trùng trong cụm Featured/Recent bằng ID; đưa phần chưa hiển thị vào Tin mới. Không sửa dữ liệu, giới hạn CMS hoặc bật khối đã tắt.
-- VIDEO vẫn dùng `HomeVideosViewComponent` hiện có: chỉ nội dung đã công bố có tệp đầu ra hợp lệ. Không đổi kiểm định, thời lượng, poster, chính sách no-AV hoặc quyền.
-- Banner sự kiện giữ ảnh, lịch, thứ tự, URL, autoplay 5 giây và dots; tỷ lệ 117:10. Dots trên điện thoại nằm sát dưới ảnh để không che chữ. Bài không ảnh có mẫu chữ, không ảnh giả.
-- Giữ tin đọc nhiều 7/30 ngày, menu nhiều cấp, dải tin chạy và các khối CMS còn lại. Sửa chữ lỗi mã hóa có sẵn trong fallback.
+Các khác biệt bắt buộc: bỏ quốc huy; nội dung/ảnh từ CMS; tiện ích có thật; không tạo tab “Quan tâm” thiếu dữ liệu hoặc thao tác giả. Không hardcode tên “Thông tin chuyên đề”/“Tin tức địa phương” nếu CMS cấu hình chuyên mục khác. Thiếu video/bài hoặc khối bị tắt thì co bố cục tương ứng. Nền header dùng họa tiết CSS nhẹ, không lấy ảnh phong cảnh chưa xác minh quyền sử dụng. Các chuyên mục hiện có khiến trang dài hơn ảnh minh họa.
 
-## Kiểm tra và giới hạn
+## Kiểm tra
 
-Kiểm tra trình duyệt dùng MVC/Razor đã biên dịch thật, CSS/JS/font thật và read model cô lập, chỉ nghe loopback. Không đọc `.env`, không đăng nhập tài khoản thật hoặc mở SQL. Ảnh dùng cho so sánh nội bộ là bản sao chỉ đọc từ bộ media hiện có; không đưa vào Git hoặc dữ liệu website.
+Host kiểm thử render Razor Web đã biên dịch, CSS/JS/font thật qua loopback; read model và endpoint bài/tìm kiếm là fixture. Không đọc `.env`, mở SQL, dùng tài khoản thật hoặc deploy IIS. Ảnh fixture chỉ nằm trong `.local`, không commit.
 
-- Viewport 1536/1366/768/390/320: kiểm tra lề chung, tràn ngang, chồng cột, tiêu đề dài/không ảnh, khối bật/tắt, 0/1/3 banner và video.
-- Kiểm tra menu bàn phím/mobile, tìm kiếm/đường dẫn bài, dots, giảm chuyển động, không tải tài nguyên ngoài. Video MP4 mẫu cô lập thực sự giải mã/phát và trả Range 206; đây không phải kiểm thử lại pipeline xử lý video/SQL.
-- Bộ kiểm tra banner chuyên biệt tiếp tục kiểm tra ảnh ngang, rất lớn, vuông, dọc và cảnh báo crop trong CMS.
-- Release build và Publish bằng `scripts/build-for-iis.ps1` với đầu vào kiểm tra offline, giữ script và guard hiện có; có Web, Worker, công cụ và manifest. Gói kiểm tra không dùng để deploy.
-- CMS được bảo toàn theo diff và kiểm tra tách stylesheet. Không chạy lại workflow E2E, không tuyên bố nghiệm thu IIS hoặc dữ liệu vận hành.
+Kiểm tra tập trung Configured/fallback tại 1536/1366/768/390/320px; ba cột tin, Tiện ích–Video, bốn khối; thiếu tin/ảnh/video/chuyên mục; 0/1/3 banner/video; menu bàn phím/mobile, tìm kiếm và liên kết. MP4 fixture phát thật, kiểm tra HTTP Range. Không chạy lại E2E CMS/SQL hoặc full regression.
 
-Kết quả: **Release build PASS (0 lỗi/cảnh báo); Publish PASS; 142/142 kiểm tra trình duyệt PASS; 64 kiểm tra banner/CMS PASS**. Hai kiểm tra bổ sung cho thiếu Featured ở 1024px và thiếu Thông báo ở 768px PASS. Sau chỉnh căn trái header cuối cùng, kiểm tra riêng 768/390/320px PASS: nhận diện, tìm kiếm và nội dung có cùng mép trái, không tràn ngang. Không cộng các nhóm này thành số bài E2E nghiệp vụ.
+Kết quả bản đính chính: **Release Web + host Razor PASS, 0 lỗi/cảnh báo; 182 kiểm tra trình duyệt PASS; 64 kiểm tra banner/CMS PASS**. Sau chỉnh CSS metadata/ô tìm kiếm, kiểm tra riêng 20 điều kiện trên Configured/fallback tại 1536/1366/768/390px PASS. Chỉnh khoảng cách cuối cùng được xác minh bằng 8 điều kiện desktop/mobile PASS, không chạy lại toàn bộ bộ kiểm thử. Các nhóm này là kiểm tra giao diện cô lập, không phải E2E nghiệp vụ hoặc nghiệm thu IIS. Đã xem render desktop, tablet, mobile và footer so với ảnh mới; không có logo hiển thị.
 
-Cách chạy lại kiểm tra nhẹ: xem `tests/LandPortal.PublicPresentationHost/README.md`. Chưa merge hoặc deploy. Sau review, quy trình IIS vẫn là `git pull` → `powershell -NoProfile -File scripts/build-for-iis.ps1` → cập nhật nguyên `web`; không đổi `.env`, SQL hoặc quyền Windows.
+Cách chạy: `tests/LandPortal.PublicPresentationHost/README.md`. Chưa merge/deploy; sau review vẫn dùng `git pull` → `scripts/build-for-iis.ps1` → cập nhật nguyên `web`, không thêm cấu hình máy chủ.

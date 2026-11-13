@@ -5,8 +5,10 @@
     var news = blocks.Where(x => x.Block.Type is "Featured" or "Recent").ToArray();
     var topItems = news.SelectMany(x => x.Items).DistinctBy(x => x.Id).ToArray();
     var hasHero = news.Any(x => x.Block.Type == "Featured") && topItems.Length > 0;
-    var latestItems = hasHero ? topItems.Skip(4).ToArray() : topItems;
+    var latestItems = hasHero ? topItems.Skip(5).ToArray() : topItems;
+    var highlights = hasHero ? topItems.Skip(5).Concat(topItems).DistinctBy(x => x.Id).Take(4).ToArray() : Array.Empty<ContentCard>();
     var latestTitle = news.FirstOrDefault(x => x.Block.Type == "Recent")?.Block.Title ?? news.FirstOrDefault()?.Block.Title ?? "Tin mới cập nhật";
+    var categories = blocks.Where(x => x.Block.Type == "Category").ToArray();
     var slides = Model.Site.Banners.Where(x => x.Position == "home").ToArray();
     var sidebarBanners = Model.Site.Banners.Where(x => x.Position == "sidebar").ToArray();
 }
@@ -14,20 +16,12 @@
 <div class="gdla-home">
     <h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
     @if (Model.Site.IsPreview) { <div class="warning-message" role="status">Xem trước cấu hình nháp · chưa áp dụng công khai. Nội dung bài vẫn lấy bản đã xuất bản.</div> }
-    <div class="home-top-grid @(hasHero ? "" : "home-top-grid--utilities")">
-        @if (hasHero) { <partial name="_HomeNewsCluster" model="topItems.Take(4).ToArray()" /> }
-        <aside class="home-top-utilities" aria-label="Tra cứu nhanh">
-            <partial name="_HomeUtilityGrid" />
-            @if (sidebarBanners.Length > 0)
-            {
-                <div class="home-sidebar-banners">
-                @foreach (var banner in sidebarBanners)
-                {
-                    <a class="site-banner" href="@banner.Url" aria-label="@banner.Label" target="@(banner.NewWindow ? "_blank" : null)" rel="@(banner.NewWindow ? "noopener noreferrer" : null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" decoding="async" /></a>
-                }
-                </div>
-            }
-        </aside>
+    <partial name="_HomeQuickLookup" />
+    <div class="home-feature-grid @(hasHero ? "" : "home-feature-grid--no-news")">
+        @if (hasHero) { <partial name="_HomeNewsCluster" model="topItems.Take(5).ToArray()" /> }
+        <partial name="_HomeHighlights" model="highlights" />
+        <partial name="_HomeServicePanel" />
+        @await Component.InvokeAsync("HomeVideos", new { site = Model.Site })
     </div>
     <div class="home-information-row">
     @foreach (var group in blocks.Where(x => x.Block.Type is "LegalDocuments" or "Announcements").OrderBy(x => x.Block.Type == "LegalDocuments" ? 0 : 1))
@@ -37,7 +31,13 @@
             <partial name="_HomeContentBlock" model="group" />
         </section>
     }
-    @await Component.InvokeAsync("HomeVideos", new { site = Model.Site })
+    @foreach (var group in categories.Take(2))
+    {
+        <section class="configured-home-block home-information-panel home-compact-category" data-block-type="Category">
+            <div class="section-heading"><h2><partial name="_PortalIcon" model='"book"' />@group.Block.Title</h2>@if (group.MoreUrl is not null) { <a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a> }</div>
+            <partial name="_HomeCompactStories" model="group.Items" />
+        </section>
+    }
     </div>
     @if (latestItems.Length > 0)
     {
@@ -45,7 +45,7 @@
     }
     <partial name="_HomeEventStrip" model="Model.Site" />
     <div class="category-sections">
-    @foreach (var group in blocks.Where(x => x.Block.Type == "Category"))
+    @foreach (var group in categories.Skip(2))
     {
         <section class="configured-home-block home-category" data-block-type="Category"><div class="section-heading"><h2>@group.Block.Title</h2>@if (group.MoreUrl is not null) { <a href="@group.MoreUrl">Xem tất cả <span aria-hidden="true">→</span></a> }</div><partial name="_HomeContentBlock" model="group" /></section>
     }
@@ -62,6 +62,15 @@
     </div>
     @await Component.InvokeAsync("PopularArticles")
     @await Component.InvokeAsync("LandStatistics")
+    @if (sidebarBanners.Length > 0)
+    {
+        <aside class="home-sidebar-banners" aria-label="Thông tin liên kết">
+        @foreach (var banner in sidebarBanners)
+        {
+            <a class="site-banner" href="@banner.Url" aria-label="@banner.Label" target="@(banner.NewWindow ? "_blank" : null)" rel="@(banner.NewWindow ? "noopener noreferrer" : null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" decoding="async" /></a>
+        }
+        </aside>
+    }
     @if (slides.Length > 0)
     {
         <section class="activity-slider" data-activity-slider aria-label="Ảnh hoạt động"><div class="activity-slides">@foreach (var banner in slides) { <a class="site-banner activity-slide" data-slide href="@banner.Url" target="@(banner.NewWindow ? "_blank" : null)" rel="@(banner.NewWindow ? "noopener noreferrer" : null)"><img src="@banner.ImageUrl" alt="@banner.Alt" loading="lazy" decoding="async" /></a> }</div>@if (slides.Length > 1) { <nav class="activity-controls" data-slide-controls hidden aria-label="Chọn ảnh hoạt động"><button type="button" data-slide-prev>Ảnh trước</button><span data-slide-status role="status" aria-live="polite"></span><button type="button" data-slide-next>Ảnh tiếp</button></nav> }</section>

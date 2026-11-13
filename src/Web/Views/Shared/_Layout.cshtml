@@ -46,9 +46,7 @@
 <a class="skip-link" href="#main-content">Chuyển đến nội dung chính</a>
 <div class="utility-bar">
     <div class="container utility-inner">
-        <span class="utility-agency">BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG
-            @if(publicSurface){<span class="utility-agency-unit"> · @organization</span>}
-        </span>
+        <span class="utility-agency">BỘ NÔNG NGHIỆP VÀ MÔI TRƯỜNG</span>
         <div class="utility-tools"><time data-vietnam-clock data-clock-precision="@(publicSurface?"minute":"second")" datetime="@DateTimeOffset.UtcNow.ToString("O")">@DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).ToString(publicSurface?"dddd, dd/MM/yyyy HH:mm":"dddd, dd/MM/yyyy HH:mm:ss",System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</time><a href="/admin">Dành cho biên tập viên <span aria-hidden="true">↗</span></a></div>
     </div>
 </div>

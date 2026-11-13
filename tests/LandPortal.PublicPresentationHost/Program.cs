@@ -64,7 +64,7 @@ public sealed class FixtureData(IHttpContextAccessor accessor)
     public int Count(string name,int fallback)=>int.TryParse(accessor.HttpContext?.Request.Query[name],out var n)?Math.Clamp(n,0,3):fallback;
     public bool Flag(string name)=>accessor.HttpContext?.Request.Query[name].ToString()=="true";
     public static Guid Id(int n)=>new($"00000000-0000-0000-0000-{n:000000000000}");
-    public IReadOnlyList<ContentCard> News=>Enumerable.Range(1,10).Select(i=>new ContentCard(Id(i),"tin-kiem-tra-"+i,
+    public IReadOnlyList<ContentCard> News=>Flag("noNews")?[]:Enumerable.Range(1,10).Select(i=>new ContentCard(Id(i),"tin-kiem-tra-"+i,
         i==1?"Cục Quản lý đất đai nghiên cứu, học tập, quán triệt và triển khai thực hiện Nghị quyết Hội nghị lần thứ tư Ban Chấp hành Trung ương Đảng khóa XIV":i%3==0?"Đẩy nhanh xây dựng, ban hành các văn bản triển khai thực hiện chính sách quản lý đất đai và phát triển bền vững":i%2==0?"Thành phố Bắc Ninh quyết liệt đẩy nhanh tiến độ xây dựng cơ sở dữ liệu đất đai":"Tăng cường quản lý và sử dụng đất đai hiệu quả tại địa phương",
         "Nội dung kiểm tra giao diện cô lập, không phải dữ liệu công bố.","13/11/2026",Flag("noImages")||i==3?null:$"/fixture/image/{i}","Article","Tin tức – Sự kiện","tin-tuc")).ToArray();
     public IReadOnlyList<ContentCard> Documents=>Enumerable.Range(20,4).Select(i=>new ContentCard(Id(i),"van-ban-"+i,i==20?"QUY ĐỊNH NGƯNG HIỆU LỰC THI HÀNH KHOẢN 5 ĐIỀU 6 THÔNG TƯ SỐ 33/2017/TT-BTNMT VÀ QUẢN LÝ ĐẤT ĐAI":"Thông tư ban hành định mức kinh tế – kỹ thuật vận hành hệ thống cơ sở dữ liệu ảnh viễn thám quốc gia",null,"12/11/2026",null,"LegalDocument"){DocumentNumber="36/2026/TT-BNNMT"}).ToArray();
@@ -99,14 +99,17 @@ public sealed class FixtureData(IHttpContextAccessor accessor)
             Add("Recent","Tin mới cập nhật",News.Skip(4).ToArray(),"/tin-tuc");
             if(!Flag("hideDocuments"))Add("LegalDocuments","Văn bản mới cập nhật",Documents,"/van-ban");
             if(!Flag("hideNotices"))Add("Announcements","Thông báo",Notices,"/thong-bao");
-            Add("Category","Xây dựng, phổ biến chính sách, pháp luật",News.Skip(2).Take(3).ToArray(),"/chuyen-muc/chinh-sach");
-            Add("Category","Dữ liệu và Thông tin đất đai",News.Skip(5).Take(2).ToArray(),"/chuyen-muc/du-lieu");
-            Add("Category","Điều tra, đánh giá tài nguyên đất",News.Skip(1).Take(3).ToArray(),"/chuyen-muc/dieu-tra");
-            Add("Category","Giao đất, cho thuê đất, chuyển mục đích sử dụng đất",News.Skip(7).Take(1).ToArray(),"/chuyen-muc/giao-dat");
+            if(!Flag("noCategories"))
+            {
+                Add("Category","Xây dựng, phổ biến chính sách, pháp luật",News.Skip(2).Take(3).ToArray(),"/chuyen-muc/chinh-sach");
+                Add("Category","Dữ liệu và Thông tin đất đai",News.Skip(5).Take(2).ToArray(),"/chuyen-muc/du-lieu");
+                Add("Category","Điều tra, đánh giá tài nguyên đất",News.Skip(1).Take(3).ToArray(),"/chuyen-muc/dieu-tra");
+                Add("Category","Giao đất, cho thuê đất, chuyển mục đích sử dụng đất",News.Skip(7).Take(1).ToArray(),"/chuyen-muc/giao-dat");
+            }
             return new(){Site=site,Blocks=blocks};
         }
     }
-    public HomeModel Fallback=>new(){News=News,Documents=Flag("hideDocuments")?[]:Documents,Announcements=Flag("hideNotices")?[]:Notices,Sections=[new("Xây dựng, phổ biến chính sách, pháp luật","chinh-sach",News.Skip(2).Take(3).ToArray()),new("Dữ liệu và Thông tin đất đai","du-lieu",News.Skip(5).Take(2).ToArray())]};
+    public HomeModel Fallback=>new(){News=News,Documents=Flag("hideDocuments")?[]:Documents,Announcements=Flag("hideNotices")?[]:Notices,Sections=Flag("noCategories")?[]:[new("Xây dựng, phổ biến chính sách, pháp luật","chinh-sach",News.Skip(2).Take(3).ToArray()),new("Dữ liệu và Thông tin đất đai","du-lieu",News.Skip(5).Take(2).ToArray())]};
 }
 
 public sealed class PresentationController(FixtureData data,FixtureFiles files):Controller
