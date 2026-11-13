@@ -232,7 +232,15 @@
 .portal-public .gdla-home .activity-slider img{display:block;width:100%;max-height:320px;object-fit:contain}
 
 @media(min-width:901px){
+ .portal-public .gdla-home .reference-lead{aspect-ratio:auto;min-height:clamp(330px,24vw,400px)}
+ .portal-public .gdla-home .reference-lead--text{min-height:0}
+ .portal-public .gdla-home .reference-lead-copy h2{max-width:48ch}
+ .portal-public .gdla-home .home-highlights:has(li:nth-child(4)){align-self:stretch}
+ .portal-public .gdla-home .home-secondary-list:not(:has(>.home-secondary-story:nth-child(4))){align-self:start}
  .portal-public .gdla-home .home-feature-grid:not(:has(>.home-news-cluster)):has(>.home-video-section)>.home-service-panel{grid-column:1;grid-row:1}
+}
+@media(min-width:1500px){
+ .portal-public .gdla-home :is(.home-feature-grid,.home-news-cluster,.home-information-row){gap:18px}
 }
 @media(max-width:1100px){
  .portal-public .gdla-home .home-quick-lookup{gap:10px}

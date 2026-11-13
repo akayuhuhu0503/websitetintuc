@@ -20,6 +20,23 @@ Các khác biệt bắt buộc: bỏ quốc huy; nội dung/ảnh từ CMS; ti�
 
 ## Kiểm tra
 
+### Lần mở rộng cuối: 1740px (thay giới hạn trang chủ 1400px ở lượt trước)
+
+Đo trên trình duyệt Local: `innerWidth=1920`, `clientWidth=1905`, DPR=1, visual viewport scale=1, CSS zoom=1, không transform. Khung cũ 1400px có lề 252,5/267,5px. Thử 1760px cho lề 72,5/87,5px; chọn 1740px để đạt **82,5/97,5px** khi có thanh cuộn dọc 15px. Không phóng toàn trang bằng zoom/scale.
+
+Phạm vi mở rộng là `body.portal-public.is-home`; các trang khác giữ giới hạn 1400px. Desktop co theo vùng nhìn với đệm 32px. Ảnh tin chính giới hạn chiều cao khoảng 330–400px, tiêu đề tối đa 48ch, thumbnail tin phụ giữ 96px. Danh sách ít tin tự co chiều cao; không ép khối chữ đơn thành ảnh lớn.
+
+Kết quả trình duyệt cô lập không có thanh cuộn chiếm chỗ:
+
+| Viewport | Khung | Lề mỗi bên | Cao tin chính |
+|---|---|---|---|
+| 1366px | 1302px | 32px | 365px |
+| 1536px | 1472px | 32px | 368,6px |
+| 1920px | 1740px | 90px | 400px |
+| 2560px | 1740px | 410px | 400px |
+
+**Release build PASS, 0 lỗi/cảnh báo; 254 điều kiện giao diện PASS** bằng `homepage-wide-check.mjs`: bốn viewport trên và 768/390/320px, Configured/fallback, căn lề, không tràn ngang, ba cột, banner/dots, một tin mới, ít/không có tin/video/banner. Đã kiểm tra bỏ class trang chủ thì CSS trở về khung 1400px. Không chạy lại bộ 303 kiểm tra, E2E CMS/SQL hoặc full regression. Kết quả bên dưới là các lượt trước, không cộng vào 254 kiểm tra lần này.
+
 Host kiểm thử render Razor Web đã biên dịch, CSS/JS/font thật qua loopback; read model và endpoint bài/tìm kiếm là fixture. Không đọc `.env`, mở SQL, dùng tài khoản thật hoặc deploy IIS. Ảnh fixture chỉ nằm trong `.local`, không commit.
 
 Kiểm tra tập trung Configured/fallback tại 1536/1366/1920/768/390/320px; ba cột tin không trùng ID, Featured/Recent đổi thứ tự và chứa ID lặp, 1/2/5/6/9/10/12 bài, Tiện ích–Video, bốn khối; thiếu tin/ảnh/video/chuyên mục; 0/1/3 banner/video; menu bàn phím/mobile, tìm kiếm và liên kết. MP4 fixture phát thật, kiểm tra HTTP Range. Không chạy lại E2E CMS/SQL hoặc full regression.

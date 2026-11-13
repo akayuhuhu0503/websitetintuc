@@ -32,7 +32,8 @@ async function measure(width,kind){
   check(m.scroll<=width+1,`${kind} ${width}px no page horizontal overflow`);
   check(m.overflow.length===0,`${kind} ${width}px cards/long titles fit within panels`);
   check(m.main&&m.header&&m.footer&&Math.abs(m.main.x-m.header.x)<2&&Math.abs(m.main.w-m.header.w)<2&&Math.abs(m.main.x-m.footer.x)<2&&Math.abs(m.main.w-m.footer.w)<2,`${kind} ${width}px header/content/footer share one frame`);
-  check(m.main.w<=1401&&(width<1536||Math.abs(m.main.w-1400)<2),`${kind} ${width}px shared content frame uses 1400px maximum`);
+  const expectedWidth=Math.min(1740,width-(width>900?64:width>480?32:24));
+  check(Math.abs(m.main.w-expectedWidth)<2,`${kind} ${width}px homepage frame uses 1740px maximum with responsive gutters`);
   check(m.height>1024,`${kind} ${width}px retained long-page content`);
   check(m.quick&&m.top&&m.quick.bottom<=m.top.y+1,`${kind} ${width}px quick lookup precedes the lead news region`);
   if(width>=1200){

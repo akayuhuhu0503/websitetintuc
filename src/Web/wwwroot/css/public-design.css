@@ -10,6 +10,9 @@ body.portal-public {
     background:#fafbfc; color:var(--gdla-ink); font:14px/1.5 var(--font-sans);
 }
 .portal-public .container { width:calc(100% - 48px); max-width:var(--gdla-container); margin-inline:auto; padding-inline:0; }
+/* The wide news front page shares one frame, without widening reading pages. */
+body.portal-public.is-home { --gdla-container:1740px; }
+@media(min-width:901px){.portal-public.is-home .container{width:calc(100% - 64px)}}
 .portal-public .main-content { padding-block:20px 32px; }
 .portal-public :is(a,button,input,select,textarea,summary):focus-visible { outline:2px solid var(--gdla-red); outline-offset:3px; }
 @media(max-width:800px){.portal-public .container{width:calc(100% - 32px)}}

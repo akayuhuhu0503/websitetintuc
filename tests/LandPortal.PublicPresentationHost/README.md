@@ -1,5 +1,7 @@
 # Kiểm tra giao diện công khai cô lập
 
+Kiểm tra riêng lần mở rộng trang chủ: chạy `node tests/browser/homepage-wide-check.mjs` khi host dưới đây đang nghe cổng 5407. Bộ này đo `innerWidth`, `clientWidth`, zoom/scale và DOM rect tại 1366/1536/1920/2560/768/390/320px; khung trang chủ tối đa 1740px, các trang khác giữ 1400px. Bao gồm Configured/fallback, ít bài, thiếu video/banner và căn lề header/footer. Kết quả riêng lưu tại `.local/tests/public-wide/geometry.json`; không cần chạy lại toàn bộ bộ kiểm tra bên dưới khi chỉ chỉnh kích thước.
+
 Host này render **Razor thật của Web**, CSS/JavaScript/font thật qua Kestrel trên loopback. Model trang chủ, cấu hình menu/banner và kết quả các component dữ liệu là fixture; không kết nối SQL, không đọc `.env`, không dùng tài khoản hoặc nội dung vận hành. Chỉ controller của fixture được map. Bộ đếm truy cập bị vô hiệu hóa bằng cache test và user-agent test; Data Protection dùng khóa trong bộ nhớ.
 
 ```powershell
