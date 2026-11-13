@@ -40,7 +40,7 @@
                 }
                 else if (item.Url is not null)
                 {
-                    <a href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@item.Label</a>
+                    <a class="@(item.Url=="/"?"nav-home":null)" aria-label="@(item.Url=="/"?item.Label:null)" href="@item.Url" target="@(item.NewWindow ? "_blank" : null)" rel="@(item.NewWindow ? "noopener noreferrer" : null)">@if(item.Url=="/"){<partial name="_PortalIcon" model='"home"' />}<span>@item.Label</span></a>
                 }
             }
         </div>

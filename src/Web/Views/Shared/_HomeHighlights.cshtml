@@ -1,0 +1,13 @@
+@model IReadOnlyList<ContentCard>
+@if (Model.Count > 0)
+{
+    <section class="home-highlights" aria-labelledby="home-highlights-title">
+        <div class="section-heading"><h2 id="home-highlights-title"><span class="home-highlights-star" aria-hidden="true">★</span>Tin tức nổi bật</h2><a href="/tin-tuc">Xem tất cả <span aria-hidden="true">→</span></a></div>
+        <ol class="home-highlights-list">
+        @foreach (var item in Model)
+        {
+            <li><div><h3><a href="@item.Url">@item.Title</a></h3><p class="item-meta">@if (item.DisplayDate is not null) { <span>@item.DisplayDate</span> }@if (!string.IsNullOrWhiteSpace(item.CategoryName)) { <span>@item.CategoryName</span> }</p></div></li>
+        }
+        </ol>
+    </section>
+}

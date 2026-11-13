@@ -1,8 +1,8 @@
 @model IReadOnlyList<HomeVideoCard>
 @if(Model.Count>0)
 {
-<section class="home-video-section" aria-labelledby="home-video-title">
-    <div class="section-heading"><h2 id="home-video-title">VIDEO</h2><a href="/video">Xem tất cả <span aria-hidden="true">→</span></a></div>
+<section class="home-information-panel home-video-section" aria-labelledby="home-video-title">
+    <div class="section-heading"><h2 id="home-video-title"><partial name="_PortalIcon" model='"video"' />VIDEO</h2><a href="/video">Xem tất cả <span aria-hidden="true">→</span></a></div>
     <div class="home-video-grid @(Model.Count==1?"home-video-grid--single":"")">
     @for(var i=0;i<Model.Count;i++)
     {
@@ -10,7 +10,7 @@
         <article class="home-video-card @(i==0?"home-video-card--lead":"")">
             <a class="home-video-poster" href="@video.Content.Url" aria-label="Phát video: @video.Content.Title">
                 <img src="@video.PosterUrl" alt="@video.Content.Title" width="1280" height="720" loading="lazy" decoding="async" />
-                <span class="home-video-play" aria-hidden="true">▶</span>
+                <span class="home-video-play" aria-hidden="true"><partial name="_PortalIcon" model='"play"' /></span>
                 @if(video.Duration is not null){<span class="home-video-duration">@video.Duration</span>}
             </a>
             <div class="home-video-copy"><h3><a href="@video.Content.Url">@video.Content.Title</a></h3>@if(video.Content.DisplayDate is not null){<span class="article-meta">@video.Content.DisplayDate</span>}</div>

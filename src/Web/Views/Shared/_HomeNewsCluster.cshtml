@@ -1,21 +1,22 @@
 @model IReadOnlyList<ContentCard>
-@if(Model.Count>0)
+@if (Model.Count > 0)
 {
-    <section class="home-news-cluster" aria-label="Tin tức" data-news-cluster>
-        <div class="news-hero @(Model.Count==1?"news-hero--single":"")">
-            <partial name="_LeadStory" model="Model[0]" />
-            @if(Model.Count>1)
-            {
-                <div class="hero-support">
-                    @foreach(var item in Model.Skip(1).Take(2)){<partial name="_Card" model="item" />}
-                </div>
-            }
-        </div>
-        @if(Model.Count>3)
+    var lead = Model[0];
+    <section class="home-news-cluster @(Model.Count == 1 ? "home-news-cluster--single" : "")" aria-label="Tin nổi bật" data-news-cluster>
+        <article class="reference-lead @(string.IsNullOrWhiteSpace(lead.ThumbnailUrl) ? "reference-lead--text" : "")">
+            @if (!string.IsNullOrWhiteSpace(lead.ThumbnailUrl)) { <a class="reference-lead-image" href="@lead.Url" tabindex="-1" aria-hidden="true"><img src="@lead.ThumbnailUrl" alt="" fetchpriority="high" decoding="async" width="960" height="640" /></a> }
+            <div class="reference-lead-copy"><span class="reference-lead-badge">TIN NỔI BẬT</span><h2><a href="@lead.Url">@lead.Title</a></h2><p class="item-meta">@if (lead.DisplayDate is not null) { <span><partial name="_PortalIcon" model='"calendar"' />@lead.DisplayDate</span> }@if (!string.IsNullOrWhiteSpace(lead.CategoryName)) { <span>@lead.CategoryName</span> }</p>@if (string.IsNullOrWhiteSpace(lead.ThumbnailUrl) && !string.IsNullOrWhiteSpace(lead.Summary)) { <p class="reference-lead-summary">@lead.Summary</p> }</div>
+        </article>
+        @if (Model.Count > 1)
         {
-            <div class="home-latest">
-                <div class="section-heading"><h2>Tin mới cập nhật</h2><a href="/tin-tuc">Xem tất cả <span aria-hidden="true">→</span></a></div>
-                <div class="home-news-strip">@foreach(var item in Model.Skip(3)){<partial name="_Card" model="item" />}</div>
+            <div class="home-secondary-list" aria-label="Các tin nổi bật khác">
+            @foreach (var item in Model.Skip(1))
+            {
+                <article class="home-secondary-story @(string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? "home-secondary-story--text" : "")">
+                    @if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl)) { <a class="home-secondary-image" href="@item.Url" tabindex="-1" aria-hidden="true"><img src="@item.ThumbnailUrl" alt="" width="144" height="96" loading="lazy" decoding="async" /></a> }
+                    <div class="home-secondary-copy"><h3><a href="@item.Url">@item.Title</a></h3><p class="item-meta">@if (item.DisplayDate is not null) { <span>@item.DisplayDate</span> }@if (!string.IsNullOrWhiteSpace(item.CategoryName)) { <span>@item.CategoryName</span> }</p></div>
+                </article>
+            }
             </div>
         }
     </section>

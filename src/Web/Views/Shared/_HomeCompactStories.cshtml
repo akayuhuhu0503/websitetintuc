@@ -1,0 +1,10 @@
+@model IReadOnlyList<ContentCard>
+<div class="home-compact-stories">
+@foreach (var item in Model)
+{
+    <article class="home-compact-story @(string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? "home-compact-story--text" : "")">
+        @if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl)) { <a class="home-compact-image" href="@item.Url" tabindex="-1" aria-hidden="true"><img src="@item.ThumbnailUrl" alt="" width="144" height="96" loading="lazy" decoding="async" /></a> }
+        <div><h3><a href="@item.Url">@item.Title</a></h3><p class="item-meta">@if (item.DisplayDate is not null) { <span>@item.DisplayDate</span> }@if (!string.IsNullOrWhiteSpace(item.CategoryName)) { <span>@item.CategoryName</span> }</p></div>
+    </article>
+}
+</div>

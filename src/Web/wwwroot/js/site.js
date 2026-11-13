@@ -247,7 +247,8 @@
     const clock = document.querySelector('[data-vietnam-clock]');
     const serverTime = Date.parse(clock?.dateTime || '');
     const started = performance.now();
-    const vietnamDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const minuteClock = clock?.dataset.clockPrecision === 'minute';
+    const vietnamDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', ...(minuteClock ? {} : { second: '2-digit' }), hour12: false });
     const tick = () => { if (clock && Number.isFinite(serverTime)) {
         const now = new Date(serverTime + performance.now() - started);
         clock.textContent = vietnamDate.format(now);
@@ -255,7 +256,7 @@
     } };
     if (clock) {
         tick();
-        window.setInterval(tick, 1000);
+        window.setInterval(tick, minuteClock ? 60000 : 1000);
     }
     document.querySelectorAll('[data-activity-slider]').forEach(slider => {
         const slides = Array.from(slider.querySelectorAll('[data-slide]'));

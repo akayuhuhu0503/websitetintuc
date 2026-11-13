@@ -1,11 +1,11 @@
 // Isolated browser layout check: actual CSS/JS and the shared Razor article markup.
 // No SQL, accounts, operational HTTP requests, screenshots or media writes.
-import { chromium } from 'playwright';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const { chromium } = await import(pathToFileURL(process.env.CMS_PLAYWRIGHT_MODULE || resolve(root,'tests/browser/node_modules/playwright/index.mjs')));
 const read = p => readFile(resolve(root, p), 'utf8');
 const partial = await read('src/Web/Views/Shared/_HomeEventStrip.cshtml');
 const configured = await read('src/Web/Views/Home/Configured.cshtml');
@@ -14,7 +14,7 @@ const controller = await read('src/Web/Controllers/HomeController.cs');
 assert(configured.includes('<partial name="_HomeEventStrip" model="Model.Site" />'));
 assert(controller.includes('if (site is not null) return View("Configured"'));
 assert(!fallback.includes('home-event-strip')); // No public configuration: no fabricated banner.
-const css = (await Promise.all(['site','site-config','interactions','public-reflow','portal-design','typography','home'].map(n => read(`src/Web/wwwroot/css/${n}.css`)))).join('\n');
+const css = (await Promise.all(['site','site-config','interactions','public-reflow','portal-design','typography','public-design','public-shell','home'].map(n => read(`src/Web/wwwroot/css/${n}.css`)))).join('\n');
 const script = await read('src/Web/wwwroot/js/site.js');
 const adminScript = await read('src/Web/wwwroot/js/site-admin.js');
 const adminView = await read('src/Web/Views/SiteAdmin/Edit.cshtml');
@@ -39,29 +39,26 @@ await page.route('**/*',route=>route.request().url().startsWith('http://fixture.
     ?route.fulfill({contentType:'image/svg+xml',body:svg(...dimension)}) :route.abort());
 async function render(count) {
     await page.goto('about:blank');
-    await page.setContent(`<style>${css}</style><body class="public-portal portal-shell portal-public is-home"><main class="main-content">${strip(count)}<div id="following">Following content</div></main></body>`);
+    await page.setContent(`<style>${css}</style><body class="public-portal portal-shell portal-public is-home"><main class="container main-content"><div class="gdla-home">${strip(count)}<div id="following">Following content</div></div></main></body>`);
     await page.addScriptTag({content:script});
     if(count) await page.waitForFunction(()=>[...document.querySelectorAll('.event-slide img')].every(i=>i.complete&&i.naturalWidth));
 }
 async function measure() {
     const result=await page.evaluate(()=>{
-        const e=document.querySelector('.home-event-strip'),r=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect();
-        const style=getComputedStyle(p),parentInnerWidth=p.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
-        const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect();
+        const e=document.querySelector('.home-event-strip'),r=e.getBoundingClientRect(),parent=e.parentElement,p=parent.getBoundingClientRect();
+        const style=getComputedStyle(parent),parentInnerWidth=parent.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
+        const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect(),frame=e.querySelector('.event-slides').getBoundingClientRect();
+        const dots=e.querySelector('.event-dots'),dr=dots?.getBoundingClientRect();
         const caption=e.querySelector('.is-active .event-slide-caption')||e.querySelector('.event-slide-caption');
-        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,radius:getComputedStyle(e).borderRadius,captionDisplay:getComputedStyle(caption).display,captionHeight:caption.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth};
+        return {w:r.width,h:r.height,frameHeight:frame.height,dotsBelow:!dr||dr.top>=frame.bottom-1,dotsText:dots?.textContent.trim()||'',center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,radius:getComputedStyle(e).borderRadius,captionDisplay:getComputedStyle(caption).display,captionHeight:caption.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth};
     });
     assert(Math.abs(result.w-result.parentInnerWidth)<0.5,JSON.stringify(result));
-    const mobile = (await page.viewportSize()).width <= 640;
-    if (mobile) {
-        assert(Math.abs(result.ih-result.iw*10/117)<0.6,JSON.stringify(result));
-        assert(result.h>=result.ih+result.captionHeight-0.5 && result.captionHeight>10,JSON.stringify(result));
-        assert.notEqual(result.captionDisplay,'none');
-    } else {
-        assert(Math.abs(result.h-result.w*10/117)<0.1,JSON.stringify(result));
-        assert(Math.abs(result.ih-result.h)<0.1);
-        assert.equal(result.captionDisplay,'none');
-    }
+    assert(Math.abs(result.frameHeight-result.w*10/117)<0.1,JSON.stringify(result));
+    assert(Math.abs(result.ih-result.frameHeight)<0.1);
+    assert(result.dotsBelow,'Pagination must not cover banner artwork');
+    assert.equal(result.dotsText,'');
+    assert.equal(result.captionDisplay,'none');
+    assert.equal(result.captionHeight,0);
     assert(Math.abs(result.center-result.parentCenter)<0.1);
     assert(Math.abs(result.iw-result.w)<0.1);
     assert.equal(result.radius,'0px');
@@ -69,7 +66,7 @@ async function measure() {
     return result;
 }
 try {
-    for(const width of [1920,1366,768,390]){
+    for(const width of [1920,1536,1366,768,390,320]){
         await page.setViewportSize({width,height:900});
         for(dimension of sizes){await render(1);await measure();assert.equal(await page.locator('[data-event-dot]').count(),0);}
         await render(0);assert.equal(await page.locator('.home-event-strip').count(),0);checks++;
@@ -93,5 +90,5 @@ try {
         await page.selectOption('#site_position','home_event_strip');await page.selectOption('.site-image-select','');assert.equal(await page.locator('#event-banner-crop-warning').isVisible(),false);checks++;
     }
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({result:'PASS',checks,viewports:[1920,1366,768,390],imageSizes:sizes,scope:'Isolated Edge layout/CMS warning; compiled Razor separately, no SQL/IIS/CMS workflow E2E'}));
+    console.log(JSON.stringify({result:'PASS',checks,viewports:[1920,1536,1366,768,390,320],imageSizes:sizes,scope:'Isolated Edge layout/CMS warning; compiled Razor separately, no SQL/IIS/CMS workflow E2E'}));
 } finally { await browser.close(); }
