@@ -47,13 +47,16 @@ async function measure() {
     const result=await page.evaluate(()=>{
         const e=document.querySelector('.home-event-strip'),r=e.getBoundingClientRect(),parent=e.parentElement,p=parent.getBoundingClientRect();
         const style=getComputedStyle(parent),parentInnerWidth=parent.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
-        const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect();
+        const img=e.querySelector('.is-active img')||e.querySelector('img'),ir=img.getBoundingClientRect(),frame=e.querySelector('.event-slides').getBoundingClientRect();
+        const dots=e.querySelector('.event-dots'),dr=dots?.getBoundingClientRect();
         const caption=e.querySelector('.is-active .event-slide-caption')||e.querySelector('.event-slide-caption');
-        return {w:r.width,h:r.height,center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,radius:getComputedStyle(e).borderRadius,captionDisplay:getComputedStyle(caption).display,captionHeight:caption.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth};
+        return {w:r.width,h:r.height,frameHeight:frame.height,dotsBelow:!dr||dr.top>=frame.bottom-1,dotsText:dots?.textContent.trim()||'',center:r.x+r.width/2,parentCenter:p.x+p.width/2,parentInnerWidth,iw:ir.width,ih:ir.height,fit:getComputedStyle(img).objectFit,radius:getComputedStyle(e).borderRadius,captionDisplay:getComputedStyle(caption).display,captionHeight:caption.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth};
     });
     assert(Math.abs(result.w-result.parentInnerWidth)<0.5,JSON.stringify(result));
-    assert(Math.abs(result.h-result.w*10/117)<0.1,JSON.stringify(result));
-    assert(Math.abs(result.ih-result.h)<0.1);
+    assert(Math.abs(result.frameHeight-result.w*10/117)<0.1,JSON.stringify(result));
+    assert(Math.abs(result.ih-result.frameHeight)<0.1);
+    assert(result.dotsBelow,'Pagination must not cover banner artwork');
+    assert.equal(result.dotsText,'');
     assert.equal(result.captionDisplay,'none');
     assert.equal(result.captionHeight,0);
     assert(Math.abs(result.center-result.parentCenter)<0.1);

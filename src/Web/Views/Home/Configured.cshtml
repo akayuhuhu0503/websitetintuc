@@ -3,10 +3,14 @@
     ViewData["Title"] = "Trang chủ"; ViewData["HomeNewsHero"] = true;
     var blocks = Model.VisibleBlocks.ToArray();
     var news = blocks.Where(x => x.Block.Type is "Featured" or "Recent").ToArray();
-    var topItems = news.SelectMany(x => x.Items).DistinctBy(x => x.Id).ToArray();
+    // Use only the public cards already loaded for enabled CMS blocks. Keep
+    // Featured ahead of Recent, then allocate each identity to one news region.
+    var topItems = news.OrderBy(x => x.Block.Type == "Featured" ? 0 : 1)
+        .SelectMany(x => x.Items).DistinctBy(x => x.Id).ToArray();
     var hasHero = news.Any(x => x.Block.Type == "Featured") && topItems.Length > 0;
-    var latestItems = hasHero ? topItems.Skip(5).ToArray() : topItems;
-    var highlights = hasHero ? topItems.Skip(5).Concat(topItems).DistinctBy(x => x.Id).Take(4).ToArray() : Array.Empty<ContentCard>();
+    var heroItems = hasHero ? topItems.Take(5).ToArray() : Array.Empty<ContentCard>();
+    var highlights = hasHero ? topItems.Skip(heroItems.Length).Take(4).ToArray() : Array.Empty<ContentCard>();
+    var latestItems = topItems.Skip(heroItems.Length + highlights.Length).ToArray();
     var latestTitle = news.FirstOrDefault(x => x.Block.Type == "Recent")?.Block.Title ?? news.FirstOrDefault()?.Block.Title ?? "Tin mới cập nhật";
     var categories = blocks.Where(x => x.Block.Type == "Category").ToArray();
     var slides = Model.Site.Banners.Where(x => x.Position == "home").ToArray();
@@ -18,7 +22,7 @@
     @if (Model.Site.IsPreview) { <div class="warning-message" role="status">Xem trước cấu hình nháp · chưa áp dụng công khai. Nội dung bài vẫn lấy bản đã xuất bản.</div> }
     <partial name="_HomeQuickLookup" />
     <div class="home-feature-grid @(hasHero ? "" : "home-feature-grid--no-news")">
-        @if (hasHero) { <partial name="_HomeNewsCluster" model="topItems.Take(5).ToArray()" /> }
+        @if (hasHero) { <partial name="_HomeNewsCluster" model="heroItems" /> }
         <partial name="_HomeHighlights" model="highlights" />
         <partial name="_HomeServicePanel" />
         @await Component.InvokeAsync("HomeVideos", new { site = Model.Site })

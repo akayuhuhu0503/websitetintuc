@@ -1,6 +1,6 @@
 /* Public presentation tokens; CMS and stored article content retain their styles. */
 body.portal-public {
-    --gdla-container:1216px; --gdla-red:#8b2e2e; --gdla-red-dark:#702424;
+    --gdla-container:1400px; --gdla-red:#8b2e2e; --gdla-red-dark:#702424;
     --gdla-tint:#f7eeee; --gdla-border:#eadfdf; --gdla-radius:6px; --gdla-gap:16px;
     --gdla-ink:#183349; --gdla-muted:#63788d;
     --brand-primary:var(--gdla-red); --brand-hover:var(--gdla-red-dark);

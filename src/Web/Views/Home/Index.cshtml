@@ -1,19 +1,24 @@
 @model HomeModel
 @{
     ViewData["Title"] = "Trang chủ"; ViewData["HomeNewsHero"] = true;
-    var highlights = Model.News.Skip(5).Concat(Model.News).DistinctBy(x => x.Id).Take(4).ToArray();
+    // HomeController already provides published cards with FeaturedFirst order.
+    // Partition the unique identities instead of repeating a card to fill a panel.
+    var newsItems = Model.News.DistinctBy(x => x.Id).ToArray();
+    var heroItems = newsItems.Take(5).ToArray();
+    var highlights = newsItems.Skip(heroItems.Length).Take(4).ToArray();
+    var latestItems = newsItems.Skip(heroItems.Length + highlights.Length).ToArray();
 }
 @section Styles { <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" /> }
 <div class="gdla-home">
     <h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
     <partial name="_HomeQuickLookup" />
-    <div class="home-feature-grid @(Model.News.Count == 0 ? "home-feature-grid--no-news" : "")">
-        @if (Model.News.Count > 0) { <partial name="_HomeNewsCluster" model="Model.News.Take(5).ToArray()" /> }
+    <div class="home-feature-grid @(newsItems.Length == 0 ? "home-feature-grid--no-news" : "")">
+        @if (heroItems.Length > 0) { <partial name="_HomeNewsCluster" model="heroItems" /> }
         <partial name="_HomeHighlights" model="highlights" />
         <partial name="_HomeServicePanel" />
         @await Component.InvokeAsync("HomeVideos")
     </div>
-    @if (Model.News.Count == 0) { <div class="empty-state"><h2>Chưa có tin tức công khai</h2><p>Tin tức sẽ hiển thị sau khi được duyệt và xuất bản.</p></div> }
+    @if (newsItems.Length == 0) { <div class="empty-state"><h2>Chưa có tin tức công khai</h2><p>Tin tức sẽ hiển thị sau khi được duyệt và xuất bản.</p></div> }
     <div class="home-information-row">
         @if (Model.Documents.Count > 0) { <section class="home-information-panel document-preview"><div class="section-heading"><h2><partial name="_PortalIcon" model='"document"' />Văn bản mới cập nhật</h2><a href="/van-ban">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="document-card-grid">@foreach (var item in Model.Documents) { <partial name="_HomeDocumentCard" model="item" /> }</div></section> }
         @if (Model.Announcements.Count > 0) { <section class="home-information-panel home-notices"><div class="section-heading"><h2><partial name="_PortalIcon" model='"notice"' />Thông báo</h2><a href="/thong-bao">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_NoticeList" model="Model.Announcements" /></section> }
@@ -22,7 +27,7 @@
             <section class="home-information-panel home-compact-category" data-block-type="Category"><div class="section-heading"><h2><partial name="_PortalIcon" model='"book"' />@group.Name</h2><a href="/chuyen-muc/@group.Slug">Xem tất cả <span aria-hidden="true">→</span></a></div><partial name="_HomeCompactStories" model="group.Items" /></section>
         }
     </div>
-    @if (Model.News.Count > 5) { <section class="home-latest" aria-labelledby="home-latest-title"><div class="section-heading"><h2 id="home-latest-title">Tin mới cập nhật</h2><a href="/tin-tuc">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="home-news-strip">@foreach (var item in Model.News.Skip(5)) { <partial name="_Card" model="item" /> }</div></section> }
+    @if (latestItems.Length > 0) { <section class="home-latest" aria-labelledby="home-latest-title"><div class="section-heading"><h2 id="home-latest-title">Tin mới cập nhật</h2><a href="/tin-tuc">Xem tất cả <span aria-hidden="true">→</span></a></div><div class="home-news-strip">@foreach (var item in latestItems) { <partial name="_Card" model="item" /> }</div></section> }
     <div class="category-sections">
     @foreach (var group in Model.Sections.Skip(2))
     {

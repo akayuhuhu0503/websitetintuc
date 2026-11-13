@@ -9,7 +9,7 @@ const modulePath=process.env.CMS_PLAYWRIGHT_MODULE||resolve(root,'tests/browser/
 const {chromium}=await import(pathToFileURL(modulePath));
 const base=process.argv[2]||'http://127.0.0.1:5407';
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(base))throw Error('Isolated loopback host only.');
-const evidence=resolve(root,'.local/tests/public-design2');await mkdir(evidence,{recursive:true});
+const evidence=resolve(root,'.local/tests/public-width');await mkdir(evidence,{recursive:true});
 const startedUtc=new Date().toISOString();
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const context=await browser.newContext();const page=await context.newPage();
@@ -32,6 +32,7 @@ async function measure(width,kind){
   check(m.scroll<=width+1,`${kind} ${width}px no page horizontal overflow`);
   check(m.overflow.length===0,`${kind} ${width}px cards/long titles fit within panels`);
   check(m.main&&m.header&&m.footer&&Math.abs(m.main.x-m.header.x)<2&&Math.abs(m.main.w-m.header.w)<2&&Math.abs(m.main.x-m.footer.x)<2&&Math.abs(m.main.w-m.footer.w)<2,`${kind} ${width}px header/content/footer share one frame`);
+  check(m.main.w<=1401&&(width<1536||Math.abs(m.main.w-1400)<2),`${kind} ${width}px shared content frame uses 1400px maximum`);
   check(m.height>1024,`${kind} ${width}px retained long-page content`);
   check(m.quick&&m.top&&m.quick.bottom<=m.top.y+1,`${kind} ${width}px quick lookup precedes the lead news region`);
   if(width>=1200){
@@ -40,7 +41,8 @@ async function measure(width,kind){
     check(m.services&&m.video&&Math.abs(m.video.y-m.services.y)<3&&Math.abs(m.video.x-m.highlights.x)<3,`${kind} ${width}px services and video share the next row`);
     check(Math.abs(m.services.x-m.lead.x)<3&&Math.abs(m.services.right-m.secondary.right)<3,`${kind} ${width}px services span the two news columns`);
     check(m.panels.length===4&&m.panels.every(p=>Math.abs(p.y-m.panels[0].y)<2)&&Math.max(...m.panels.map(p=>p.w))-Math.min(...m.panels.map(p=>p.w))<2,`${kind} ${width}px four information panels have equal widths and aligned tops`);
-    check(await page.locator('.home-secondary-story .item-meta,.home-highlights-list .item-meta').evaluateAll(es=>es.every(e=>parseFloat(getComputedStyle(e).marginBottom)===0&&parseFloat(getComputedStyle(e).fontSize)<=10)),`${kind} ${width}px compact news metadata is not expanded by legacy styles`);
+    check(await page.locator('.home-secondary-story .item-meta,.home-highlights-list .item-meta').evaluateAll(es=>es.every(e=>parseFloat(getComputedStyle(e).fontSize)>=12)),`${kind} ${width}px news metadata remains legible`);
+    check(await page.locator('.home-secondary-story h3,.home-highlights-list h3').evaluateAll(es=>es.every(e=>parseFloat(getComputedStyle(e).fontSize)>=14)),`${kind} ${width}px secondary titles remain legible`);
     check(await page.locator('.home-service-search input').evaluate(e=>{const h=e.getBoundingClientRect().height;return h>=28&&h<=34&&e.getBoundingClientRect().right<=e.parentElement.getBoundingClientRect().right;}),`${kind} ${width}px quick-search input retains compact height and fits its group`);
   }
   if(m.lead&&m.secondary&&Math.abs(m.lead.y-m.secondary.y)<3)check(m.lead.right<=m.secondary.x+1,`${kind} ${width}px primary and secondary news do not overlap`);
@@ -48,7 +50,7 @@ async function measure(width,kind){
   if(m.event){check(Math.abs(m.event.h-m.event.w*10/117)<2,`${kind} ${width}px banner retains 117:10 without caption height`);}
 }
 try{
-  for(const width of [1536,1366,768,390,320]){
+  for(const width of [1536,1366,1920,768,390,320]){
     await page.setViewportSize({width,height:1024});
     for(const fallback of [false,true]){
       await load('?videos=1&banners=1'+(fallback?'&fallback=true':''));await measure(width,fallback?'fallback':'configured');
@@ -56,10 +58,37 @@ try{
       check(await page.locator('.home-video-section').count()===1,`${fallback?'fallback':'configured'} ${width}px video rendered once`);
       check(await page.locator('.home-information-row .home-notices').count()===1&&await page.locator('.home-information-row .document-preview').count()===1&&await page.locator('.home-information-row .home-compact-category').count()===2,`${fallback?'fallback':'configured'} ${width}px documents/notices/two categories in information row`);
       check(await page.locator('.home-secondary-story').count()===4,`${fallback?'fallback':'configured'} ${width}px four available secondary news items retained`);
+      const topUrls=await page.locator('.reference-lead h2 a,.home-secondary-story h3 a,.home-highlights-list h3 a').evaluateAll(es=>es.map(e=>e.getAttribute('href')));
+      check(topUrls.length===9&&new Set(topUrls).size===9,`${fallback?'fallback':'configured'} ${width}px all three news regions use distinct article identities`);
       check(!(await page.locator('body').innerText()).match(/@if\s*\(|@await\s|@foreach\s*\(/),`${fallback?'fallback':'configured'} ${width}px no literal Razor expressions visible`);
     }
+    await load('?videos=0&banners=3');
+    check(await page.locator('.home-event-strip').evaluate(e=>{const frame=e.querySelector('.event-slides').getBoundingClientRect(),dots=e.querySelector('.event-dots'),r=dots.getBoundingClientRect();return Math.abs(frame.height-frame.width*10/117)<2&&r.top>=frame.bottom-1&&dots.textContent.trim()==='';}),`${width}px banner preserves 117:10 and keeps dots outside artwork without text`);
   }
   await page.setViewportSize({width:1366,height:1024});
+  for(const fallback of [false,true])for(const count of [1,2,5,6,9,10,12]){
+    await load(`?news=${count}&videos=1&banners=0`+(fallback?'&fallback=true':''));
+    const urls=await page.locator('.reference-lead h2 a,.home-secondary-story h3 a,.home-highlights-list h3 a,.home-latest .news-card h3 a').evaluateAll(es=>es.map(e=>e.getAttribute('href')));
+    check(urls.length===count&&new Set(urls).size===count,`${fallback?'fallback':'configured'} ${count} available articles are neither repeated nor omitted`);
+    if(count<=5){
+      check(await page.locator('.home-highlights').count()===0,`${fallback?'fallback':'configured'} ${count} articles do not fabricate highlights`);
+      check(await page.locator('.home-feature-grid').evaluate(e=>{const top=e.getBoundingClientRect().top,video=e.querySelector('.home-video-section').getBoundingClientRect();return Math.abs(video.top-top)<2;}),`${fallback?'fallback':'configured'} ${count} articles and video do not leave an empty first row`);
+    }
+    if(count===10){
+      check(await page.locator('.home-latest .news-card').count()===1,'Ten distinct articles leave exactly one latest item');
+      check(await page.locator('.home-latest .news-card').evaluate(e=>{const r=e.getBoundingClientRect(),img=e.querySelector('.card-image')?.getBoundingClientRect();return r.width<=761&&img&&img.width<r.width*.4;}),'A single latest article has a bounded card and compact thumbnail');
+    }
+  }
+  await load('?news=10&repeatRecent=true&recentFirst=true&videos=0&banners=0');
+  const reordered=await page.locator('.reference-lead h2 a,.home-secondary-story h3 a,.home-highlights-list h3 a,.home-latest .news-card h3 a').evaluateAll(es=>es.map(e=>e.getAttribute('href')));
+  check(reordered.length===10&&new Set(reordered).size===10&&reordered[0].endsWith('000000000001'),'Duplicate Recent block preceding Featured preserves the selected lead and unique article IDs');
+  for(const categories of [0,1,2,3]){
+    await load(`?categories=${categories}&videos=0&banners=0`);
+    check(await page.locator('[data-block-type="Category"]').count()===categories,`${categories} configured categories render exactly once`);
+    check(await page.evaluate(()=>document.documentElement.scrollWidth)<=1366,`${categories} categories create no horizontal overflow`);
+  }
+  await load('?noNews=true&videos=1&banners=0');
+  check(await page.locator('.home-feature-grid').evaluate(e=>{const service=e.querySelector('.home-service-panel').getBoundingClientRect(),video=e.querySelector('.home-video-section').getBoundingClientRect();return service.right<=video.left+1||service.bottom<=video.top+1||video.bottom<=service.top+1;}),'Video and services never overlap when all news is absent');
   for(const count of [0,1,3]){
     await load(`?videos=${count}&banners=${count}&sidebar=${count>0}`);
     check(await page.locator('.home-video-card').count()===count,`Video ${count} data items rendered without fabricated fallback`);
@@ -119,7 +148,7 @@ try{
   const adminLayout=await readFile(resolve(root,'src/Web/Views/Shared/_AdminLayout.cshtml'),'utf8');
   check(!adminLayout.includes('public-design')&&!adminLayout.includes('public-shell'),'CMS layout does not load new public stylesheets');
   check(errors.length===0,'No browser JavaScript errors');check(networkErrors.length===0,'All requested local presentation assets return success');check(external.length===0,'No runtime external fonts/assets requested');
-  await writeFile(resolve(evidence,'browser-result.json'),JSON.stringify({result:'PASS',startedUtc,completedUtc:new Date().toISOString(),checks,viewports:[1536,1366,768,390,320],metrics,scope:'Real compiled MVC/Razor over loopback; synthetic readmodels/components; actual static test MP4 playback/range; no SQL/CMS authorization/FFmpeg processing assertions'},null,2));
+  await writeFile(resolve(evidence,'browser-result.json'),JSON.stringify({result:'PASS',startedUtc,completedUtc:new Date().toISOString(),checks,viewports:[1536,1366,1920,768,390,320],metrics,scope:'Real compiled MVC/Razor over loopback; synthetic readmodels/components; actual static test MP4 playback/range; no SQL/CMS authorization/FFmpeg processing assertions'},null,2));
   console.log('RESULT PASS '+checks);
 }catch(error){await writeFile(resolve(evidence,'browser-failure.json'),JSON.stringify({startedUtc,completedUtc:new Date().toISOString(),checks,error:String(error),errors,networkErrors,external,metrics},null,2));throw error;}
 finally{await browser.close();}
