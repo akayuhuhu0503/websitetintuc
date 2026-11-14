@@ -31,7 +31,13 @@ if(args.Length==1&&args[0]=="--verify-package")
     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{mode="OFFLINE_PACKAGE_CHECK_ONLY",sqlOpened=false,workerStarted=false,video=videoSettings.Enabled,managedVideo=videoSettings.ApprovedManagedVideoWithoutAv,managedImage=mediaSettings.ApprovedManagedImageWithoutAv,managedDocuments=mediaSettings.ApprovedManagedDocumentsWithoutAv}));
     return 0;
 }
-var config = PortalConfiguration.Load();
+Microsoft.Extensions.Configuration.IConfigurationRoot config;
+try { config = PortalConfiguration.Load(); }
+catch(IisConfigurationException error)
+{
+    Console.Error.WriteLine(error.Code+": "+error.Message);
+    return 2; // Safe, specific startup diagnostic; no connection or queue work has begun.
+}
 var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
 var expected = config["Sql:ExpectedDatabase"];
 var connection = new SqlConnectionStringBuilder(DatabaseSettings.Connection(config));

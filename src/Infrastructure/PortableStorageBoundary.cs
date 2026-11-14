@@ -1,10 +1,3 @@
-using System.Diagnostics;
-using System.Security.AccessControl;
-using System.Security.Cryptography;
-using System.Security.Principal;
-using System.Text.Json;
-using System.Xml;
-using System.Xml.Linq;
 using Microsoft.Extensions.Configuration;
 
 namespace LandPortal.Infrastructure;
@@ -27,35 +20,11 @@ internal sealed class PortableStorageBoundary
     static string Full(string value)=>Path.GetFullPath(value).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
     static bool Within(string child,string parent)=>child.Equals(parent,StringComparison.OrdinalIgnoreCase)||child.StartsWith(parent+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);
     [System.Diagnostics.CodeAnalysis.DoesNotReturn]
-    static void Fail(string reason)=>throw new MediaUploadException("Kho portable chưa được xác minh an toàn: "+reason,503);
+    static void Fail(string reason,string code="STORAGE_PATH")=>throw IisStorageMetadata.Failure(code);
     static void NoLinks(string path)
     {
         for(string? p=path;p!=null;p=Path.GetDirectoryName(p))
             if((Directory.Exists(p)||File.Exists(p))&&(File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)Fail("không chấp nhận reparse point.");
-    }
-    static XDocument Xml(string text)
-    {
-        using var reader=XmlReader.Create(new StringReader(text),new XmlReaderSettings{DtdProcessing=DtdProcessing.Prohibit,XmlResolver=null});
-        return XDocument.Load(reader);
-    }
-    static string[] IisRoots()
-    {
-        // Worker processes do not normally receive this variable and use the
-        // same read-only IIS metadata query as the data operator instead.
-        var pool=Environment.GetEnvironmentVariable("APP_POOL_CONFIG");
-        if(!string.IsNullOrWhiteSpace(pool)&&File.Exists(pool))
-            return Xml(File.ReadAllText(pool)).Descendants("virtualDirectory").Select(v=>(string?)v.Attribute("physicalPath")).Where(v=>!string.IsNullOrWhiteSpace(v)).Select(v=>Full(Environment.ExpandEnvironmentVariables(v!))).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var windows=Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var executable=Path.Combine(windows,Environment.Is64BitOperatingSystem&&!Environment.Is64BitProcess?"Sysnative":"System32","inetsrv","appcmd.exe");
-        if(!File.Exists(executable))Fail("không đọc được metadata IIS để xác minh private nằm ngoài webroot.");
-        var start=new ProcessStartInfo(executable){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
-        foreach(var a in new[]{"list","vdir","/xml"})start.ArgumentList.Add(a);
-        using var process=Process.Start(start)??throw new InvalidOperationException("IIS metadata unavailable.");
-        var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
-        if(!process.WaitForExit(10000)){process.Kill(true);Fail("đọc metadata IIS quá thời gian.");}
-        var text=stdout.GetAwaiter().GetResult();var error=stderr.GetAwaiter().GetResult();
-        if(process.ExitCode!=0||!string.IsNullOrWhiteSpace(error)||text.Length>1024*1024)Fail("tài khoản hiện hành không đọc được metadata IIS; không tự cấp quyền.");
-        return Xml(text).Descendants("VDIR").Select(v=>(string?)v.Attribute("physicalPath")).Where(v=>!string.IsNullOrWhiteSpace(v)).Select(v=>Full(Environment.ExpandEnvironmentVariables(v!))).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
     internal static PortableStorageBoundary? Create(IConfiguration c,string[] stores)
     {
@@ -74,30 +43,40 @@ internal sealed class PortableStorageBoundary
         var layout=new PortablePackageLayout(bundle??package,web,home,bundle!=null);
         NoLinks(home);NoLinks(web);
         if(!Directory.Exists(web))Fail("missing IIS web directory.");
-        layout.VerifyBinding();
+        try { layout.VerifyBinding(); }
+        catch(Exception e) when(e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Security.SecurityException or System.Text.Json.JsonException or KeyNotFoundException)
+        { throw IisStorageMetadata.Failure("STORAGE_MANIFEST"); }
         if(c["Deployment:Profile"]!="UAT"||c["DOTNET_ENVIRONMENT"]!="Staging"||c["ASPNETCORE_ENVIRONMENT"]!="Staging")Fail("ngoại lệ portable chỉ dành cho UAT đã xác định.");
         var roots=stores.Select(Full).ToArray();
         if(roots.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=4||roots.Any(x=>!Within(x,home)||x.Equals(home,StringComparison.OrdinalIgnoreCase)||Within(x,web)||x.Split(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar).Any(s=>s.Equals("wwwroot",StringComparison.OrdinalIgnoreCase))))Fail("kho phải tách biệt trong private, ngoài web/wwwroot.");
         if(roots.Any(a=>roots.Any(b=>a!=b&&Within(a,b))))Fail("kho private không được lồng nhau.");
-        var served=IisRoots();
-        if(!served.Any(x=>x.Equals(web,StringComparison.OrdinalIgnoreCase))||served.Any(x=>Within(home,x)||Within(x,home)))Fail("IIS mapping không đúng web hoặc đang phục vụ private.");
-        if(bundle!=null&&served.Any(x=>!x.Equals(web,StringComparison.OrdinalIgnoreCase)&&(Within(x,Full(bundle))||Within(Full(bundle),x))))Fail("IIS must not separately map the embedded runtime.");
+        var served=IisStorageMetadata.ReadRoots(web);
+        if(!served.Any(x=>x.Equals(web,StringComparison.OrdinalIgnoreCase))||served.Any(x=>Within(home,x)||Within(x,home)))Fail("IIS mapping không đúng web hoặc đang phục vụ private.","IIS_MAPPING");
+        if(bundle!=null&&served.Any(x=>!x.Equals(web,StringComparison.OrdinalIgnoreCase)&&(Within(x,Full(bundle))||Within(Full(bundle),x))))Fail("IIS must not separately map the embedded runtime.","IIS_MAPPING");
         foreach(var root in roots)NoLinks(root);
         return new(home,roots);
     }
     internal bool Allows(string path)
     {
-        if(validated!=null)return validated.Value.Allows(path);
-        path=Full(path);
-        if(!stores.Any(root=>Within(path,root)))return false;
-        NoLinks(path);
-        return true;
+        try
+        {
+            if(validated!=null)return validated.Value.Allows(path);
+            path=Full(path);
+            if(!stores.Any(root=>Within(path,root)))return false;
+            NoLinks(path);
+            return true;
+        }
+        catch(IisConfigurationException e){throw new MediaUploadException(e.Message,503);}
     }
 
     internal void ValidateFile(string path)
     {
-        if(validated!=null){validated.Value.ValidateFile(path);return;}
-        if(!Allows(Path.GetDirectoryName(path)!))Fail("tệp nằm ngoài các kho đã xác minh.");
-        NoLinks(path);
+        try
+        {
+            if(validated!=null){validated.Value.ValidateFile(path);return;}
+            if(!Allows(Path.GetDirectoryName(path)!))Fail("tệp nằm ngoài các kho đã xác minh.");
+            NoLinks(path);
+        }
+        catch(IisConfigurationException e){throw new MediaUploadException(e.Message,503);}
     }
 }
