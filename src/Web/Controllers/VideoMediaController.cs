@@ -10,6 +10,27 @@ public sealed class VideoMediaController(PortalDbContext db,StorageOptions stora
 {
     [AcceptVerbs("GET","HEAD"),Route("video-media/{id:guid}/{part}")]
     public Task<IActionResult> Public(Guid id,string part)=>Serve(id,part,null);
+    [HttpGet("video-media/{id:guid}/tracks")]
+    public async Task<IActionResult> Tracks(Guid id, Guid contentId)
+    {
+        Response.Headers.CacheControl = "no-store, private";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        if (!options.Enabled) return NotFound();
+        var revisionId = await db.Contents.Where(c => c.Id == contentId && c.IsPublic && !c.IsTrashed
+            && db.ContentAssets.Any(a => a.RevisionId == c.PublishedRevisionId && a.MediaAssetId == id && a.Usage == "Video"))
+            .Select(c => c.PublishedRevisionId).SingleOrDefaultAsync();
+        if (revisionId is null) return NotFound();
+        var video = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
+        if (video is null || !await VideoReadiness.ReadyAsync(db, storage, video, environment.IsDevelopment(), HttpContext.RequestAborted, options)) return NotFound();
+        var candidates = await db.ContentAssets.AsNoTracking().Where(a => a.RevisionId == revisionId && a.Usage == "Subtitle"
+            && db.Set<VideoSubtitle>().Any(t => t.MediaAssetId == a.MediaAssetId && t.VideoMediaAssetId == id))
+            .OrderBy(a => a.SortOrder).ThenBy(a => a.MediaAssetId).Select(a => a.MediaAssetId).ToListAsync();
+        var ready = new List<string>();
+        foreach (var track in candidates)
+            if (await VideoSubtitleService.ReadyAsync(db, storage, track, environment.IsDevelopment(), HttpContext.RequestAborted, options)) ready.Add("/video-track/" + track);
+        if (!await db.Contents.AnyAsync(c => c.Id == contentId && c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == revisionId)) return NotFound();
+        return Json(new { tracks = ready });
+    }
     [Microsoft.AspNetCore.Authorization.Authorize,AcceptVerbs("GET","HEAD"),Route("admin/videos/media/{id:guid}/{part}")]
     public Task<IActionResult> Preview(Guid id,string part,Guid contentId)=>Serve(id,part,contentId);
     private async Task<bool> Allowed(Guid id,Guid? contentId)

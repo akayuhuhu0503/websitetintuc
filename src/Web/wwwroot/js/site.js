@@ -1,5 +1,59 @@
 "use strict";
 (() => {
+    document.querySelectorAll('[data-home-video]').forEach(slot => {
+        const button = slot.querySelector('.home-video-poster');
+        const status = slot.querySelector('.home-video-error');
+        button?.addEventListener('click', () => {
+            if (slot.querySelector('video'))
+                return;
+            const id = slot.dataset.videoId;
+            const contentId = slot.dataset.contentId;
+            if (!id || !contentId || !/^[a-f0-9-]{36}$/i.test(id) || !/^[a-f0-9-]{36}$/i.test(contentId))
+                return;
+            const player = document.createElement('video');
+            player.controls = true;
+            player.playsInline = true;
+            player.preload = 'none';
+            player.poster = `/video-media/${id}/poster`;
+            player.setAttribute('aria-label', button.getAttribute('aria-label') || 'Phát video');
+            const showError = (message) => { if (status) {
+                status.textContent = message;
+                status.hidden = false;
+            } };
+            player.addEventListener('error', () => showError('Video hiện không phát được hoặc đã ngừng công khai. Vui lòng thử lại sau hoặc mở bài viết bằng tiêu đề bên dưới.'));
+            player.src = `/video-media/${id}/play`;
+            button.hidden = true;
+            slot.insertBefore(player, status);
+            slot.closest('.home-video-card')?.classList.add('is-playing');
+            player.focus();
+            void player.play().catch(error => {
+                if (error?.name === 'NotAllowedError')
+                    showError('Nhấn nút phát trong trình phát để tiếp tục.');
+                else
+                    showError('Chưa phát được video. Vui lòng thử lại bằng nút phát hoặc mở bài viết bên dưới.');
+            });
+            // Captions are resolved lazily against this article's live revision.
+            // The track endpoint rechecks publication and file integrity itself.
+            void fetch(`/video-media/${id}/tracks?contentId=${contentId}`, { cache: 'no-store', credentials: 'same-origin' })
+                .then(async (response) => { if (!response.ok)
+                throw new Error('tracks'); return response.json(); })
+                .then(data => {
+                if (!Array.isArray(data.tracks))
+                    return;
+                data.tracks.forEach((url, index) => {
+                    if (typeof url !== 'string' || !/^\/video-track\/[a-f0-9-]{36}$/i.test(url))
+                        return;
+                    const track = document.createElement('track');
+                    track.kind = 'captions';
+                    track.srclang = 'vi';
+                    track.label = `Tiếng Việt${index ? ` ${index + 1}` : ''}`;
+                    track.src = url;
+                    player.append(track);
+                });
+            }).catch(() => { if (!player.error)
+                showError('Chưa tải được phụ đề. Bạn có thể tiếp tục xem video hoặc thử lại sau.'); });
+        });
+    });
     // Keep installed schema-compatible views in sync with the public copy until
     // their next binary deployment. Only interface chrome/help is adjusted;
     // source articles, test dataset labels and safety warnings are untouched.
@@ -403,6 +457,16 @@
     }
     menus.forEach(menu => {
         const summary = menu.querySelector(':scope > summary');
+        if (menu.matches('.nav-dropdown')) {
+            menu.addEventListener('pointerenter', event => {
+                if (event.pointerType === 'mouse' && !compactViewport.matches && !navigation?.classList.contains('nav-is-compact'))
+                    menu.open = true;
+            });
+            menu.addEventListener('pointerleave', event => {
+                if (event.pointerType === 'mouse' && !compactViewport.matches && !menu.contains(document.activeElement))
+                    menu.open = false;
+            });
+        }
         menu.addEventListener('toggle', () => {
             summary?.setAttribute('aria-expanded', String(menu.open));
             if (menu.open) {

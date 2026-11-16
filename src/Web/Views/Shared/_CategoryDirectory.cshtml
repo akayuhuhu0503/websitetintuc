@@ -1,0 +1,12 @@
+@model LandPortal.Web.Services.CategoryDirectoryModel
+<ul class="category-directory">
+@foreach (var item in Model.Items.Where(x => x.ParentId == Model.ParentId))
+{
+    <li><a href="/chuyen-muc/@item.Slug" aria-current="@(Model.ActiveSlug == item.Slug ? "page" : null)">@item.Name</a>
+    @if (Model.Items.Any(x => x.ParentId == item.Id))
+    {
+        <partial name="_CategoryDirectory" model="new LandPortal.Web.Services.CategoryDirectoryModel(Model.Items, item.Id, Model.ActiveSlug)" />
+    }
+    </li>
+}
+</ul>

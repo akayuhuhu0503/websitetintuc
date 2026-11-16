@@ -7,6 +7,14 @@
 @if(Model.CanSave&&Model.CanPublish&&Model.Section=="menus"){<form method="post" action="/admin/site/disclosure-catalog" class="site-admin-panel">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion"/><label class="checkbox-label"><input type="checkbox" name="confirmed" value="true" required/> Tôi xác nhận ba tên chuyên mục Công khai thông tin đúng đặc tả chính thức.</label><p>Chỉ kích hoạt danh mục theo quyền quản trị toàn hệ thống; không đăng bài hoặc áp dụng menu nháp. Nếu có hồ sơ đang gắn trạng thái công khai chưa hợp lệ, hệ thống dừng để rà soát riêng.</p><button class="button secondary" type="submit">Xác nhận danh mục Công khai thông tin</button></form>}
 @if (Model.CanSave && Model.Section == "menus") { <form method="post" action="/admin/site/disclosure-menu">@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" /><button type="submit">Thêm nhóm Công khai thông tin vào nháp</button><p>Ba nhóm đã chốt theo đặc tả. Xác nhận danh mục nếu cần, xem trước rồi áp dụng bản nháp theo quyền; không tự đăng bài.</p></form> }
 <nav class="site-admin-tabs" aria-label="Vùng cấu hình">@foreach (var tab in new[] { ("contact", "Liên hệ & nhận diện"), ("categories", "Chuyên mục"), ("menus", "Menu & liên kết"), ("banners", "Banner"), ("blocks", "Trang chủ"), ("vocabulary", "Danh mục văn bản"), ("history", "Phiên bản") }) { <a aria-current="@(Model.Section == tab.Item1 ? "page" : null)" href="/admin/site?section=@tab.Item1">@tab.Item2</a> }</nav>
+@if (Model.CanSave && Model.Section == "menus" && !r.Menus.Any(x => x.RouteKey == "Materials" && x.TargetKind == "Route"))
+{
+    <form method="post" action="/admin/site/materials-menu" class="site-admin-panel">
+        @Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Model.RowVersion" />
+        <h2>Tài liệu</h2><p>Tạo chuyên mục riêng và mục Tài liệu trong nhóm Văn bản. Không lấy tệp từ Văn bản pháp luật hoặc Dự thảo. Sau khi áp dụng cấu hình, chọn chuyên mục Tài liệu trong trình soạn bài và đính kèm PDF, Word hoặc Excel theo quy trình duyệt hiện có.</p>
+        <button type="submit">Thêm nhóm Tài liệu vào nháp</button>
+    </form>
+}
 @if (Model.Section == "contact")
 {
     <section class="site-admin-panel"><h2>Thông tin công khai trong bản nháp</h2><dl><dt>Cơ quan</dt><dd>@r.OrganizationName</dd><dt>Địa chỉ</dt><dd>@r.ContactAddress</dd><dt>Điện thoại / Đường dây nóng</dt><dd>@r.ContactPhone / @r.ContactHotline</dd><dt>Email</dt><dd>@r.ContactEmail</dd><dt>Chân trang</dt><dd>@r.FooterText</dd></dl>@if (r.LogoAssetId.HasValue) { <img class="site-admin-image" src="/admin/site/media/@r.LogoAssetId" alt="Logo trong bản nháp" /> }@if (Model.CanSave) { <a class="primary-button" href="/admin/site/edit?section=contact">Sửa bản nháp</a> }</section>

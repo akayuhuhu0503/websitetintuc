@@ -37,6 +37,7 @@ public static class EntryPoint
             typeof(PublicSiteService).GetField("current",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(service,Task.FromResult<SitePublicConfiguration?>(sp.GetRequiredService<FixtureData>().Site));
             return service;
         });
+        builder.Services.AddScoped(sp=>new PublicNavigation(null!,sp.GetRequiredService<PublicSiteService>()));
         builder.Services.AddScoped(sp=>new PublicTraffic(null!,sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>(),sp.GetRequiredService<IMemoryCache>(),sp.GetRequiredService<ILogger<PublicTraffic>>(),null!));
         builder.Services.AddControllersWithViews().AddApplicationPart(typeof(LandPortal.Web.Controllers.HomeController).Assembly)
             .ConfigureApplicationPartManager(parts=>{parts.FeatureProviders.Add(new TestControllersOnly());parts.FeatureProviders.Add(new TestComponents());});
@@ -81,6 +82,8 @@ public sealed class FixtureData(IHttpContextAccessor accessor)
             menus.Add(new(Id(121),Id(101),"main","Cơ cấu tổ chức","/gioi-thieu/co-cau",false,2));
             menus.Add(new(Id(122),Id(102),"main","Hoạt động của Cục","/chuyen-muc/hoat-dong",false,1));
             menus.Add(new(Id(123),Id(102),"main","Tin địa phương","/chuyen-muc/dia-phuong",false,2));
+            r.Categories.Add(new(){CategoryId=1,DisplayName="Hoạt động của Cục",Slug="hoat-dong",SortOrder=1});
+            r.Categories.Add(new(){CategoryId=2,DisplayName="Tin địa phương",Slug="dia-phuong",SortOrder=2});
             menus.Add(new(Id(124),Id(103),"main","Giấy chứng nhận sai hỏng, hủy","/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy",false,1));
             foreach(var item in names.Take(6))menus.Add(new(Guid.NewGuid(),null,"footer",item.Item1,item.Item2,false,menus.Count));
             var banners=Enumerable.Range(0,Count("banners",1)).Select(i=>new SitePublicBanner(Id(200+i),"Banner sự kiện fixture", "Banner kiểm tra tỷ lệ 117:10", "home_event_strip", "/fixture/banner/"+i,"/tin-tuc",false,i,"Mô tả quản trị không hiện ở banner")).ToList();
@@ -126,6 +129,8 @@ public sealed class PresentationController(FixtureData data,FixtureFiles files):
     }
     [HttpGet("/fixture/banner/{id}")]public IActionResult Banner(int id)=>Content($"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1170 100'><rect width='1170' height='100' fill='{(id%2==0?"#8b2e2e":"#702424")}'/><text x='585' y='60' fill='white' text-anchor='middle' font-family='sans-serif' font-size='28'>BANNER KIỂM TRA BỐ CỤC {id+1}</text></svg>","image/svg+xml");
     [HttpGet("/fixture/sample.mp4")]public IActionResult Movie()=>PhysicalFile(Path.Combine(files.Root,"sample.mp4"),"video/mp4",enableRangeProcessing:true);
+    [HttpGet("/video-media/{id:guid}/play")]public IActionResult Video(Guid id)=>data.Videos.Any(x=>x.VideoId==id)?Movie():NotFound();
+    [HttpGet("/video-media/{id:guid}/tracks")]public IActionResult Tracks(Guid id)=>data.Videos.Any(x=>x.VideoId==id)?Json(new{tracks=Array.Empty<string>()}):NotFound();
     [HttpGet("/bai-viet/{id:guid}")]public IActionResult Detail(Guid id)=>Content($"<!doctype html><html lang='vi'><meta charset='utf-8'><title>Bài kiểm tra riêng</title><h1>Bài kiểm tra riêng</h1>{(data.Videos.Any(x=>x.Content.Id==id)?"<video controls width='640' src='/fixture/sample.mp4'></video>":"<p>Đích liên kết nội dung kiểm tra giao diện.</p>")}<a href='/'>Trang chủ</a></html>","text/html");
     [HttpGet("/tim-kiem")]public IActionResult Search(string? q)=>Content("Tìm kiếm fixture: "+q,"text/plain");
     [HttpGet("/tin-tuc")]public IActionResult NewsList()=>Content("Danh sách fixture dùng cho điều hướng/prefetch giao diện; không truy vấn dữ liệu vận hành.","text/plain");

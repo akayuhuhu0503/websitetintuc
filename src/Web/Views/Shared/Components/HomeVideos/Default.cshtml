@@ -8,11 +8,14 @@
     {
         var video=Model[i];
         <article class="home-video-card @(i==0?"home-video-card--lead":"")">
-            <a class="home-video-poster" href="@video.Content.Url" aria-label="Phát video: @video.Content.Title">
+            <div class="home-video-player" data-home-video data-video-id="@video.VideoId" data-content-id="@video.Content.Id">
+            <button type="button" class="home-video-poster" aria-label="Phát video: @video.Content.Title">
                 <img src="@video.PosterUrl" alt="@video.Content.Title" width="1280" height="720" loading="lazy" decoding="async" />
                 <span class="home-video-play" aria-hidden="true"><partial name="_PortalIcon" model='"play"' /></span>
                 @if(video.Duration is not null){<span class="home-video-duration">@video.Duration</span>}
-            </a>
+            </button>
+            <p class="home-video-error" role="status" hidden></p>
+            </div>
             <div class="home-video-copy"><h3><a href="@video.Content.Url">@video.Content.Title</a></h3>@if(video.Content.DisplayDate is not null){<span class="article-meta">@video.Content.DisplayDate</span>}</div>
         </article>
     }

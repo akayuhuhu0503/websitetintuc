@@ -24,7 +24,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         ["Functions"] = ("Chức năng nhiệm vụ", "/gioi-thieu/chuc-nang-nhiem-vu"),
         ["Organization"] = ("Cơ cấu tổ chức", "/gioi-thieu/co-cau-to-chuc"),
         ["Announcements"] = ("Thông báo", "/thong-bao"), ["Legal"] = ("Văn bản pháp luật", "/van-ban"),
-        ["DraftDocuments"] = ("Văn bản dự thảo", "/du-thao"), ["Videos"] = ("Video", "/video"),
+        ["DraftDocuments"] = ("Văn bản dự thảo", "/du-thao"), ["Materials"] = ("Tài liệu", "/tai-lieu"), ["Videos"] = ("Video", "/video"),
         ["Questions"] = ("Hỏi đáp", "/hoi-dap"), ["Contact"] = ("Liên hệ", "/lien-he"),
         ["Handbook"] = ("Sổ tay đất đai", "/so-tay"), ["ExecutiveDocuments"] = ("Văn bản chỉ đạo điều hành", "/van-ban-chi-dao-dieu-hanh"),
         ["LandPlanning"] = ("Quy hoạch sử dụng đất", "/quy-hoach-su-dung-dat"), ["Weekly"] = ("Lịch tuần", "/lich-tuan"),
@@ -371,12 +371,16 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
             case "Content":
                 var content = contentId.HasValue ? await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == contentId) : null;
                 if (content is null || publishing && (!content.IsPublic || content.IsTrashed || !content.PublishedRevisionId.HasValue)) throw new SiteConfigurationException("Đích nội dung phải đang công khai khi áp dụng."); break;
-            case "Route": if (!Routes.ContainsKey(route)) throw new SiteConfigurationException("Chọn mục hệ thống từ danh sách; không nhận tuyến admin/private."); break;
+            case "Route":
+                if (!Routes.ContainsKey(route)) throw new SiteConfigurationException("Chọn mục hệ thống từ danh sách; không nhận tuyến admin/private.");
+                if (route == "Materials" && categoryId.HasValue && !r.Categories.Any(x => x.CategoryId == categoryId && x.ShowInNavigation))
+                    throw new SiteConfigurationException("Chọn chuyên mục tài liệu được phép hiển thị.");
+                break;
             case "Internal" when groupAllowed: if(!InternalUrlValid(external))throw new SiteConfigurationException("Đường dẫn nội bộ không hợp lệ hoặc thuộc vùng riêng tư."); break;
             case "External": if (!ExternalUrlValid(external)) throw new SiteConfigurationException("Liên kết ngoài phải là HTTP(S), không credential/backslash/control."); break;
             default: throw new SiteConfigurationException("Loại đích liên kết không hợp lệ.");
         }
-        if (kind != "Category" && categoryId.HasValue || kind != "Content" && contentId.HasValue || kind != "Route" && route.Length > 0 || kind is not ("External" or "Internal") && external.Length > 0) throw new SiteConfigurationException("Các trường đích không khớp loại đã chọn.");
+        if (kind != "Category" && !(groupAllowed && kind == "Route" && route == "Materials") && categoryId.HasValue || kind != "Content" && contentId.HasValue || kind != "Route" && route.Length > 0 || kind is not ("External" or "Internal") && external.Length > 0) throw new SiteConfigurationException("Các trường đích không khớp loại đã chọn.");
     }
     private static SiteMenuItem Menu(SiteConfigurationRevision r, string label, string kind, string route, int order, Guid? parent = null, string position = "main")
     { var item = new SiteMenuItem { Label = label, TargetKind = kind, RouteKey = route, SortOrder = order, ParentId = parent, Position = position, SystemProtected = true }; r.Menus.Add(item); return item; }

@@ -1,6 +1,14 @@
 (() => {
     const targetKind = document.getElementById('site_targetKind');
-    const revealTarget = () => document.querySelectorAll('[data-target-kind]').forEach(group => { group.hidden = !group.dataset.targetKind.split(' ').includes(targetKind?.value); });
+    const routeKey = document.getElementById('site_routeKey');
+    const revealTarget = () => {
+        const materials = targetKind?.value === 'Route' && routeKey?.value === 'Materials' && document.querySelector('[name="Section"]')?.value === 'menus';
+        document.querySelectorAll('[data-target-kind]').forEach(group => {
+            group.hidden = !group.dataset.targetKind.split(' ').includes(targetKind?.value) && !(materials && group.hasAttribute('data-materials-category'));
+        });
+        document.querySelectorAll('[data-materials-hint]').forEach(hint => hint.hidden = !materials);
+    };
+    routeKey?.addEventListener('change', revealTarget);
     targetKind?.addEventListener('change', revealTarget); revealTarget();
     const edit = document.getElementById('site-edit-form'); let changed = false;
     edit?.addEventListener('input', () => changed = true); edit?.addEventListener('change', () => changed = true);

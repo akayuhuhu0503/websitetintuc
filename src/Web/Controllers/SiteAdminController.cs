@@ -77,6 +77,21 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
         (x.UploadedByUserId == actor.UserId || db.ContentAssets.Any(a => a.MediaAssetId == x.Id && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId)) ||
          db.Set<SiteConfigurationRevision>().Any(v => v.LogoAssetId == x.Id) || db.Set<SiteBanner>().Any(b => b.MediaAssetId == x.Id)));
 
+    [HttpPost("admin/site/materials-menu"), Authorize(Policy = Permissions.ManageSite)]
+    public async Task<IActionResult> MaterialsMenuDraft(string rowVersion)
+    {
+        try
+        {
+            var state = await sites.ReadAsync(false) ?? throw new SiteConfigurationException("Cấu hình chưa khởi tạo.", 503);
+            var nextId = Math.Max(await db.Categories.MaxAsync(x => (int?)x.Id) ?? 0, state.Revision.Categories.Select(x => x.CategoryId).DefaultIfEmpty().Max()) + 1;
+            await sites.MutateAsync(await ActorAsync(), Version(rowVersion), r => MaterialsMenu.Add(r, nextId), "AddMaterialsMenu");
+            TempData["Success"] = "Đã tạo chuyên mục và menu Tài liệu riêng trong bản nháp. Xem trước rồi áp dụng cấu hình. Chưa chuyển hoặc công bố tài liệu nào.";
+            return Redirect("/admin/site?section=menus");
+        }
+        catch (SiteConfigurationException error) { return StatusCode(error.StatusCode, error.Message); }
+        catch (DbUpdateConcurrencyException) { return Conflict("Cấu hình đã đổi. Tải lại trước khi thêm menu."); }
+    }
+
     [HttpPost("admin/site/disclosure-menu"), Authorize(Policy = Permissions.ManageSite)]
     public async Task<IActionResult> DisclosureMenu(string rowVersion)
     {
@@ -123,7 +138,7 @@ public sealed class SiteAdminController(PortalDbContext db, SiteConfigurationSer
                         if (model.ItemId.HasValue && menu is null) throw new SiteConfigurationException("Menu không tồn tại.", 404);
                         menu ??= new(); if (!r.Menus.Contains(menu)) r.Menus.Add(menu);
                         menu.Label = model.Menu.Label.Trim(); menu.Position = model.Menu.Position; menu.ParentId = model.Menu.ParentId; menu.TargetKind = model.Menu.TargetKind;
-                        menu.CategoryId = model.Menu.TargetKind == "Category" ? model.Menu.CategoryId : null; menu.ContentId = model.Menu.TargetKind == "Content" ? model.Menu.ContentId : null; menu.RouteKey = model.Menu.TargetKind == "Route" ? model.Menu.RouteKey : ""; menu.ExternalUrl = model.Menu.TargetKind is "External" or "Internal" ? model.Menu.ExternalUrl.Trim() : ""; menu.OpenNewWindow = model.Menu.OpenNewWindow; menu.SortOrder = model.Menu.SortOrder; menu.Enabled=model.Menu.Enabled; break;
+                        menu.CategoryId = model.Menu.TargetKind == "Category" || model.Menu.TargetKind == "Route" && model.Menu.RouteKey == "Materials" ? model.Menu.CategoryId : null; menu.ContentId = model.Menu.TargetKind == "Content" ? model.Menu.ContentId : null; menu.RouteKey = model.Menu.TargetKind == "Route" ? model.Menu.RouteKey : ""; menu.ExternalUrl = model.Menu.TargetKind is "External" or "Internal" ? model.Menu.ExternalUrl.Trim() : ""; menu.OpenNewWindow = model.Menu.OpenNewWindow; menu.SortOrder = model.Menu.SortOrder; menu.Enabled=model.Menu.Enabled; break;
                     case "banners":
                         var banner = model.ItemId.HasValue ? r.Banners.SingleOrDefault(x => x.Id == model.ItemId) : null;
                         if (model.ItemId.HasValue && banner is null) throw new SiteConfigurationException("Banner không tồn tại.", 404);
