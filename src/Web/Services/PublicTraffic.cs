@@ -62,7 +62,15 @@ public sealed class PublicTraffic(PortalDbContext db,IDataProtectionProvider pro
         {
             var now=DateTimeOffset.UtcNow;var vn=now.ToOffset(TimeSpan.FromHours(7));var day=new DateTimeOffset(vn.Year,vn.Month,vn.Day,0,0,0,vn.Offset);var month=new DateTimeOffset(vn.Year,vn.Month,1,0,0,0,vn.Offset);
             var rows=db.Set<PublicVisit>().AsNoTracking();
-            var result=new PublicTrafficCounts(await rows.LongCountAsync(x=>x.LastSeenUtc>=now.AddMinutes(-5)),await rows.LongCountAsync(x=>x.StartedUtc>=day),await rows.LongCountAsync(x=>x.StartedUtc>=month),await rows.LongCountAsync(),now);
+            // One round trip and one scan; preserve the same independent windows,
+            // bigint counters and existing 15-second statistics-only cache.
+            var activeSince=now.AddMinutes(-5);
+            var counts=await rows.GroupBy(x=>1).Select(g=>new {
+                Active=g.Sum(x=>x.LastSeenUtc>=activeSince?1L:0L),
+                Today=g.Sum(x=>x.StartedUtc>=day?1L:0L),
+                Month=g.Sum(x=>x.StartedUtc>=month?1L:0L),Total=g.LongCount()
+            }).SingleOrDefaultAsync();
+            var result=new PublicTrafficCounts(counts?.Active??0,counts?.Today??0,counts?.Month??0,counts?.Total??0,now);
             cache.Set("public-traffic-counts",result,TimeSpan.FromSeconds(15));return result;
         }
         catch(Microsoft.Data.SqlClient.SqlException){logger.LogWarning("Public statistics block hidden while SQL is unavailable; no fabricated fallback counts.");return null;}
