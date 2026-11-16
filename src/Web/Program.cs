@@ -205,6 +205,7 @@ app.Use(async (context, next) =>
 });
 app.UseAuthorization();
 app.UseMiddleware<DuePublicationMiddleware>();
+app.UseMiddleware<PublicRequestConnectionMiddleware>();
 app.MapGet("/health", () => Results.Ok(new { status = "running", phase = "2B" }));
 app.MapGet("/ready", async (PortalDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 app.MapGet("/robots.txt", () => Results.Text("User-agent: *\nDisallow: /\n", "text/plain"));

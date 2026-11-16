@@ -89,7 +89,7 @@ static class PublicationChecks
             builder.Services.AddScoped<CurrentPermissionService>();
             builder.Services.AddScoped(s => new SchedulerService(s.GetRequiredService<PortalDbContext>(), s.GetRequiredService<WorkflowService>(), s.GetRequiredService<CurrentPermissionService>(), new SchedulerOptions(), clock));
             builder.Services.AddSingleton<WebPublicationScheduler>();
-            web = builder.Build(); web.UseRouting(); web.UseMiddleware<DuePublicationMiddleware>();
+            web = builder.Build(); web.UseRouting(); web.UseMiddleware<DuePublicationMiddleware>();web.UseMiddleware<PublicRequestConnectionMiddleware>();
             // The production middleware runs before the endpoint's first published SQL read.
             // Existing CMS/view rendering is deliberately not repeated in this lifecycle delta.
             web.MapGet("/fixture/article/{id:guid}", async (Guid id, PortalDbContext db) =>

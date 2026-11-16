@@ -82,22 +82,24 @@
         try {
             // Reuse the server's public-only, most-recent Article listing. Never
             // infer publication state from home cards or administrative data.
-            let page: Document = document;
+            let headlines: { id: string; title: string }[];
             if (location.pathname.replace(/\/$/, '') !== '/tin-tuc' || location.search !== '') {
                 const controller = new AbortController();
                 const timeout = window.setTimeout(() => controller.abort(), 5000);
                 try {
-                    const response = await fetch('/tin-tuc', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-                    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error('News unavailable');
-                    page = new DOMParser().parseFromString(await response.text(), 'text/html');
+                    const response = await fetch('/tin-tuc/moi-nhat', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+                    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('News unavailable');
+                    headlines = await response.json();
                 } finally { window.clearTimeout(timeout); }
-            }
+            } else headlines = Array.from(document.querySelectorAll<HTMLAnchorElement>('.listing-results .listing-lead .lead-copy h3 a[href], .listing-results .listing-grid > .news-card h3 a[href]'))
+                .map(link => ({ id: new URL(link.href).pathname.split('/')[2], title: link.textContent || '' }));
             const list = document.createElement('ul');
             list.className = 'latest-news-items';
             const seen = new Set<string>();
-            for (const source of Array.from(page.querySelectorAll<HTMLAnchorElement>('.listing-results .listing-lead .lead-copy h3 a[href], .listing-results .listing-grid > .news-card h3 a[href]'))) {
-                const url = new URL(source.getAttribute('href') || '', location.origin);
-                const title = source.textContent?.replace(/\s+/g, ' ').trim();
+            for (const source of headlines) {
+                if (!/^[a-f0-9-]{36}$/i.test(source.id) || typeof source.title !== 'string') continue;
+                const url = new URL('/bai-viet/' + source.id, location.origin);
+                const title = source.title.replace(/\s+/g, ' ').trim();
                 if (!title || url.origin !== location.origin || !/^\/bai-viet\/[a-f0-9-]{36}(?:\/|$)/i.test(url.pathname) || seen.has(url.pathname)) continue;
                 seen.add(url.pathname);
                 const item = document.createElement('li');
@@ -129,6 +131,23 @@
         }
     }
     void showLatestNews();
+    // Acknowledge a real same-tab navigation immediately. No progress animation,
+    // prefetch, content substitution or interception of the browser's navigation.
+    document.addEventListener('click', event => {
+        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || location.pathname.startsWith('/admin')) return;
+        const link = (event.target as Element)?.closest<HTMLAnchorElement>('a[href]');
+        if (!link || link.download || (link.target && link.target !== '_self')) return;
+        const url = new URL(link.href, location.href);
+        if (url.origin !== location.origin || !/^https?:$/.test(url.protocol) || url.pathname.startsWith('/admin') ||
+            (url.pathname === location.pathname && url.search === location.search && url.hash) ||
+            /^\/(media|tep-nguon|video-media|tai-lieu)\//.test(url.pathname)) return;
+        document.body.classList.add('public-navigation-pending');
+        document.querySelector('main')?.setAttribute('aria-busy', 'true');
+    });
+    window.addEventListener('pageshow', () => {
+        document.body.classList.remove('public-navigation-pending');
+        document.querySelector('main')?.removeAttribute('aria-busy');
+    });
     // Native date fields use the browser/OS locale, not <html lang="vi">.
     // Keep field names, IDs and ISO wire values; localize only the editable UI.
     const dateFields = new WeakMap<HTMLInputElement, { kind: string; seconds: boolean; min: string; max: string }>();

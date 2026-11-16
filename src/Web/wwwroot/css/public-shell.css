@@ -138,3 +138,4 @@ body.portal-public .main-nav.nav-is-compact .nav-dropdown>summary { min-height:4
     body.portal-public .utility-bar,body.portal-public .main-nav,body.portal-public .site-footer,body.portal-public .header-search { display:none; }
     body.portal-public .masthead::after { display:none; }
 }
+.public-navigation-pending, .public-navigation-pending a { cursor: progress; }
