@@ -18,6 +18,7 @@
 @if(inboxes.Length>0){<p class="sidebar-label">TƯƠNG TÁC</p>@foreach(var kind in inboxes){<a href="/admin/tuong-tac?kind=@kind" data-admin-nav="inbox-@kind">@InteractionLabels.Kind(kind)</a>}}
 @if(actor.Has(LandPortal.Application.Permissions.ViewSite) || actor.Has(LandPortal.Application.Permissions.ManageSite) || actor.Has(LandPortal.Application.Permissions.PublishSite) || actor.Has(LandPortal.Application.Permissions.ManageUsers) || actor.Has(LandPortal.Application.Permissions.ManageRoles) || actor.Has(LandPortal.Application.Permissions.OutboxReconcile) || LandPortal.Web.Controllers.AuditController.CanRead(actor)) {
 <p class="sidebar-label">QUẢN TRỊ</p>
+@if(actor.Has(LandPortal.Application.Permissions.ManageSite)){<a href="/admin/source-sync" data-admin-nav="/admin/source-sync">Đồng bộ QLDD</a>}
 @if(actor.Has(LandPortal.Application.Permissions.ViewSite) || actor.Has(LandPortal.Application.Permissions.ManageSite) || actor.Has(LandPortal.Application.Permissions.PublishSite)) {<a href="/admin/site?section=banners" data-admin-nav="banners">Banner &amp; trang chủ</a><a href="/admin/site?section=menus" data-admin-nav="site">Menu &amp; cấu hình</a>}
 @if(actor.Has(LandPortal.Application.Permissions.ManageSite)||actor.Has(LandPortal.Application.Permissions.PublishSite)){<a href="/admin/thong-ke-dat-dai" data-admin-nav="/admin/thong-ke-dat-dai">Thống kê đất đai</a>}
 @if(actor.Has(LandPortal.Application.Permissions.ManageUsers)){<a href="/admin/users" data-admin-nav="/admin/users">Tài khoản</a>}

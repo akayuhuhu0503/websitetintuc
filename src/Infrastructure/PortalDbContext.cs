@@ -11,6 +11,8 @@ public class PortalUser : IdentityUser
 }
 public partial class PortalDbContext(DbContextOptions<PortalDbContext> options) : IdentityDbContext<PortalUser>(options)
 {
+    [DbFunction("JSON_VALUE", IsBuiltIn = true)]
+    public static string? JsonValue(string json, string path) => throw new NotSupportedException("SQL projection only.");
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Content> Contents => Set<Content>();
     public DbSet<ContentRevision> Revisions => Set<ContentRevision>();
