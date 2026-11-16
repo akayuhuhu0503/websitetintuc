@@ -51,6 +51,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
     let dirty = false, bodyDirty = false, userBodyInteraction = false, generation = 0, saving = false, conflicted = false, navigating = false;
     let timer: number | undefined;
     let externalBusy = false;
+    let documentUploadBusy = false;
     let readinessRequest = 0;
     let activeSave: Promise<SavedDraft | null> | null = null;
     let uncertainSave: { payload: FormData; intent: string; generation: number; wasNew: boolean } | null = null;
@@ -124,6 +125,15 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         result.set('intent', intent); result.set('autosave', String(autosave)); result.set('RequestId', uuid());
         return result;
     }
+    // Compare only persisted fields, not command/version/session tokens or local files.
+    // This runs at the debounced save boundary, not for every keystroke.
+    function fingerprint(payload: FormData): string {
+        const values: string[][] = [];
+        payload.forEach((value,key) => { if(typeof value==='string'&&!['Id','CurrentRevisionId','RowVersion','RequestId','__RequestVerificationToken','intent','autosave'].includes(key))values.push([key,value]); });
+        return JSON.stringify(values);
+    }
+    let savedFingerprint = fingerprint(data('Save',true));
+    let confirmedAttachmentIds = new Set<string>();
     async function errorMessage(response: Response): Promise<string> {
         const type = response.headers.get('content-type') || '';
         if (type.includes('application/json')) {
@@ -149,7 +159,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         if (response.status === 409) return 'Bài đã thay đổi hoặc chuyển trạng thái ở phiên khác. Nội dung đang nhập vẫn được giữ; tải lại và đối chiếu trước khi tiếp tục.';
         return 'Không lưu được (HTTP ' + response.status + '). Nội dung đang nhập vẫn được giữ.';
     }
-    function update(result: SavedDraft) {
+    function update(result: SavedDraft, checkReadiness = true) {
         const previousState=form.dataset.state;
         field('Id').value = result.contentId; field('RowVersion').value = result.rowVersion;
         field('CurrentRevisionId').value = result.currentRevisionId || ''; form.dataset.state = result.state;
@@ -164,14 +174,17 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         }
         const preview = document.querySelector<HTMLAnchorElement>('#preview-link'); if(preview)preview.href='/admin/preview/'+result.contentId;
         window.dispatchEvent(new CustomEvent('cms:draft-saved', { detail: result }));
-        void refreshReadiness();
+        if(checkReadiness)void refreshReadiness();
     }
     async function save(intent: string, autosave = false): Promise<SavedDraft | null> {
         window.clearTimeout(timer);
         if (!canSave || conflicted || sessionPaused || externalBusy) return null;
+        if(documentUploadBusy&&intent!=='Save'){notify('Chờ đính kèm tài liệu hoàn tất trước khi gửi duyệt hoặc đăng bài.',true);return null;}
         if (activeSave) { await activeSave; if (conflicted) return null; if (autosave) return null; }
         if (autosave && !dirty) return null;
         const request = uncertainSave || { payload: data(intent, autosave), intent, generation, wasNew: !field('Id').value };
+        const requestFingerprint = fingerprint(request.payload);
+        if(autosave&&!uncertainSave&&field('Id').value&&requestFingerprint===savedFingerprint){dirty=false;notify('Nội dung không đổi; bản nháp đã được lưu.');return null;}
         const capturedGeneration = request.generation;
         const wasNew = request.wasNew;
         intent = request.intent;
@@ -183,10 +196,13 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
                 if (!response.ok) { uncertainSave = response.status >= 500 ? request : null; if (response.status === 409 || response.status === 403) conflicted = true; notify(await errorMessage(response), true); return null; }
                 const result = await response.json() as SavedDraft;
                 uncertainSave = null;
-                update(result);
+                update(result,false);
+                savedFingerprint=requestFingerprint;
+                confirmedAttachmentIds=new Set(request.payload.getAll('AttachmentIds').filter((value):value is string=>typeof value==='string'));
                 form.querySelectorAll('[data-server-error]').forEach(e=>e.remove());
                 form.querySelectorAll('[aria-invalid=true]').forEach(e=>e.removeAttribute('aria-invalid'));
                 if (capturedGeneration === generation) { dirty = false; if (bodyDirty) initialBody = rewrite(editor.value, false); }
+                if(!dirty)void refreshReadiness();
                 notify('Đã lưu lúc ' + new Date(result.savedUtc).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + (dirty ? '. Còn thay đổi mới đang chờ lưu.' : '.'));
                 if (dirty && result.state !== 'Draft' && result.state !== 'Rejected') { conflicted = true; notify('Thao tác trước đã được xác nhận, nhưng còn thay đổi mới chưa lưu. Nội dung vẫn ở đây; giữ lại nội dung và đối chiếu bài trước khi mở bản sửa mới.', true); }
                 else if (intent !== 'Save') { navigating = true; window.location.assign(editorUrl(result.contentId)); }
@@ -202,8 +218,9 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
         void save(submitter?.value || 'Save');
     });
-    window.addEventListener('beforeunload', event => { if ((dirty || saving || externalBusy) && !navigating) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if ((dirty || saving || externalBusy || documentUploadBusy) && !navigating) { event.preventDefault(); event.returnValue = ''; } });
     document.querySelectorAll<HTMLButtonElement>('[data-workflow]').forEach(button => button.addEventListener('click', async () => {
+        if(documentUploadBusy){notify('Chờ đính kèm tài liệu hoàn tất trước khi xử lý phiên bản bài.',true);return;}
         if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) return;
         window.clearTimeout(timer);
         if (activeSave) await activeSave;
@@ -223,7 +240,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
 
     async function refreshReadiness() {
         const panel=document.querySelector<HTMLElement>('#editor-workflow-readiness');
-        if(!panel||!field('Id').value)return;
+        if(!panel||!field('Id').value||documentUploadBusy||dirty)return;
         const seq=++readinessRequest;
         try{
             const response=await fetch('/admin/editor-readiness/'+field('Id').value,{credentials:'same-origin'});
@@ -300,7 +317,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         const mode=button.dataset.editorSchedule;
         if(mode!=='approved'&&mode!=='direct'){notify('Chọn cách hẹn giờ xuất bản.',true);return;}
         if(!due){notify('Chọn thời điểm đăng theo giờ Việt Nam.',true);return;}
-        if(externalBusy||saving){notify('Chờ lưu bài hoặc gắn video hoàn tất trước khi hẹn giờ.',true);return;}
+        if(externalBusy||saving||documentUploadBusy){notify('Chờ lưu bài hoặc đính kèm tệp hoàn tất trước khi hẹn giờ.',true);return;}
         const scheduleButtons=document.querySelectorAll<HTMLButtonElement>('[data-editor-schedule]');scheduleButtons.forEach(b=>b.disabled=true);
         try{
             if(mode==='direct'&&canSave&&(!(await save('Save'))||dirty))return;
@@ -445,28 +462,76 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         if(!payload.items.length)list.textContent='Bài này chưa có tài liệu đã tải.';
     }
     document.querySelector('[data-document-library]')?.addEventListener('click',()=>void loadDocuments());
+    type DocumentAsset = PickerMedia & { usable: boolean };
+    const uncertainDocuments = new Set<string>();
+    const documentProgress=document.querySelector<HTMLProgressElement>('#document-progress');
+    function documentStatus(message:string,phase:string){
+        if(documentFeedback){documentFeedback.textContent=message;documentFeedback.dataset.phase=phase;documentFeedback.setAttribute('role','status');}
+    }
+    async function reconcileDocument(contentId:string,sha256:string|null):Promise<DocumentAsset|null>{
+        if(!sha256)return null;
+        const response=await fetch('/admin/documents/'+contentId+'/result?sha256='+encodeURIComponent(sha256),{credentials:'same-origin',headers:{'X-Editor-Request':'true'}});
+        if(response.status===401){requireSession();return null;}
+        if(!response.ok)return null;
+        return await response.json() as DocumentAsset;
+    }
+    async function attachDocument(asset:DocumentAsset){
+        if(!asset.usable){documentStatus(asset.notice||'Tệp đã lưu nhưng chưa đủ điều kiện đính kèm. Kiểm tra lại trong Tài liệu đã tải.','held');return;}
+        documentStatus('Đang gắn '+asset.originalName+' vào bài…','attaching');
+        addAttachment(asset);
+        const saved=await save('Save');
+        const attached=!!saved&&confirmedAttachmentIds.has(asset.id);
+        documentStatus(attached?'Đã đính kèm '+asset.originalName+' vào bản nháp. '+(asset.notice||''):'Tệp đã lưu riêng cho bài này nhưng chưa xác nhận gắn vào nháp. Bấm Lưu hoặc chọn lại từ tài liệu của bài.',attached?'complete':'unconfirmed');
+    }
     document.querySelector<HTMLInputElement>('#editor-document-file')?.addEventListener('change',async event=>{
         const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];if(!file)return;
+        if(documentUploadBusy)return;
         if(!/\.(pdf|docx|xlsx)$/i.test(file.name)||file.size>10*1024*1024){documentFeedback!.textContent='Chọn PDF, DOCX hoặc XLSX không quá 10 MB.';return;}
-        input.disabled=true;const draft=await ensureSavedDraft();if(!draft){input.disabled=false;return;}
-        const progress=document.querySelector<HTMLProgressElement>('#document-progress')!;progress.hidden=false;progress.value=0;
-        documentFeedback!.textContent='Đang tải '+file.name+'…';
-        const request=new XMLHttpRequest();request.open('POST','/admin/documents/'+draft.id+'?format=json');request.setRequestHeader('X-CSRF-TOKEN',csrf);request.setRequestHeader('X-Editor-Request','true');
-        request.upload.onprogress=e=>{if(e.lengthComputable)progress.value=e.loaded/e.total*100;};
-        request.onload=async()=>{
-            progress.hidden=true;input.disabled=false;
-            if(request.status===401){requireSession();documentFeedback!.textContent='Phiên đăng nhập đã hết hạn. Tài liệu chưa được xác nhận; bản soạn vẫn được giữ.';return;}
-            try{
-                if(request.status<200||request.status>=300){documentFeedback!.textContent=request.getResponseHeader('content-type')?.includes('text/plain')?request.responseText:'Chưa tải được tài liệu. Kiểm tra loại tệp, dung lượng và quyền của bạn.';return;}
-                const asset=JSON.parse(request.responseText) as PickerMedia&{usable:boolean};
-                if(!asset.usable){documentFeedback!.textContent=asset.notice||'Tệp đã tải nhưng chưa đạt kiểm định. Chọn lại từ tài liệu của bài sau khi kiểm tra xong.';return;}
-                addAttachment(asset);const saved=await save('Save');
-                documentFeedback!.textContent=saved?'Đã đính kèm '+asset.originalName+' vào bản nháp. '+(asset.notice||''): 'Tệp đã lưu riêng cho bài này nhưng chưa xác nhận gắn vào nháp. Bấm Lưu hoặc chọn lại từ tài liệu của bài.';
-                input.value='';
-            }catch{documentFeedback!.textContent='Chưa xác nhận kết quả. Chọn “Tài liệu đã tải” trước khi thử lại để tránh trùng.';}
-        };
-        request.onerror=()=>{progress.hidden=true;input.disabled=false;documentFeedback!.textContent='Mất kết nối. Chọn “Tài liệu đã tải” để kiểm tra kết quả; nội dung đang soạn vẫn giữ nguyên.';};
-        const data=new FormData();data.append('file',file);request.send(data);
+        documentUploadBusy=true;input.disabled=true;
+        documentStatus('Chuẩn bị '+file.name+'…','preparing');
+        if(documentProgress){documentProgress.hidden=false;documentProgress.removeAttribute('value');documentProgress.max=100;}
+        const fileKey=JSON.stringify([file.name,file.size,file.lastModified]);
+        try{
+            // Existing drafts do not need a redundant save before upload: the server
+            // checks edit rights and the final save includes current unsaved typing.
+            if(activeSave)await activeSave;
+            const draft=field('Id').value&&!uncertainSave&&!sessionPaused&&!conflicted&&!externalBusy?{id:field('Id').value,rowVersion:field('RowVersion').value}:await ensureSavedDraft();
+            if(!draft){documentStatus('Chưa chuẩn bị được bản nháp. Kiểm tra thông báo lưu bài; nội dung vẫn được giữ.','unconfirmed');return;}
+            // WebCrypto hashes at most the configured 10 MiB off the UI thread.
+            // Plain HTTP LAN may not expose SubtleCrypto; it must never fake a hash.
+            const sha256=crypto.subtle?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join(''):null;
+            const pendingKey=draft.id+'|'+(sha256||fileKey);
+            if(uncertainDocuments.has(pendingKey)){
+                documentStatus('Đang kiểm tra kết quả lần tải trước…','checking');
+                const recovered=await reconcileDocument(draft.id,sha256);
+                if(!recovered){documentStatus('Chưa tìm thấy kết quả đã lưu; tệp có thể vẫn đang được xử lý. Chọn lại cùng tệp để kiểm tra, không tải trùng.','unconfirmed');return;}
+                uncertainDocuments.delete(pendingKey);await attachDocument(recovered);input.value='';return;
+            }
+            documentStatus('Đang tải '+file.name+'…','uploading');
+            if(documentProgress)documentProgress.value=0;
+            const asset=await new Promise<DocumentAsset|null>((resolve,reject)=>{
+                const request=new XMLHttpRequest();request.open('POST','/admin/documents/'+draft.id+'?format=json');request.setRequestHeader('X-CSRF-TOKEN',csrf);request.setRequestHeader('X-Editor-Request','true');
+                request.upload.onprogress=e=>{if(e.lengthComputable&&documentProgress){documentProgress.value=e.loaded/e.total*100;documentStatus('Đang tải '+file.name+' · '+Math.floor(e.loaded/e.total*100)+'%','uploading');}};
+                request.upload.onload=()=>{if(documentProgress)documentProgress.removeAttribute('value');documentStatus('Đang kiểm tra định dạng và lưu tệp…','checking');};
+                request.onload=()=>{
+                    if(request.status===401){requireSession();documentStatus('Phiên đã hết hạn. Bản soạn vẫn được giữ; xác thực lại trước khi tải.','unconfirmed');resolve(null);return;}
+                    if(request.status>=500){reject(Error('Upload result uncertain'));return;}
+                    if(request.status<200||request.status>=300){documentStatus(request.getResponseHeader('content-type')?.includes('text/plain')?request.responseText:'Chưa tải được tài liệu. Kiểm tra loại tệp, dung lượng và quyền của bạn.','rejected');resolve(null);return;}
+                    try{resolve(JSON.parse(request.responseText) as DocumentAsset);}catch{reject(Error('Upload result uncertain'));}
+                };
+                request.onerror=()=>reject(Error('Upload result uncertain'));
+                request.onabort=()=>reject(Error('Upload result uncertain'));
+                const payload=new FormData();payload.append('file',file);request.send(payload);
+            }).catch(async()=>{
+                uncertainDocuments.add(pendingKey);
+                documentStatus('Đang kiểm tra kết quả đã lưu sau mất kết nối…','checking');
+                const recovered=await reconcileDocument(draft.id,sha256).catch(()=>null);
+                if(recovered){uncertainDocuments.delete(pendingKey);return recovered;}
+                documentStatus('Chưa xác nhận kết quả. Chọn lại cùng tệp để kiểm tra hoặc mở “Tài liệu đã tải”; không gửi lại tệp khi chưa rõ kết quả.','unconfirmed');return null;
+            });
+            if(asset){await attachDocument(asset);input.value='';}
+        }catch{documentStatus('Chưa hoàn tất thao tác. Nội dung đang soạn vẫn được giữ; kiểm tra “Tài liệu đã tải” trước khi thử lại.','unconfirmed');}
+        finally{documentUploadBusy=false;input.disabled=false;if(documentProgress)documentProgress.hidden=true;if(!dirty)void refreshReadiness();}
     });
 
     document.querySelector('[data-close-reauth]')?.addEventListener('click',()=>reauth?.close());

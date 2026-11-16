@@ -111,7 +111,7 @@ try {
     await page.locator('#editor-document-file').setInputFiles({ name: 'fixture.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% presentation fixture, endpoint validation mocked\n%%EOF') });
     await page.waitForFunction(() => document.querySelector('#document-feedback').textContent.startsWith('Đã đính kèm'));
     assert.equal(await page.locator('input[name=AttachmentIds]').inputValue(), documentId);
-    assert(saveCount >= beforeDocument + 2, 'document upload saves before and after attaching');
+    assert(saveCount >= beforeDocument + 1, 'document attachment must be confirmed by a draft save');
     assert(saves.some(s => s.AttachmentIds?.includes(documentId))); checks++;
     assert.equal(await page.locator('.jodit-wysiwyg').innerText(), 'Nội dung fixture đang soạn'); checks++;
     const group = page.locator('[name="Metadata.DisclosureGroupId"]');
