@@ -37,7 +37,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         if (category is null) return NotFoundView();
         var live = await site.GetAsync();
         var configCategory = live?.Revision.Categories.FirstOrDefault(x=>x.CategoryId == category.Id);
-        if (live is not null && configCategory is null) return NotFoundView();
+        if (live is not null && !PublicNavigation.VisibleCategories(live.Revision).Any(x => x.Id == category.Id)) return NotFoundView();
         var rows = query.Published().Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == category.Id) || x.CategoryId == category.Id);
         return await List(configCategory?.DisplayName ?? category.Name, rows, q, page, slug,configCategory?.Description);
     }

@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 namespace LandPortal.Web.Controllers;
-public sealed class VideoTrackController(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions):Controller
+public sealed class VideoTrackController(PortalDbContext db,StorageOptions storage,VideoOptions options,CurrentPermissionService permissions,IHostEnvironment environment):Controller
 {
     [AcceptVerbs("GET","HEAD"),Route("video-track/{id:guid}")]
     public Task<IActionResult> Public(Guid id)=>Serve(id,null);
@@ -25,7 +25,7 @@ public sealed class VideoTrackController(PortalDbContext db,StorageOptions stora
     {
         Response.Headers.CacheControl="no-store, private";Response.Headers["X-Content-Type-Options"]="nosniff";
         if(!options.Enabled)return NotFound();var track=await db.Set<VideoSubtitle>().AsNoTracking().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==id);
-        if(track==null||!await Allowed(track,contentId)||!await VideoSubtitleService.ReadyAsync(db,storage,id,true,HttpContext.RequestAborted))return NotFound();
+        if(track==null||!await Allowed(track,contentId)||!await VideoSubtitleService.ReadyAsync(db,storage,id,environment.IsDevelopment(),HttpContext.RequestAborted,options))return NotFound();
         FileStream? stream=null;try
         {
             stream=new FileStream(MediaService.ResolveMediaPath(storage,track.Original.StorageKey),FileMode.Open,FileAccess.Read,FileShare.Read,16384,FileOptions.Asynchronous);

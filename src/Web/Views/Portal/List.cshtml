@@ -1,6 +1,6 @@
 @model ListingModel
-@inject LandPortal.Web.Services.PublicSiteService Sites
-@{ViewData["Title"]=Model.Title;var site=await Sites.GetAsync();var showLead=Model.Page==1&&string.IsNullOrWhiteSpace(Model.Query)&&Model.Items.FirstOrDefault()?.Kind=="Tin tức";}
+@inject LandPortal.Web.Services.PublicNavigation Navigation
+@{ViewData["Title"]=Model.Title;var navigation=await Navigation.GetAsync();var showLead=Model.Page==1&&string.IsNullOrWhiteSpace(Model.Query)&&Model.Items.FirstOrDefault()?.Kind=="Tin tức";}
 <partial name="_PublicBreadcrumb" model="Model.Title" />
 <header class="page-header page-header-search"><div><p class="eyebrow">THÔNG TIN ĐẤT ĐAI</p><h1>@Model.Title</h1>@if(Model.Description is not null){<p>@Model.Description</p>}</div>
 <form class="listing-filter" method="get" role="search"><label class="sr-only" for="list-q">Tìm trong @Model.Title</label><input id="list-q" type="search" name="q" value="@Model.Query" placeholder="Tìm kiếm trong chuyên mục…" maxlength="200" /><button type="submit" class="button" aria-label="Tìm trong chuyên mục"><partial name="_PortalIcon" model='"search"' /></button></form></header>
@@ -13,6 +13,6 @@ else{
 }
 <partial name="_PublicPager" model="new int[]{Model.Page,Model.PageCount}" />
 </section><aside class="listing-sidebar" aria-label="Điều hướng chuyên mục">
-@if(site is not null){<section class="sidebar-panel"><h2>Chuyên mục thông tin</h2><nav aria-label="Các chuyên mục"><a href="/tin-tuc" aria-current="@(Context.Request.Path=="/tin-tuc"?"page":null)">Tất cả tin tức <span aria-hidden="true">›</span></a>@foreach(var category in site.Revision.Categories.Where(x=>x.ShowInNavigation).OrderBy(x=>x.SortOrder)){<a href="/chuyen-muc/@category.Slug" aria-current="@(Model.CategorySlug==category.Slug?"page":null)">@category.DisplayName <span aria-hidden="true">›</span></a>}</nav></section>}
+@if(navigation.Categories.Count > 0){<section class="sidebar-panel"><h2>Chuyên mục thông tin</h2><nav aria-label="Các chuyên mục"><a href="/tin-tuc" aria-current="@(Context.Request.Path=="/tin-tuc"?"page":null)">Tất cả tin tức <span aria-hidden="true">›</span></a><partial name="_CategoryDirectory" model="new LandPortal.Web.Services.CategoryDirectoryModel(navigation.Categories, null, Model.CategorySlug)" /></nav></section>}
 <section class="sidebar-panel sidebar-help"><partial name="_PortalIcon" model='"search"' /><h2>Tra cứu thông tin</h2><p>Tìm tin tức, văn bản và hỏi đáp đã công khai trên cổng thông tin.</p><a href="/tim-kiem" class="button secondary">Tìm kiếm nâng cao →</a></section>
 </aside></div>

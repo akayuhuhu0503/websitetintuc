@@ -77,7 +77,7 @@ public sealed class DuePublicationMiddleware(RequestDelegate next)
         var action = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
         // Only content-bearing pages. Health, static/media, admin, lookup and public
         // form endpoints are not delayed by publication work.
-        return action?.ControllerName is "Home" or "Disclosure" or "WeeklySchedule" or "Sitemap" ||
+        return action?.ControllerName is "Home" or "Disclosure" or "WeeklySchedule" or "Sitemap" or "Materials" ||
             action?.ControllerName == "Portal" && !context.Request.Path.StartsWithSegments("/tep-nguon");
     }
 

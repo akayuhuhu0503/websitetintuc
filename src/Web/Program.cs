@@ -155,6 +155,7 @@ builder.Services.AddScoped<IGiayHuyLookup, GiayHuyLookup>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SiteConfigurationService>();
 builder.Services.AddScoped<PublicSiteService>();
+builder.Services.AddScoped<PublicNavigation>();
 var app = builder.Build();
 app.UsePrivateRuntimeProtection();
 if(LandPortal.Domain.PortalBuildCapabilities.LegacyLanSchema15)

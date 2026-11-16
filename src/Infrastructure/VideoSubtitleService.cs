@@ -81,10 +81,10 @@ public sealed class VideoSubtitleService(PortalDbContext db,StorageOptions stora
         }
         return true;
     }
-    public static async Task<bool> ReadyAsync(PortalDbContext db,StorageOptions storage,Guid id,bool development,CancellationToken ct=default)
+    public static async Task<bool> ReadyAsync(PortalDbContext db,StorageOptions storage,Guid id,bool development,CancellationToken ct=default,VideoOptions? policy=null)
     {
         var track=await db.Set<VideoSubtitle>().AsNoTracking().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==id,ct);if(track==null||track.State!=InquiryScanState.Clean||track.Original.ScanStatus!="Clean"||track.Original.Origin!="VideoSubtitle"||track.Original.ValidationStatus!="WebVttValidated"||track.ScannedSha256!=track.Original.Sha256||track.ScannedUtc==null||string.IsNullOrWhiteSpace(track.ScannerVersion)||track.ScannerProvider=="MicrosoftDefender"&&!development)return false;
-        var parent=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==track.VideoMediaAssetId,ct);if(parent==null||track.LastCueSeconds>parent.DurationSeconds+0.5||!await VideoReadiness.ReadyAsync(db,storage,parent.Original,development,ct))return false;
+        var parent=await db.Set<VideoFile>().AsNoTracking().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==track.VideoMediaAssetId,ct);if(parent==null||track.LastCueSeconds>parent.DurationSeconds+0.5||!await VideoReadiness.ReadyAsync(db,storage,parent.Original,development,ct,policy))return false;
         try{var path=MediaService.ResolveMediaPath(storage,track.Original.StorageKey);return File.Exists(path)&&new FileInfo(path).Length==track.Original.ByteLength&&await VideoUploadService.HashFileAsync(path,ct)==track.Original.Sha256;}catch(Exception e)when(e is IOException or UnauthorizedAccessException or MediaUploadException){return false;}
     }
 }

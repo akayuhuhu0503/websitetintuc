@@ -106,5 +106,5 @@ ban đầu. Không nạp `.env` hoặc cấu hình SQL vận hành.
 
 Giữ nguyên: `git pull` → `powershell -NoProfile -File scripts/build-for-iis.ps1`
 → thay nguyên `web` gồm `.runtime`. Không thêm cấu hình IIS, không migration.
-Chưa merge/deploy. Cần đo lại trên IIS sau triển khai được phép để biết độ trễ
+PR #14 đã merge tại `87beab0a6cc6a0026edd65f7626c67acb105616f`; chưa deploy IIS. Kiểm tra tích hợp với PR #15 được ghi tại `public-navigation-video-materials.md`, không thay thế số đo trước/sau ở trên. Cần đo lại trên IIS sau triển khai được phép để biết độ trễ
 mạng/SQL thực và tải đồng thời; không suy diễn số đo LocalDB thành kết quả gdla.gov.vn.

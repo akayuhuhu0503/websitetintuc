@@ -140,9 +140,9 @@ try{
   await load('?videos=1&banners=0');
   const article=await page.locator('.reference-lead h2 a').getAttribute('href');await page.locator('.reference-lead h2 a').click();
   check(new URL(page.url()).pathname===article,'Lead article retains its identity-route link (fixture destination)');
-  await load('?videos=1&banners=0');await page.locator('.home-video-poster').first().click();
+  await load('?videos=1&banners=0');const beforeVideo=page.url();await page.locator('.home-video-poster').first().click();
   const video=page.locator('video');await video.evaluate(v=>v.play());await page.waitForFunction(()=>document.querySelector('video').currentTime>.1);
-  check(await video.evaluate(v=>v.videoWidth)===320,'HTML5 test MP4 actually decodes and plays after video link');
+  check(page.url()===beforeVideo && await video.evaluate(v=>v.videoWidth)===320,'HTML5 test MP4 decodes and plays inline without navigation');
   const range=await context.request.get(base+'/fixture/sample.mp4',{headers:{Range:'bytes=0-63'}});check(range.status()===206&&(await range.body()).length===64,'Test MP4 HTTP Range returns requested bytes');
   await page.emulateMedia({reducedMotion:'reduce'});await load('?videos=0&banners=3');await page.mouse.move(0,0);const before=await page.locator('[data-event-dot][aria-current="true"]').getAttribute('data-event-dot');await page.waitForTimeout(5200);
   check(await page.locator('[data-event-dot][aria-current="true"]').getAttribute('data-event-dot')===before,'Reduced-motion preference suppresses banner autoplay');

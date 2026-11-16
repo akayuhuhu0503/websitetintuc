@@ -140,7 +140,11 @@
 .portal-public .gdla-home .home-video-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding-top:8px}
 .portal-public .gdla-home .home-video-card{min-width:0}
 .portal-public .gdla-home .home-video-card+.home-video-card{display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;padding-top:10px;border-top:1px solid var(--gdla-border)}
-.portal-public .gdla-home .home-video-poster{display:block;position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:4px;background:var(--gdla-tint)}
+.portal-public .gdla-home .home-video-poster{display:block;position:relative;width:100%;padding:0;border:0;cursor:pointer;aspect-ratio:16/9;overflow:hidden;border-radius:4px;background:var(--gdla-tint)}
+.portal-public .gdla-home .home-video-player{min-width:0}
+.portal-public .gdla-home .home-video-player video{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;background:#111;border-radius:4px}
+.portal-public .gdla-home .home-video-card+.home-video-card.is-playing{display:block}
+.portal-public .gdla-home .home-video-error{font-size:13px;line-height:1.5;margin:8px 0;color:var(--gdla-red)}
 .portal-public .gdla-home .home-video-poster img{width:100%;height:100%;display:block;object-fit:contain}
 .portal-public .gdla-home .home-feature-grid>.home-video-section .home-video-card--lead .home-video-poster{aspect-ratio:7/2}
 .portal-public .gdla-home .home-feature-grid>.home-video-section .home-video-card--lead .home-video-poster img{object-fit:cover}
