@@ -6,8 +6,9 @@ không kết nối SQL vận hành, không thay schema/cấu hình triển khai 
 ## Kết quả đo
 
 Baseline `f8fe40cb464917ad0ad11dae5d317a732c95cf22` (nhánh PR #13).
-Tại thời điểm bàn giao, PR #13 vẫn **open**, main là `d98d6898`.
-PR này kế thừa nhánh PR #13 để review riêng phần điều hướng; chưa merge.
+PR #13 đã merge vào main tại `741fd170d97e1a84113c69223a39cde2c477f29e`
+sau khi chủ dự án xác nhận. Tree của merge commit trùng baseline đã kiểm thử.
+PR #14 đã chuyển base sang main, chỉ còn phần điều hướng; chưa merge/deploy.
 
 Edge headless, viewport 1366×900, Kestrel HTTP loopback, SQL Server LocalDB riêng,
 schema 18, application role thật, Pooling=False. Cùng 120 nội dung giả đã xuất bản,
