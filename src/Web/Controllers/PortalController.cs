@@ -14,6 +14,12 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
 {
     [HttpGet("tin-tuc")]
     public Task<IActionResult> News(string? q, int page = 1) => List("Tin tức", query.Published().Where(x => x.Kind == ContentKind.Article), q, page);
+    // The ticker needs only current public titles/ids, not another complete page,
+    // category COUNT, site configuration, Razor layout or visit registration.
+    [HttpGet("tin-tuc/moi-nhat")]
+    public async Task<IActionResult> LatestNews(CancellationToken ct) => Json(await PublicContentQuery.Recent(
+        query.Published().Where(x => x.Kind == ContentKind.Article)).Take(10)
+        .Select(x => new { x.Id, x.Title }).ToListAsync(ct));
     [HttpGet("thong-bao")]
     public Task<IActionResult> Announcements(string? q, int page = 1) => List("Thông báo", query.Published().Where(x => x.Kind == ContentKind.Announcement), q, page);
     [HttpGet("video")]
