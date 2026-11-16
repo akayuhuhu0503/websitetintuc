@@ -63,6 +63,21 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         var assets = await db.MediaAssets.AsNoTracking().Where(a => db.EditorialDocuments.Any(d => d.ContentId == id && d.MediaAssetId == a.Id)).OrderByDescending(a => a.CreatedUtc).Take(100).ToListAsync();
         return Json(new { items = assets.Select(Describe) });
     }
+    // Reconcile a lost upload response without receiving, storing and validating the same bytes again.
+    // Knowing a hash never grants access: only this uploader's document on this editable article is visible.
+    [HttpGet("admin/documents/{id:guid}/result")]
+    public async Task<IActionResult> Result(Guid id, string? sha256, CancellationToken ct)
+    {
+        if (sha256 == null || sha256.Length != 64 || sha256.Any(c => !char.IsAsciiHexDigit(c))) return BadRequest();
+        var actor = await Actor();
+        var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (content == null || content.IsTrashed || !actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) return NotFound();
+        var hash = sha256.ToLowerInvariant();
+        var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(a => a.Sha256 == hash
+            && a.Origin == "EditorialDocument" && a.UploadedByUserId == actor.UserId
+            && db.EditorialDocuments.Any(d => d.MediaAssetId == a.Id && d.ContentId == id && d.OwnerId == actor.UserId), ct);
+        return asset == null ? NotFound() : Json(Describe(asset));
+    }
     private object Describe(MediaAsset asset) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
         usable = !asset.IsQuarantined && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" || options.ApprovedManagedDocumentsWithoutAv && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation),
         previewUrl = "/admin/documents/file/" + asset.Id, url = "/media/" + asset.Id,

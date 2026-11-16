@@ -213,14 +213,18 @@
         if (slides.length < 2) return;
         const dots = Array.from(carousel.querySelectorAll<HTMLButtonElement>('[data-event-dot]'));
         const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-        let current = 0, timer: number | undefined, hovering = false, touching = false, start: { x: number; y: number } | null = null, suppressClick = false;
+        let current = 0, timer: number | undefined, hovering = false, touching = false, inView = !('IntersectionObserver' in window), start: { x: number; y: number } | null = null, suppressClick = false;
         const schedule = () => {
             window.clearTimeout(timer);
-            if (!motion.matches && !document.hidden && !hovering && !touching && !carousel.contains(document.activeElement))
+            if (inView && !motion.matches && !document.hidden && !hovering && !touching && !carousel.contains(document.activeElement))
                 timer = window.setTimeout(() => show(current + 1), 5000);
         };
         const show = (next: number) => {
             current = (next + slides.length) % slides.length;
+            // Do not download every offscreen banner at initial page load.
+            // Request the selected image promptly when the carousel is visible.
+            const selectedImage = slides[current].querySelector('img');
+            if (inView && selectedImage) selectedImage.loading = 'eager';
             slides.forEach((slide, i) => {
                 slide.hidden = false;
                 slide.classList.toggle('is-active', i === current);
@@ -231,7 +235,6 @@
             schedule();
         };
         carousel.classList.add('event-carousel-ready');
-        slides.forEach(slide => { const img = slide.querySelector('img'); if (img) img.loading = 'eager'; });
         carousel.querySelector<HTMLElement>('[data-event-dots]')!.hidden = false;
         dots.forEach((dot, i) => dot.addEventListener('click', () => show(i)));
         carousel.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') { hovering = true; schedule(); } });
@@ -257,6 +260,16 @@
         surface.addEventListener('pointercancel', () => { start = null; touching = false; schedule(); });
         surface.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); suppressClick = false; } }, true);
         show(0);
+        if ('IntersectionObserver' in window) {
+            new IntersectionObserver(entries => {
+                inView = entries.some(entry => entry.isIntersecting);
+                if (inView) {
+                    const img = slides[current].querySelector('img');
+                    if (img) img.loading = 'eager';
+                }
+                schedule();
+            }).observe(carousel);
+        }
     });
     const navigation = document.querySelector<HTMLElement>('[data-portal-navigation]');
     const toggle = navigation?.querySelector<HTMLButtonElement>('.mobile-menu-toggle');

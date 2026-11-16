@@ -8,9 +8,18 @@ public sealed class CurrentPermissionService(PortalDbContext db)
     {
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId);
         if (user == null || user.IsDisabled || user.MustChangePassword || user.LockoutEnd > DateTimeOffset.UtcNow) return new(userId, new HashSet<string>(StringComparer.Ordinal));
-        var demo=await db.UserClaims.AsNoTracking().Where(x=>x.UserId==userId&&x.ClaimType!=null&&x.ClaimType.StartsWith("dev.demo")).ToListAsync();
+        // One fresh projection per call, never a permission cache. Keep classification
+        // in SQL so the existing database collation semantics remain unchanged.
+        var claims = await db.UserClaims.AsNoTracking().Where(x => x.UserId == userId &&
+            (x.ClaimType == "permission" || x.ClaimType == "content.category.scope" || x.ClaimType == "content.category" ||
+             x.ClaimType != null && x.ClaimType.StartsWith("dev.demo")))
+            .Select(x => new { x.ClaimType, x.ClaimValue,
+                IsPermission = x.ClaimType == "permission",
+                IsScope = x.ClaimType == "content.category.scope" || x.ClaimType == "content.category",
+                IsDemo = x.ClaimType != null && x.ClaimType.StartsWith("dev.demo") }).ToListAsync();
+        var demo=claims.Where(x=>x.IsDemo);
         if(!DevDemoPolicy.Allowed(demo.Select(x=>new System.Security.Claims.Claim(x.ClaimType!,x.ClaimValue??"")),Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),db.Database.GetDbConnection().Database))return new(userId,new HashSet<string>(StringComparer.Ordinal));
-        var own = await db.UserClaims.AsNoTracking().Where(x => x.UserId == userId && x.ClaimType == "permission").Select(x => x.ClaimValue!).ToListAsync();
+        var own = claims.Where(x => x.IsPermission).Select(x => x.ClaimValue!);
         var roles = from ur in db.UserRoles.AsNoTracking() join rc in db.RoleClaims.AsNoTracking() on ur.RoleId equals rc.RoleId where ur.UserId == userId && rc.ClaimType == "permission" select rc.ClaimValue!;
         var permissions = own.Concat(await roles.ToListAsync()).Where(x => Permissions.All.Contains(x, StringComparer.Ordinal)).ToHashSet(StringComparer.Ordinal);
         // Preserve the original edit capability's create/read meaning; no role-name checks
@@ -18,7 +27,7 @@ public sealed class CurrentPermissionService(PortalDbContext db)
         if (permissions.Contains(Permissions.EditOwn) || permissions.Contains(Permissions.EditAll)) { permissions.Add(Permissions.Create); permissions.Add(Permissions.ViewOwn); }
         if (permissions.Contains(Permissions.EditAll)) permissions.Add(Permissions.ViewAll);
         if (permissions.Contains(Permissions.PublishDirect)) permissions.Add(Permissions.PublishApproved);
-        var scoped=await db.UserClaims.AsNoTracking().Where(x=>x.UserId==userId&&(x.ClaimType=="content.category.scope"||x.ClaimType=="content.category")).Select(x=>new{x.ClaimType,x.ClaimValue}).ToListAsync();
+        var scoped=claims.Where(x=>x.IsScope).ToList();
         IReadOnlySet<int>? categoryIds=null;
         if(scoped.Count!=0)categoryIds=scoped.Where(x=>x.ClaimType=="content.category"&&int.TryParse(x.ClaimValue,out _)).Select(x=>int.Parse(x.ClaimValue!)).ToHashSet();
         return new(userId, permissions){CategoryIds=categoryIds};
