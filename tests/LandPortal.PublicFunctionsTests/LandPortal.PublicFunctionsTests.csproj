@@ -1,3 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup><ProjectReference Include="../../src/Web/Web.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../LandPortal.PublicNavigationTests/FocusedChecks.cs" Link="ConnectionChecks.cs" /></ItemGroup>
 </Project>

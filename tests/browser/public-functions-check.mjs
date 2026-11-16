@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // Use the existing Playwright installation; never connect to an operational URL.
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const run = path.resolve(process.argv[2]);
-assert.match(run, /[\\/]\.local[\\/]tests[\\/]public-functions-LPPublic_[a-f0-9]{12}$/);
+assert.match(run, /[\\/]\.local[\\/]tests[\\/](public-functions-LPPublic_|public-integration-)[a-f0-9]{12}$/);
 const fixture = JSON.parse(await fs.readFile(path.join(run, 'ready.json'), 'utf8'));
 assert.match(fixture.url, /^http:\/\/127\.0\.0\.1:\d+$/);
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -54,6 +54,7 @@ try {
     const player = slot.locator('video');
     await page.waitForFunction(() => { const v = document.querySelector('[data-home-video] video'); return v && v.currentTime > 0 && v.readyState >= 2; });
     check(page.url() === before, 'Keyboard Play stays on homepage and real MP4 advances');
+    check(!await page.locator('body').evaluate(x => x.classList.contains('public-navigation-pending')), 'Inline Play does not trigger navigation pending state');
     check(await player.evaluate(v => v.controls && v.playsInline && v.preload === 'none'), 'Native playback controls, inline playback and lazy initialization');
     check(await player.evaluate(v => Math.abs(v.getBoundingClientRect().width / v.getBoundingClientRect().height - 16 / 9) < 0.02), 'Active player keeps 16:9 ratio');
     await page.waitForFunction(() => document.querySelector('[data-home-video] video track') !== null);

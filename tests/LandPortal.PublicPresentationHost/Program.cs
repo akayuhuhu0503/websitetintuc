@@ -134,6 +134,7 @@ public sealed class PresentationController(FixtureData data,FixtureFiles files):
     [HttpGet("/bai-viet/{id:guid}")]public IActionResult Detail(Guid id)=>Content($"<!doctype html><html lang='vi'><meta charset='utf-8'><title>Bài kiểm tra riêng</title><h1>Bài kiểm tra riêng</h1>{(data.Videos.Any(x=>x.Content.Id==id)?"<video controls width='640' src='/fixture/sample.mp4'></video>":"<p>Đích liên kết nội dung kiểm tra giao diện.</p>")}<a href='/'>Trang chủ</a></html>","text/html");
     [HttpGet("/tim-kiem")]public IActionResult Search(string? q)=>Content("Tìm kiếm fixture: "+q,"text/plain");
     [HttpGet("/tin-tuc")]public IActionResult NewsList()=>Content("Danh sách fixture dùng cho điều hướng/prefetch giao diện; không truy vấn dữ liệu vận hành.","text/plain");
+    [HttpGet("/tin-tuc/moi-nhat")]public IActionResult LatestNews()=>Json(data.News.Take(10).Select(x=>new{x.Id,x.Title}));
 }
 
 [ViewComponent(Name="HomeVideos")]public sealed class FixtureHomeVideosViewComponent(FixtureData data):ViewComponent
