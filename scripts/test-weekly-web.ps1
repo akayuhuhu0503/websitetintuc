@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$SourceZip)
+param([Parameter(Mandatory=$true)][string]$SourceZip, [switch]$DatesOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $source = (Resolve-Path -LiteralPath $SourceZip).Path
@@ -10,7 +10,9 @@ Push-Location $root
 try {
     & $dotnet build tests/LandPortal.WeeklyWebTests/LandPortal.WeeklyWebTests.csproj -c Release --nologo -v minimal
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
-    & $dotnet tests/LandPortal.WeeklyWebTests/bin/Release/net10.0/LandPortal.WeeklyWebTests.dll $source $run
+    $testArgs = @($source, $run)
+    if ($DatesOnly) { $testArgs += '--dates' }
+    & $dotnet tests/LandPortal.WeeklyWebTests/bin/Release/net10.0/LandPortal.WeeklyWebTests.dll @testArgs
     if ($LASTEXITCODE -ne 0) { throw "Focused WEB import checks failed. See $run" }
     Write-Host "PASS: $run"
 } finally { Pop-Location }

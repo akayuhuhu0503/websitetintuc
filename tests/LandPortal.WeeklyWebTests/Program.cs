@@ -18,7 +18,9 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-if (args.Length != 2) throw new ArgumentException("source ZIP and new test output required");
+if (args.Length == 2 && args[1] == "--date-plan-guards") { WeeklyDateChecks.PlanGuards(WeeklyPackage.Read(args[0])); return; }
+if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--dates") throw new ArgumentException("source ZIP, new test output, optional --dates required");
+var datesOnly = args.Length == 3;
 var root = Directory.GetCurrentDirectory(); var run = Path.GetFullPath(args[1]);
 if (!run.StartsWith(Path.Combine(root, ".local", "tests", "weekly-web-"), StringComparison.OrdinalIgnoreCase) || Directory.Exists(run)) throw new ArgumentException("New isolated test folder required");
 Directory.CreateDirectory(run);
@@ -89,7 +91,7 @@ try
     string? loseResponse = null; bool corruptDownload = false;
     app.Use(async (context,next) =>
     {
-        var lose = context.Request.Method == "POST" && (loseResponse == "save" && context.Request.Path == "/admin/save" || loseResponse == "upload" && Regex.IsMatch(context.Request.Path,@"^/admin/documents/[a-f0-9-]+$"));
+        var lose = context.Request.Method == "POST" && (loseResponse == "save" && context.Request.Path == "/admin/save" || loseResponse == "begin" && context.Request.Path.StartsWithSegments("/admin/workflow") || loseResponse == "upload" && Regex.IsMatch(context.Request.Path,@"^/admin/documents/[a-f0-9-]+$"));
         if (!lose && !(corruptDownload && context.Request.Path.StartsWithSegments("/admin/documents/file"))) { await next(); return; }
         var original = context.Response.Body; using var captured = new MemoryStream(); context.Response.Body = captured; await next(); context.Response.Body = original;
         if (lose && context.Response.StatusCode != 200) { await File.WriteAllBytesAsync(Path.Combine(run,"unexpected-response.json"),captured.ToArray()); captured.Position=0; await captured.CopyToAsync(original); }
@@ -100,24 +102,31 @@ try
     using var cms = new WebCmsClient(new Uri(app.Urls.Single()), true); using var outsider = new WebCmsClient(cms.Origin,true);
     Task<(string,string,string)> Answer(string who,string question) { var n=Regex.Matches(question,@"\d+").Select(x=>int.Parse(x.Value)).ToArray(); if(n.Length!=2||!question.Contains("cộng")&&!question.Contains("trừ"))throw new Exception("Unknown test CAPTCHA"); return Task.FromResult(("web-weekly-"+who,accounts[who].Password,(question.Contains("cộng")?n[0]+n[1]:n[0]-n[1]).ToString())); }
     await cms.LoginAsync(q=>Answer("writer",q)); Check(cms.UserId == accounts["writer"].Id,"Real HTTP Identity/CAPTCHA/CSRF login; no stored password/cookie");
+    if (datesOnly)
+    {
+        await WeeklyDateChecks.RunAsync(package,cms,options,policy,storage,accounts,run,Check,Denied,value=>loseResponse=value);
+    }
+    else
+    {
+    var sourceDates = new DateDecisions(package.ZipSha256,package.WorkbookSha256,[new(1,"2026-01-05","Synthetic test only; not a source-owner confirmation")]);
     var importer = new WebWeeklyImporter(cms); await importer.PreflightAsync(); Check(true,"Actual Admin create form, category76 and PDF capability");
     await outsider.LoginAsync(q=>Answer("outsider",q)); await Denied(()=>new WebWeeklyImporter(outsider).PreflightAsync(),"Insufficient CMS permission rejected before create/upload");
     var plan = await importer.PlanAsync(package); Check(plan.Rows.Count(x=>x.Action=="Create")==43,"Read-only HTTP dry-run plans 43 drafts");
     var journal = new WebJournal(plan.Origin,plan.UserId,plan.ZipSha256,plan.WorkbookSha256,[]); var journalPath=Path.Combine(run,"web-journal.json");
-    await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,true),"Batch43 refused before a verified pilot");
-    loseResponse="save"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false),"Lost draft response: stops with Creating journal","CMS HTTP 503");
+    await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,true,sourceDates),"Batch43 refused before a verified pilot");
+    loseResponse="save"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates),"Lost draft response: stops with Creating journal","CMS HTTP 503");
     await using var db = new PortalDbContext(options);
     Check(await db.Contents.CountAsync()==1 && !await db.MediaAssets.AnyAsync(),"Only one draft committed, no PDF yet");
     journal=JsonSerializer.Deserialize<WebJournal>(await File.ReadAllBytesAsync(journalPath))!;
-    loseResponse="upload"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false),"Resume draft command then lost PDF response","CMS HTTP 503");
+    loseResponse="upload"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates),"Resume draft command then lost PDF response","CMS HTTP 503");
     Check(await db.Contents.CountAsync()==1 && await db.Revisions.CountAsync()==1 && await db.MediaAssets.CountAsync()==1,"No duplicate draft; one actual PDF stored by CMS");
     journal=JsonSerializer.Deserialize<WebJournal>(await File.ReadAllBytesAsync(journalPath))!;
-    loseResponse="save"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false),"Find upload by hash then lost attach response","CMS HTTP 503");
+    loseResponse="save"; await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates),"Find upload by hash then lost attach response","CMS HTTP 503");
     Check(await db.MediaAssets.CountAsync()==1 && await db.DraftAssets.CountAsync()==1,"PDF receipt reused, no duplicate upload");
     journal=JsonSerializer.Deserialize<WebJournal>(await File.ReadAllBytesAsync(journalPath))!;
-    await importer.ImportAsync(package,plan,journal,journalPath,false); await importer.ReconcileAsync(package,plan,journal);
+    await importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates); await importer.ReconcileAsync(package,plan,journal);
     Check(journal.Rows.Single().Stage=="Verified" && await db.Revisions.CountAsync()==2,"Restarted client replays exact attach command, one verified draft");
-    await importer.ImportAsync(package,plan,journal,journalPath,false);
+    await importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates);
     Check(await db.Contents.CountAsync()==1 && await db.MediaAssets.CountAsync()==1 && await db.Revisions.CountAsync()==2,"Repeated pilot has zero content/media/revision delta");
     var media=await db.MediaAssets.SingleAsync(); Check(media.ScanStatus=="NotScanned" && media.Sha256==first.PdfSha256 && media.OriginalName==first.FileName,"Original PDF bytes/name/hash; truthful NotScanned");
     Check((await importer.PlanAsync(package)).Rows[0].Action=="Reuse","Existing exact title/PDF reused via Admin inventory");
@@ -137,13 +146,14 @@ try
     db.ChangeTracker.Clear();content=await db.Contents.AsNoTracking().SingleAsync();
     var editing=await workflow.BeginEditAsync(content.Id,writer,content.RowVersion,Guid.NewGuid());
     await workflow.SaveAsync(content.Id,new DraftInput{Kind=ContentKind.StaticPage,Title=first.Title,PrimaryCategoryId=76,BodyHtml="<p>Human edit: PDF intentionally removed.</p>"},writer,editing.RowVersion,Guid.NewGuid());
-    await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false),"Human-removed PDF is not reattached on resume");
+    await Denied(()=>importer.ImportAsync(package,plan,journal,journalPath,false,sourceDates),"Human-removed PDF is not reattached on resume");
     Check(!await db.DraftAssets.AnyAsync() && !await db.WeeklyScheduleReleases.AnyAsync(),"No overwrite of removal, no WeeklyScheduleRelease created");
     db.ChangeTracker.Clear(); content=await db.Contents.AsNoTracking().SingleAsync(); await workflow.TrashAsync(content.Id,writer,content.RowVersion,Guid.NewGuid());
     await Denied(()=>importer.PlanAsync(package),"Trash title collision blocks recreation/reuse","thùng rác");
     await Denied(()=>Task.Run(()=>new WebCmsClient(new Uri("http://gdla.gov.vn/"))),"Production client requires HTTPS");
     await Denied(()=>Task.Run(()=>cms.Url("https://example.invalid/admin/save")),"Cross-origin requests refused");
     Check(!File.ReadAllText(journalPath).Contains(accounts["writer"].Password,StringComparison.Ordinal)&&!File.ReadAllText(journalPath).Contains("__RequestVerificationToken",StringComparison.Ordinal),"Journal excludes password and CSRF");
+    }
     await WeeklyImporter.AtomicJson(Path.Combine(run,"result.json"),new{passed=checks.Count,checks,instance,operationalSqlTouched=false}); Console.WriteLine("RESULT "+checks.Count+" PASS; "+run);
 }
 catch(Exception e) { await File.WriteAllTextAsync(Path.Combine(run,"failure.txt"),e.ToString());Console.WriteLine("FAIL "+e.GetType().Name+"; isolated failure.txt");Environment.ExitCode=1; }

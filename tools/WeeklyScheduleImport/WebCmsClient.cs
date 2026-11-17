@@ -71,11 +71,16 @@ public sealed class WebCmsClient : IDisposable
         using var doc = JsonDocument.Parse(bytes); return doc.RootElement.Clone();
     }
     public async Task<JsonElement> SaveAsync(IReadOnlyDictionary<string, string[]> fields)
+        => await PostAsync("/admin/save?format=json", fields);
+    public async Task<JsonElement> BeginEditAsync(Guid id, string version, Guid command)
+        => await PostAsync($"/admin/workflow/{id}", new Dictionary<string, string[]> {
+            ["Action"] = ["BeginEdit"], ["RowVersion"] = [version], ["RequestId"] = [command.ToString()] });
+    async Task<JsonElement> PostAsync(string path, IReadOnlyDictionary<string, string[]> fields)
     {
         var token = await SessionAsync();
         using var body = new FormUrlEncodedContent(fields.SelectMany(p => p.Value.Select(v => new KeyValuePair<string, string>(p.Key, v)))
             .Append(new("__RequestVerificationToken", token)));
-        using var response = await admin.PostAsync(Url("/admin/save?format=json"), body);
+        using var response = await admin.PostAsync(Url(path), body);
         using var doc = JsonDocument.Parse(await ReadAsync(response, "application/json", 1024 * 1024));
         return doc.RootElement.Clone();
     }

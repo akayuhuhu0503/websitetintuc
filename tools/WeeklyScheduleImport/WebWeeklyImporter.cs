@@ -90,7 +90,7 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         var fields = Fields(form);
         return new(id, form.GetAttribute("data-state") ?? "", form.GetAttribute("data-can-save") == "true", Fingerprint(fields), form);
     }
-    static Dictionary<string, string[]> Fields(IElement form)
+    internal static Dictionary<string, string[]> Fields(IElement form)
     {
         var values = new List<KeyValuePair<string, string>>();
         foreach (var element in form.QuerySelectorAll("input[name],textarea[name],select[name]"))
@@ -107,7 +107,7 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         }
         return values.GroupBy(x => x.Key).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(x => x.Value).ToArray());
     }
-    static string Fingerprint(Dictionary<string, string[]> fields) => WeeklyPackage.Hash(JsonSerializer.SerializeToUtf8Bytes(fields));
+    internal static string Fingerprint(Dictionary<string, string[]> fields) => WeeklyPackage.Hash(JsonSerializer.SerializeToUtf8Bytes(fields.OrderBy(x => x.Key, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.Value)));
     public async Task<Guid> AttachedAsync(WebEditor editor, WeeklyRow row)
     {
         var attachments = editor.Form.QuerySelectorAll("input[name='AttachmentIds']").Select(x => Guid.Parse(x.GetAttribute("value")!)).ToArray();
@@ -140,13 +140,17 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
             || journal.Rows.Where(x => x.ContentId != null).GroupBy(x => x.ContentId).Any(g => g.Count() != 1))
             throw new InvalidDataException("Plan/nhật ký không khớp ZIP, Excel, tài khoản, host hoặc STT. Không nhập.");
     }
-    public async Task ImportAsync(WeeklyPackage source, WebPlan plan, WebJournal journal, string journalPath, bool all)
+    public async Task ImportAsync(WeeklyPackage source, WebPlan plan, WebJournal journal, string journalPath, bool all, DateDecisions? dates = null)
     {
         Validate(source, plan, journal); await PreflightAsync();
         if (all && plan.Rows.Any(x => x.Action == "Create") && !journal.Rows.Any(x => x.Stage == "Verified" && x.CreatedByTool)) throw new InvalidDataException("Chạy nhập thử một hồ sơ và Reconcile thành công trước --all.");
         if (all) await ReconcileAsync(source, plan, journal);
         var pilot = plan.Rows.FirstOrDefault(x => x.Action == "Create")?.Stt ?? 1;
         var selection = all ? source.Rows : source.Rows.Where(x => x.Stt == pilot);
+        var confirmed = WeeklyDates.Resolve(source, dates);
+        foreach (var row in selection.Where(r => plan.Rows.Single(x => x.Stt == r.Stt).Action == "Create"
+            && journal.Rows.All(x => x.Stt != r.Stt || x.Stage == "New")))
+            if (!confirmed.ContainsKey(row.Stt)) throw Conflict(row, "Ngày cột B chưa được xác nhận; chạy web-date-report và điền date-decisions.json trước khi tạo bài.");
         foreach (var row in selection)
         {
             var item = journal.Rows.SingleOrDefault(x => x.Stt == row.Stt);
@@ -165,6 +169,7 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
                 }
                 if (planned.Action != "Create" || candidates.Count != 0) throw Conflict(row, "Có hồ sơ mới trùng tiêu đề sau Dry-run; chạy đối soát trước.");
                 item.PendingSave = new() { ["Kind"] = ["StaticPage"], ["Title"] = [row.Title], ["CategoryId"] = ["76"], ["BodyHtml"] = [Body],
+                    ["Metadata.PublicationDate"] = [confirmed[row.Stt]],
                     ["RequestId"] = [WeeklyPackage.Command(row, "web-create").ToString()], ["intent"] = ["Save"] };
                 item.Stage = "Creating"; await Persist();
             }
@@ -210,7 +215,7 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         Validate(source, plan, journal);
         foreach (var item in journal.Rows.Where(x => x.Stage == "Verified")) await VerifyRowAsync(item, source.Rows.Single(x => x.Stt == item.Stt));
     }
-    async Task<Guid?> PublishedAsync(WebJournalRow item, WeeklyRow row)
+    internal async Task<Guid?> PublishedAsync(WebJournalRow item, WeeklyRow row)
     {
         var history = await cms.HtmlAsync($"/admin/history/{item.ContentId}");
         if (history.QuerySelector("#history-form")?.GetAttribute("data-content-id") != item.ContentId.ToString()) throw Conflict(row, "Không nhận diện được lịch sử CMS.");

@@ -2,6 +2,8 @@
 
 Phương án hiện hành của PR #17. **Không chuyển công cụ sang IIS, không đọc cấu hình private của website, không kết nối SQL trực tiếp.** CLI dùng các form/API Admin đã có; không cần thay website để thêm API. Các chế độ CLI SQL/IIS cũ vẫn giữ để dùng khi được cấp phép riêng.
 
+**Bổ sung ngày đăng:** trước khi nhập mới, chạy `DateReport` và xác nhận các ngày số/mơ hồ trong `date-decisions.json`. Công cụ tạo nháp với `Metadata.PublicationDate` đã xác minh. Với 43 hồ sơ đã nhập, không nhập lại: dùng `DatePlan → SyncDates → cán bộ duyệt/công bố → VerifyDates → SyncLinks`. Xem [hướng dẫn và 19 dòng cần xác nhận](weekly-schedule-dates.md).
+
 ## Điều kiện thực tế
 
 - HTTPS `https://gdla.gov.vn/` có chứng chỉ hợp lệ và Admin hoạt động. Không tắt kiểm tra TLS hoặc sử dụng token bỏ qua đăng nhập.
@@ -34,7 +36,7 @@ Mặc định kết quả tại `%USERPROFILE%\LandPortal-Private\weekly43-web`.
 
 ## Resume và phạm vi ghi
 
-- WEB mode không nhận `--config`, `--iis-web`, mật khẩu hay cookie qua tham số. Không gọi workflow gửi duyệt, duyệt, xuất bản; chỉ `/admin/save?format=json` với `intent=Save` và `/admin/documents/{id}?format=json`.
+- WEB mode không nhận `--config`, `--iis-web`, mật khẩu hay cookie qua tham số. Không gọi workflow gửi duyệt, duyệt, xuất bản; nhập mới dùng `/admin/save?format=json` với `intent=Save` và `/admin/documents/{id}?format=json`. Đồng bộ ngày được phép gọi `BeginEdit` cho hồ sơ Published trước khi lưu bản sửa, không upload lại PDF.
 - `web-plan.json` gắn ZIP/Excel SHA256, origin, tài khoản và STT. `web-journal.json` ghi ý định **trước** từng POST, ContentId/MediaId, trạng thái và phiên bản. Lệnh tạo/gắn dùng RequestId ổn định của CMS; cùng RequestId không thể được dùng bởi người khác hoặc payload khác.
 - Mất phản hồi tạo bài/gắn PDF: lần chạy sau gửi lại đúng lệnh cũ, gồm row version cũ. Mất phản hồi upload: truy vấn `/admin/documents/{id}/result?sha256=...` trước khi gửi file. Không tự retry mạng bên trong một lần chạy. Nếu bản nháp đã đổi hoặc PDF bị cán bộ gỡ, dừng; không gắn lại.
 - `Reconcile` chỉ GET các hồ sơ đã Verified, tải PDF và so SHA256. Các thao tác Creating/Uploading/Attaching còn dở được báo riêng, không giả PASS; dùng `Pilot`/`ImportAll` cùng nhật ký để tiếp tục. Khóa file ngăn hai tiến trình cùng sử dụng một thư mục kết quả.

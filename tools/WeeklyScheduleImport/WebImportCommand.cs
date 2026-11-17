@@ -8,18 +8,20 @@ public static class WebImportCommand
     public static async Task RunAsync(string[] args)
     {
         var command = args[0];
-        if (command is not ("web-preflight" or "web-dry-run" or "web-import" or "web-reconcile" or "web-sync-links"))
-            throw new ArgumentException("Dùng web-preflight | web-dry-run | web-import | web-reconcile | web-sync-links.");
+        if (command is not ("web-preflight" or "web-dry-run" or "web-import" or "web-reconcile" or "web-sync-links" or "web-date-report" or "web-date-plan" or "web-sync-dates" or "web-verify-dates"))
+            throw new ArgumentException("Dùng web-preflight | web-dry-run | web-import | web-reconcile | web-sync-links | web-date-report | web-date-plan | web-sync-dates | web-verify-dates.");
         var options = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 1; i < args.Length; i++)
         {
             var key = args[i];
             if (key == "--all") { if (!options.TryAdd(key, "true") || command != "web-import") throw new ArgumentException("--all chỉ dành cho web-import sau hồ sơ thử."); continue; }
-            if (key is not ("--zip" or "--out" or "--site") || i + 1 >= args.Length || args[i + 1].StartsWith("--") || !options.TryAdd(key, args[++i]))
-                throw new ArgumentException("WEB IMPORT chỉ nhận --zip, --out, --site và --all. Không nhận mật khẩu, cookie, SQL hoặc config private qua tham số.");
+            if (key is not ("--zip" or "--out" or "--site" or "--date-plan" or "--stt") || i + 1 >= args.Length || args[i + 1].StartsWith("--") || !options.TryAdd(key, args[++i]))
+                throw new ArgumentException("Tham số không hợp lệ. Không nhận mật khẩu, cookie, SQL hoặc config private qua tham số.");
         }
+        if (options.ContainsKey("--date-plan") && command is not ("web-date-plan" or "web-sync-dates") || options.ContainsKey("--stt") && command != "web-sync-dates") throw new ArgumentException("--date-plan chỉ dành cho kế hoạch/đồng bộ ngày; --stt chỉ dành cho web-sync-dates.");
         string Required(string key) => options.TryGetValue(key, out var value) ? value : throw new ArgumentException("Thiếu " + key);
         var sourcePath = Path.GetFullPath(Required("--zip")); var package = WeeklyPackage.Read(sourcePath);
+        if (command == "web-date-report") { await WeeklyDates.ReportAsync(package, Path.GetFullPath(Required("--out"))); return; }
         var origin = new Uri(options.GetValueOrDefault("--site", "https://gdla.gov.vn/"));
         using var cms = new WebCmsClient(origin);
         if (Console.IsInputRedirected) throw new UnauthorizedAccessException("Đăng nhập tại console trực tiếp; không đọc mật khẩu từ file/pipe.");
@@ -59,9 +61,37 @@ public static class WebImportCommand
         var savedPlan = JsonSerializer.Deserialize<WebPlan>(await File.ReadAllBytesAsync(Path.Combine(output!, "web-plan.json")))!;
         var journalPath = Path.Combine(output!, "web-journal.json");
         var journal = JsonSerializer.Deserialize<WebJournal>(await File.ReadAllBytesAsync(journalPath))!;
+        var datesPath = Path.Combine(output!, "date-decisions.json");
+        var dates = File.Exists(datesPath) ? JsonSerializer.Deserialize<DateDecisions>(await File.ReadAllBytesAsync(datesPath)) : null;
+        if (command is "web-date-plan" or "web-sync-dates" or "web-verify-dates")
+        {
+            var sync = new WebDateSync(cms);
+            if (command == "web-verify-dates")
+            {
+                var verified = await sync.VerifyPublicAsync(package, savedPlan, journal, dates);
+                var file = Path.Combine(output!, "web-date-public-" + DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssfffZ") + ".json");
+                await WeeklyImporter.AtomicJson(file, verified); Console.WriteLine("Đã đối soát ngày công khai và PDF; xem " + file); return;
+            }
+            var planName = options.GetValueOrDefault("--date-plan", "web-date-plan.json");
+            if (Path.GetFileName(planName) != planName || !planName.StartsWith("web-date-plan", StringComparison.Ordinal) || !planName.EndsWith(".json", StringComparison.Ordinal)) throw new ArgumentException("--date-plan phải là tên web-date-plan*.json trong thư mục nhật ký, không chứa đường dẫn.");
+            var planPath = Path.Combine(output!, planName); var dateJournalPath = Path.ChangeExtension(planPath, ".journal.json");
+            if (command == "web-date-plan")
+            {
+                if (File.Exists(planPath) || File.Exists(dateJournalPath)) throw new IOException("Giữ kế hoạch/nhật ký cũ. Muốn kế hoạch mới, dùng --date-plan web-date-plan-2.json.");
+                var datePlan = await sync.PlanAsync(package, savedPlan, journal, dates);
+                await WeeklyImporter.AtomicJson(planPath, datePlan);
+                Console.WriteLine("DATE PLAN (chỉ đọc CMS): " + string.Join(", ", datePlan.Rows.GroupBy(x => x.Status).Select(x => x.Key + "=" + x.Count()))); return;
+            }
+            var bytes = await File.ReadAllBytesAsync(planPath); var planned = JsonSerializer.Deserialize<WebDatePlan>(bytes)!;
+            var changes = File.Exists(dateJournalPath) ? JsonSerializer.Deserialize<WebDateJournal>(await File.ReadAllBytesAsync(dateJournalPath))!
+                : new WebDateJournal(WeeklyPackage.Hash(JsonSerializer.SerializeToUtf8Bytes(planned, WeeklyPackage.Json)), []);
+            await sync.ApplyAsync(package, savedPlan, journal, dates, planned, changes, dateJournalPath,
+                options.TryGetValue("--stt", out var stt) ? int.Parse(stt, System.Globalization.CultureInfo.InvariantCulture) : null);
+            Console.WriteLine($"DATE SYNC: {changes.Rows.Count(x => x.Stage == "Verified")} hồ sơ đối soát; {planned.Rows.Count(x => x.Status == "NeedsConfirmation")} chờ xác nhận ngày. Chỉ lưu bản nháp, chưa duyệt/xuất bản; không tải lại PDF."); return;
+        }
         if (command == "web-import")
         {
-            await importer.ImportAsync(package, savedPlan, journal, journalPath, options.ContainsKey("--all"));
+            await importer.ImportAsync(package, savedPlan, journal, journalPath, options.ContainsKey("--all"), dates);
             Console.WriteLine($"WEB IMPORT: {journal.Rows.Count(x => x.Stage == "Verified")}/43 đã đối soát PDF/bài; chỉ lưu nháp hoặc tái sử dụng hồ sơ, không duyệt/xuất bản. STT 39–42 giữ nguyên tiêu đề để cán bộ rà soát."); return;
         }
         if (command == "web-reconcile")
