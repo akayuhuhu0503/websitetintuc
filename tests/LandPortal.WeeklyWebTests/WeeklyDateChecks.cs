@@ -28,11 +28,11 @@ static class WeeklyDateChecks
     {
         Task Reject(Func<Task> action,string name,string? expected=null)=>denied(action,name,expected);
         var report=WeeklyDates.Inspect(source); var originalSha=WeeklyPackage.Hash(source.Workbook);
-        check(report.Count==43 && report.Count(x=>x.CellType=="n")==17 && report.Count(x=>x.Status=="VerifiedText")==24,"Dates: all43 / 17 serials / 24 clear text dates");
+        check(report.Count==43 && report.Count(x=>x.CellType=="n")==17 && report.Count(x=>x.Status=="VerifiedText")==26,"Dates: all43 / 17 serials / 26 clear text dates");
         check(report[0].StoredDate=="2026-05-01" && report[0].SwappedCandidate=="2026-01-05" && report[0].Status=="NeedsConfirmation","Serial46143 reports both interpretations, does not assume January");
         check(report[4].Status=="NeedsConfirmation" && report[4].StoredDate==report[4].SwappedCandidate,"Even symmetric numeric date requires source confirmation");
         check(report[12].StoredDate=="2026-04-06" && report[12].Status=="VerifiedText","Vietnamese text with leading whitespace parsed day/month, raw unchanged");
-        check(report.Skip(38).Take(4).All(x=>x.Status=="NeedsConfirmation") && report[42].ProposedDate=="2026-11-04","39-42 title/PDF conflicts held; 43 not replaced by title week start");
+        check(report.Skip(39).Take(2).All(x=>x.Status=="VerifiedText") && report[42].ProposedDate==null,"40/41 text dates independent of PDF conflicts; 43 serial not guessed");
         check(!WeeklyDates.TryVietnamese("31/02/2026",out _) && !WeeklyDates.TryVietnamese("2026-01-05",out _) && WeeklyDates.TryVietnamese("6/4/2026",out var vi)&&vi==new DateOnly(2026,4,6),"Strict Vietnamese text parsing rejects impossible/other formats");
         var decisions=new DateDecisions(source.ZipSha256,source.WorkbookSha256,[new(1,"2026-01-05","Synthetic fixture only")]);
         check(!WeeklyDates.Resolve(source,null).ContainsKey(1)&&WeeklyDates.Resolve(source,decisions)[1]=="2026-01-05","Unconfirmed serial blocked; bound explicit decision resolves it");
@@ -71,7 +71,7 @@ static class WeeklyDateChecks
         var beforeMetadata=JsonSerializer.Serialize(input.Metadata); var mediaBefore=await db.MediaAssets.AsNoTracking().SingleAsync();
         var sync=new WebDateSync(cms);
         var datePlan=await sync.PlanAsync(source,plan,imported,decisions);
-        check(datePlan.Rows[0].Status=="Ready" && datePlan.Rows.Count(x=>x.Status=="NeedsConfirmation")==18,"Read-only date plan separates ready draft and held dates");
+        check(datePlan.Rows[0].Status=="Ready" && datePlan.Rows.Count(x=>x.Status=="NeedsConfirmation")==16,"Read-only date plan separates ready draft and held dates");
         WebDateJournal Journal(WebDatePlan p)=>new(WeeklyPackage.Hash(JsonSerializer.SerializeToUtf8Bytes(p,WeeklyPackage.Json)),[]);
         var journal=Journal(datePlan);var journalPath=Path.Combine(run,"dates-draft.json");
         lose("save");await Reject(()=>sync.ApplyAsync(source,plan,imported,decisions,datePlan,journal,journalPath),"Lost date-save response stops safely","CMS HTTP 503");

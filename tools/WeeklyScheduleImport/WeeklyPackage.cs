@@ -196,7 +196,7 @@ public sealed class WeeklyPackage
         while ((read = input.Read(buffer)) > 0) { if (output.Length + read > max) throw new InvalidDataException("ZIP vượt giới hạn giải nén."); output.Write(buffer, 0, read); }
         return output.ToArray();
     }
-    static void ValidateZip(ZipArchive zip, long maximum)
+    internal static void ValidateZip(ZipArchive zip, long maximum)
     {
         if (zip.Entries.Count > 4000 || zip.Entries.Sum(e => e.Length) > maximum || zip.Entries.GroupBy(e => e.FullName, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1)
             || zip.Entries.Any(e => e.FullName.StartsWith('/') || e.FullName.Contains('\\') || e.FullName.Split('/').Any(s => s is ".." or ".") || e.FullName.Contains(':')))

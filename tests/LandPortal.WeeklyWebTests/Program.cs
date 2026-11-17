@@ -18,6 +18,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
+if (args.Length == 2 && args[1] == "--date-column-only") { await WeeklyDateColumnChecks.RunAsync(args[0]); return; }
 if (args.Length == 2 && args[1] == "--date-plan-guards") { WeeklyDateChecks.PlanGuards(WeeklyPackage.Read(args[0])); return; }
 if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--dates") throw new ArgumentException("source ZIP, new test output, optional --dates required");
 var datesOnly = args.Length == 3;

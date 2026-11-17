@@ -4,11 +4,13 @@ Lỗi của công cụ WEB IMPORT cũ: payload tạo nháp không có `Metadata.
 
 ## Đối chiếu nguồn
 
-Đã đọc đủ 43 dòng B7:B49, đếm lại 43 PDF / 120 trang. **24 ngày text rõ; 19 dòng chờ xác nhận**: 17 ô số Excel và hai dòng text 40–41 còn xung đột tuần/PDF. STT 39–42 vẫn cần cán bộ rà soát tiêu đề/PDF trước duyệt. E48 vẫn sửa 2→3 trên bản sao Excel. A/B/C và ZIP nguồn không đổi.
+**Nguồn duy nhất của ngày đăng là cột B** trong sheet `2.4.1_LichCT`. Đọc đủ 43 dòng B7:B49: **26 ngày text theo dd/mm/yyyy và 17 ô số Excel**. Ngày 17/11/2026 chủ dữ liệu đã xác nhận toàn bộ 17 ngày dự định trong bảng dưới, gồm STT 1 = 05/01/2026 và STT 43 = 04/11/2026. Xác nhận được lưu trong `date-decisions.json` private, gắn đúng hash ZIP/Excel; không tự áp dụng sang nguồn khác.
 
-Tất cả 17 ô số dùng number format tích hợp 14, phụ thuộc locale. Báo cáo liệt kê raw serial, định dạng và cả diễn giải vi-VN/en-US; không thể khẳng định máy lập Excel đã hiển thị theo locale nào. Ứng viên đảo ngày/tháng chỉ là đề xuất, **không tự chọn theo ngày bắt đầu tuần**.
+Không dùng tiêu đề hoặc PDF để chọn ngày, cảnh báo tuần/PDF không làm thay đổi ngày. STT 40–41 lấy thẳng text 19/10/2026 và 26/10/2026 từ B. Cảnh báo nội dung STT 39–42 vẫn giữ riêng cho cán bộ biên tập, không phải điều kiện xác minh ngày.
 
-| STT | Ngày giải mã B (dd/mm/2026) | Đề xuất cần xác nhận (dd/mm/2026) |
+Tất cả 17 ô số dùng number format tích hợp 14, phụ thuộc locale hiển thị. **Serial lưu một ngày lịch xác định; đổi định dạng hiển thị không sửa được lỗi nhập đảo ngày/tháng.** Công cụ giải mã theo hệ ngày 1900/1904 của workbook, không phụ thuộc locale máy Developer/SQL. Với đúng nguồn này, dùng 17 diễn giải đã được chủ dữ liệu xác nhận; không tự đảo mọi ngày số của nguồn tương lai. Payload CMS dùng ISO `yyyy-MM-dd` và `DateOnly`, không qua ngày/giờ hiện tại hoặc phép đổi múi giờ.
+
+| STT | Ngày lịch lưu ở B (dd/mm/2026) | Ngày dự định đã được xác nhận (dd/mm/2026) |
 |---|---|---|
 | 1 | 01/05 | 05/01 |
 | 2 | 01/12 | 12/01 |
@@ -25,21 +27,21 @@ Tất cả 17 ô số dùng number format tích hợp 14, phụ thuộc locale. 
 | 31 | 08/10 | 10/08 |
 | 35 | 09/07 | 07/09 |
 | 39 | 10/12 | 12/10 |
-| 40 | 19/10 (text) | 19/10; còn lệch tuần PDF |
-| 41 | 26/10 (text) | 26/10; còn lệch tuần PDF |
-| 42 | 11/02 | 02/11; còn lệch tuần PDF |
-| 43 | 11/04 | 04/11; không tự đổi thành 02/11 theo tiêu đề |
+| 42 | 11/02 | 02/11 |
+| 43 | 11/04 | 04/11 |
+
+`DateReport` chỉ đọc workbook và hash ZIP, không mở/phân tích lại PDF, không kết nối CMS/SQL. Báo cáo đủ 43 dòng giữ raw B, kiểu, định dạng, ngày lịch lưu, ứng viên đảo và ngày CMS đã chuẩn hóa cùng trạng thái. Không sửa A/B/C. Kết quả kiểm PDF 43 tệp/120 trang và sửa E48 2→3 là kiểm chứng của lượt trước; lượt chuẩn hóa ngày không đếm lại PDF.
 
 ## Chạy trên máy Developer
 
 Mở PowerShell tại **thư mục CLI mới**, giữ nguyên thư mục kết quả cũ `%USERPROFILE%\LandPortal-Private\weekly43-web` có `web-plan.json`, `web-journal.json`, `source-backup.zip` và `original.xlsx`. Không chạy lại DryRun/Pilot/ImportAll cho 43 hồ sơ đã Verified.
 
 ```powershell
-# 1. Offline, không đăng nhập: xuất báo cáo 43 dòng và mẫu xác nhận ngày.
+# 1. Offline, không đăng nhập: đọc xác nhận đã lưu và xuất 43 ngày chuẩn hóa.
 powershell -NoProfile -File .\NHAP-LICH-WEB.ps1 -Action DateReport
 ```
 
-Đọc `DOI-CHIEU-NGAY-*.md` trong thư mục kết quả. Sau xác nhận thực tế của chủ dữ liệu, điền **chỉ các STT đã xác nhận** vào `date-decisions.json`: `ConfirmedDate` dạng `yyyy-MM-dd`, `ConfirmedBy` là người đã xác nhận. Giữ hai hash nguồn. Dòng chưa xác nhận để `null`; công cụ bỏ qua, không ghi ngày mơ hồ. Mẫu được tạo trống, không giả xác nhận. Ngày text hợp lệ không có cảnh báo được đọc trực tiếp từ B, không cần xác nhận lặp.
+Đọc `DOI-CHIEU-NGAY-*.md` trong thư mục kết quả. Với bộ nguồn hiện tại, 17 xác nhận đã được ghi theo câu trả lời của chủ dữ liệu; **không cần xác nhận lại từng STT**. Giữ file private `date-decisions.json` cùng nhật ký cũ. Nếu chuyển sang ZIP/Excel khác, công cụ từ chối dùng xác nhận cũ. Nếu chưa có file, chỉ tạo mẫu trống; không giả xác nhận. Ngày text hợp lệ được đọc trực tiếp từ B, không cần xác nhận lặp. Ngày ngoài hai diễn giải của B hoặc dùng để thay đổi một ngày text rõ ràng bị từ chối.
 
 ```powershell
 # 2. Chỉ đọc CMS, đối chiếu ContentId/tiêu đề/category76/revision/PDF/hash và metadata.
@@ -72,4 +74,8 @@ Test dùng HTTP/controllers thật và SQL Server LocalDB riêng schema18, một
 
 Kết quả 17/11/2026: **44/44 kiểm tra tập trung PASS**, gồm các bước dựng host/Identity/SQL cô lập và kiểm tra ngày/revision/Excel (`weekly-web-dates-1794899958423`). Release build PASS, 0 warning/error. Test host/LocalDB đã dừng. Hai trang công khai đã kiểm trên fixture sau workflow thật; **chưa kiểm ngày sau sửa trên gdla.gov.vn vì chưa thực thi sửa hồ sơ vận hành hoặc công bố bản sửa**.
 
-Rà soát cuối bổ sung ràng buộc ngày từng dòng plan với tập ngày đã xác nhận (không chỉ hash của tập ngày). **4/4 kiểm tra offline riêng PASS** cho đúng tập ngày, chèn ngày số chưa xác nhận, sửa ngày text và hash sai; Release build cuối PASS. Không chạy lại phần HTTP/SQL không đổi. Publish self-contained và parser PowerShell PASS.
+Rà soát cuối bổ sung ràng buộc ngày từng dòng plan với tập ngày đã xác nhận (không chỉ hash của tập ngày). **4/4 kiểm tra offline riêng PASS** cho đúng tập ngày, chèn ngày số chưa xác nhận, sửa ngày text và hash sai. Đây là kết quả trước bổ sung chuẩn hóa độc lập cột B.
+
+Kiểm thử bổ sung chỉ đọc Excel, không mở PDF hoặc dựng HTTP/SQL: `dotnet run --project tests/LandPortal.WeeklyWebTests -c Release -- <source.zip> --date-column-only`. Bao gồm locale en-US/vi-VN/fr-FR, serial 1900/1904, ngày sai/có phần giờ/công thức, không dùng tiêu đề/cached row/PDF, giữ bytes nguồn, ràng buộc ngày với B và báo cáo 43 ngày sau xác nhận. Không chạy lại toàn bộ HTTP/SQL hoặc các bộ E2E cũ.
+
+Kết quả sau đính chính nguồn ngày: **36/36 kiểm tra cột B và báo cáo PASS; 4/4 ràng buộc plan PASS**. Release build 0 lỗi/cảnh báo. Chạy đúng nhánh offline trước phần dựng host; không phân tích PDF, không mở HTTP/SQL. Kết quả 44 HTTP/SQL ở trên là kiểm chứng lịch sử, không chạy lại hoặc cộng gộp vào lượt này. Đã chuẩn hóa đủ 43/43 ngày bằng 17 xác nhận private và 26 ngày text; **chưa sửa hồ sơ thật**.

@@ -20,8 +20,9 @@ public static class WebImportCommand
         }
         if (options.ContainsKey("--date-plan") && command is not ("web-date-plan" or "web-sync-dates") || options.ContainsKey("--stt") && command != "web-sync-dates") throw new ArgumentException("--date-plan chỉ dành cho kế hoạch/đồng bộ ngày; --stt chỉ dành cho web-sync-dates.");
         string Required(string key) => options.TryGetValue(key, out var value) ? value : throw new ArgumentException("Thiếu " + key);
-        var sourcePath = Path.GetFullPath(Required("--zip")); var package = WeeklyPackage.Read(sourcePath);
-        if (command == "web-date-report") { await WeeklyDates.ReportAsync(package, Path.GetFullPath(Required("--out"))); return; }
+        var sourcePath = Path.GetFullPath(Required("--zip"));
+        if (command == "web-date-report") { await WeeklyDates.ReportAsync(WeeklyDateSource.Read(sourcePath), Path.GetFullPath(Required("--out"))); return; }
+        var package = WeeklyPackage.Read(sourcePath);
         var origin = new Uri(options.GetValueOrDefault("--site", "https://gdla.gov.vn/"));
         using var cms = new WebCmsClient(origin);
         if (Console.IsInputRedirected) throw new UnauthorizedAccessException("Đăng nhập tại console trực tiếp; không đọc mật khẩu từ file/pipe.");

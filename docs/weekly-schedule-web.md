@@ -2,7 +2,7 @@
 
 Phương án hiện hành của PR #17. **Không chuyển công cụ sang IIS, không đọc cấu hình private của website, không kết nối SQL trực tiếp.** CLI dùng các form/API Admin đã có; không cần thay website để thêm API. Các chế độ CLI SQL/IIS cũ vẫn giữ để dùng khi được cấp phép riêng.
 
-**Bổ sung ngày đăng:** trước khi nhập mới, chạy `DateReport` và xác nhận các ngày số/mơ hồ trong `date-decisions.json`. Công cụ tạo nháp với `Metadata.PublicationDate` đã xác minh. Với 43 hồ sơ đã nhập, không nhập lại: dùng `DatePlan → SyncDates → cán bộ duyệt/công bố → VerifyDates → SyncLinks`. Xem [hướng dẫn và 19 dòng cần xác nhận](weekly-schedule-dates.md).
+**Bổ sung ngày đăng:** ngày chỉ lấy từ cột B. `DateReport` đọc Excel offline, dùng `date-decisions.json` private cho 17 ô số đã được chủ dữ liệu xác nhận; 26 ngày text đọc theo dd/mm/yyyy. Công cụ tạo nháp với `Metadata.PublicationDate` đã xác minh. Với 43 hồ sơ đã nhập, không nhập lại: dùng `DatePlan → SyncDates → cán bộ duyệt/công bố → VerifyDates → SyncLinks`. Xem [hướng dẫn chuẩn hóa 43 ngày](weekly-schedule-dates.md).
 
 ## Điều kiện thực tế
 
