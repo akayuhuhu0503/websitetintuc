@@ -23,6 +23,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using UglyToad.PdfPig.Writer;
 
+if (args.Length == 3 && args[0] == "pdf-week") { await PdfWeekChecks.Run(args[1], args[2]); return; }
 if (args.Length == 4 && args[0] == "integration") { await IntegrationChecks.Run(args[1], args[2], args[3]); return; }
 
 // New isolated LocalDB only. Never load .env, operational config or credentials.

@@ -43,7 +43,9 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
             if(managedDocumentNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
             if(asset.MimeType=="application/pdf"){Response.Headers["Content-Security-Policy"]="sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
             Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
-            return base.File(stream, asset.MimeType, download || managedDocumentNoAv || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
+            // A validated public PDF may use the browser viewer, including the approved NotScanned policy.
+            // Publication/proof/hash checks above and sandbox/nosniff still apply; Office stays attachment-only.
+            return base.File(stream, asset.MimeType, download || asset.MimeType != "application/pdf" ? asset.OriginalName : null, enableRangeProcessing: true);
         }
         var isPublished = await db.ContentAssets.AnyAsync(a => a.MediaAssetId == id
             && db.Contents.Any(c => c.IsPublic && !c.IsTrashed && c.PublishedRevisionId == a.RevisionId));

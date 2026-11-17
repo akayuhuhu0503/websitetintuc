@@ -119,7 +119,7 @@ foreach(var a in documents.Concat(images))db.ContentAssets.Add(new(){RevisionId=
 foreach(var asset in documents){
  var controller=new MediaController(db,storage,policy,usage){ControllerContext=new(){HttpContext=new DefaultHttpContext()}};
  var result=await controller.File(asset.Id);
- Check(result is FileStreamResult file && file.FileDownloadName==asset.OriginalName && controller.Response.Headers["X-Media-Scan-Status"]=="NotScanned" && controller.Response.Headers["X-Content-Type-Options"]=="nosniff",asset.OriginalName+" actual endpoint attachment with persisted public grant");
+ Check(result is FileStreamResult file && (asset.MimeType=="application/pdf" ? string.IsNullOrEmpty(file.FileDownloadName) : file.FileDownloadName==asset.OriginalName) && controller.Response.Headers["X-Media-Scan-Status"]=="NotScanned" && controller.Response.Headers["X-Content-Type-Options"]=="nosniff",asset.OriginalName+" PDF inline / Office attachment with persisted public grant");
  if(result is FileStreamResult opened)await opened.FileStream.DisposeAsync();
 }
 var deniedPublish=false;try{await workflow.PublishApprovedAsync(content.Id,revision.Id,unprivileged,content.RowVersion,Guid.NewGuid());}catch(UnauthorizedAccessException){deniedPublish=true;}
