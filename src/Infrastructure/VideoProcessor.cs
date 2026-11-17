@@ -21,6 +21,9 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
     private VideoToolPaths? tools;
     private string? ffmpegHash,ffprobeHash;
     public VideoToolHealth? LastHealth {get;private set;}
+    public string? LastOperation {get;private set;}
+    public int LastDeadlineSeconds {get;private set;}
+    internal void ResetOperationObservation(){LastOperation=null;LastDeadlineSeconds=0;}
     public VideoWorkerObservation? WorkerObservation()=>VideoWorkerStatus.Read(storage);
     public VideoWorkerInspection WorkerStatus()=>VideoWorkerStatus.Inspect(storage,options.ProcessSeconds);
     public static bool BrowserCompatible(VideoProbe p)=>p.Codec=="h264"&&p.PixelFormat=="yuv420p"&&(p.Profile is "Baseline" or "Constrained Baseline" or "Main" or "High")&&(p.Audio==null||p.Audio=="aac"&&p.AudioProfile=="LC");
@@ -90,8 +93,9 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
         if(!match.Success)throw new VideoProcessingException("VIDEO_PROCESSOR_VERSION_INVALID",true);
         return match.Groups[1].Value;
     }
-    internal async Task<string> Run(string binary,IEnumerable<string> arguments,int seconds,CancellationToken ct)
+    internal async Task<string> Run(string binary,IEnumerable<string> arguments,int seconds,CancellationToken ct,string operation="tool-check")
     {
+        LastOperation=operation;LastDeadlineSeconds=seconds;
         VideoToolLocator.RequireNoLinks(binary);
         await using var binaryLock=new FileStream(binary,FileMode.Open,FileAccess.Read,FileShare.Read,65536,FileOptions.Asynchronous|FileOptions.SequentialScan);
         var expected=string.Equals(binary,tools?.Ffmpeg,StringComparison.OrdinalIgnoreCase)?ffmpegHash:ffprobeHash;
@@ -127,7 +131,7 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
     public async Task<VideoProbe> ProbeAsync(string path,CancellationToken ct=default)
     {
         if(LastHealth?.Ready!=true){var health=await HealthAsync(ct);if(!health.Ready)throw new VideoProcessingException(health.Code,true);}
-        var json=await Run(tools!.Ffprobe!,["-v","error","-protocol_whitelist","file,pipe","-show_entries","stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,pix_fmt,profile:stream_side_data=rotation:format=duration,format_name","-of","json",path],30,ct);
+        var json=await Run(tools!.Ffprobe!,["-v","error","-protocol_whitelist","file,pipe","-show_entries","stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,pix_fmt,profile:stream_side_data=rotation:format=duration,format_name","-of","json",path],30,ct,"probe");
         using var doc=JsonDocument.Parse(json);var streams=doc.RootElement.GetProperty("streams").EnumerateArray().ToArray();var video=streams.Where(x=>x.GetProperty("codec_type").GetString()=="video").ToArray();var audio=streams.Where(x=>x.GetProperty("codec_type").GetString()=="audio").ToArray();
         if(video.Length!=1||audio.Length>1||streams.Length!=video.Length+audio.Length)throw new VideoProcessingException("VIDEO_STREAMS_UNSUPPORTED");
         var width=video[0].GetProperty("width").GetInt32();var height=video[0].GetProperty("height").GetInt32();var duration=double.Parse(doc.RootElement.GetProperty("format").GetProperty("duration").GetString()!,CultureInfo.InvariantCulture);
@@ -151,9 +155,9 @@ public sealed class VideoProcessor(VideoOptions options,StorageOptions storage,V
         {
             args.AddRange(["-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p","-fpsmax","60","-threads",options.Threads.ToString(CultureInfo.InvariantCulture),"-vf","scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2","-c:a","aac","-profile:a","aac_low","-b:a","128k"]);
         }
-        args.AddRange(["-movflags","+faststart","-fs",Math.Min(new FileInfo(input).Length*3,options.QuotaBytes/3).ToString(CultureInfo.InvariantCulture),"-f","mp4",output]);await Run(tools!.Ffmpeg!,args,options.ProcessSeconds,ct);
+        args.AddRange(["-movflags","+faststart","-fs",Math.Min(new FileInfo(input).Length*3,options.QuotaBytes/3).ToString(CultureInfo.InvariantCulture),"-f","mp4",output]);await Run(tools!.Ffmpeg!,args,options.ProcessSeconds,ct,"transcode");
         var after=await ProbeAsync(output,ct);if(!BrowserCompatible(after)||Math.Abs(before.Duration-after.Duration)>1||after.Width>Math.Max(before.Width,before.Height)||after.Height>Math.Max(before.Width,before.Height))throw new VideoProcessingException("VIDEO_OUTPUT_VERIFY_FAILED");
-        await Run(tools!.Ffmpeg!,["-nostdin","-hide_banner","-loglevel","error","-protocol_whitelist","file,pipe","-threads",options.Threads.ToString(CultureInfo.InvariantCulture),"-ss",Math.Min(1,after.Duration/2).ToString(CultureInfo.InvariantCulture),"-i",output,"-frames:v","1","-vf","scale=w='min(960,iw)':h='min(540,ih)':force_original_aspect_ratio=decrease","-f","image2",poster],60,ct);
+        await Run(tools!.Ffmpeg!,["-nostdin","-hide_banner","-loglevel","error","-protocol_whitelist","file,pipe","-threads",options.Threads.ToString(CultureInfo.InvariantCulture),"-ss",Math.Min(1,after.Duration/2).ToString(CultureInfo.InvariantCulture),"-i",output,"-frames:v","1","-vf","scale=w='min(960,iw)':h='min(540,ih)':force_original_aspect_ratio=decrease","-f","image2",poster],60,ct,"poster");
         using(var codec=SkiaSharp.SKCodec.Create(poster)){if(codec==null||codec.Info.Width<1||codec.Info.Height<1)throw new VideoProcessingException("VIDEO_POSTER_VERIFY_FAILED");}
         var mp4=new FileInfo(output);var jpg=new FileInfo(poster);if(mp4.Length<32||jpg.Length<16||mp4.Length>options.MaxFileBytes*3||jpg.Length>16*1024*1024)throw new VideoProcessingException("VIDEO_OUTPUT_SIZE_FAILED");
         string Key(string p)=>Path.GetRelativePath(storage.MediaRoot,p).Replace('\\','/');var result=new VideoOutput(Key(output),await VideoUploadService.HashFileAsync(output,ct),mp4.Length,Key(poster),await VideoUploadService.HashFileAsync(poster,ct),jpg.Length,after,before){NativeCpuMilliseconds=nativeCpuMilliseconds-cpuStart};

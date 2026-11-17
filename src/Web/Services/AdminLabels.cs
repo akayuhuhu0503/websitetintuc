@@ -56,6 +56,7 @@ public static class AdminLabels
         ["VIDEO_PROCESSOR_START_FAILED"]="Không khởi chạy được FFmpeg/FFprobe",
         ["VIDEO_PROCESSOR_REJECTED"]="FFmpeg/FFprobe từ chối tệp",
         ["VIDEO_PROCESSOR_TIMEOUT"]="Xử lý video vượt thời gian cho phép",
+        ["VIDEO_TIMEOUT_RETRY_AUTHORIZED"]="Đã cho phép một lượt xử lý bổ sung sau lỗi hết thời gian",
         ["VIDEO_PROCESSOR_MEMORY_LIMIT"]="Xử lý video vượt giới hạn bộ nhớ",
         ["VIDEO_PROCESSOR_OUTPUT_LIMIT"]="Thông tin trả về của bộ xử lý vượt giới hạn",
         ["VIDEO_PROCESSOR_CANCELLED"]="Đã dừng xử lý video",
@@ -74,6 +75,7 @@ public static class AdminLabels
     public static string Role(string value)=>value switch{"Administrator"=>"Quản trị hệ thống","Editor"=>"Người viết","Publisher"=>"Người duyệt và xuất bản",_=>value};
     public static string Action(string value)=>value switch
     {
+        "video.processing.timeout-retry"=>"Cho phép thêm một lượt xử lý video hết thời gian",
         "SaveDraft"=>"Lưu bản nháp","Autosave"=>"Tự lưu bản nháp","Submit"=>"Gửi duyệt","Approve"=>"Duyệt bài","Reject"=>"Trả lại bài","PublishDirect"=>"Xuất bản trực tiếp","PublishApproved"=>"Xuất bản bài đã duyệt","Unpublish"=>"Gỡ bài","Trash"=>"Chuyển vào thùng rác","RestoreRevision"=>"Khôi phục phiên bản","RestoreTrash"=>"Khôi phục bài","BeginEdit"=>"Mở bản sửa","Clone"=>"Nhân bản bài",
         "AdminPasswordLogin"=>"Đăng nhập bằng mật khẩu","AdminPasswordFailed"=>"Đăng nhập chưa thành công","AdminPasswordLocked"=>"Đăng nhập bị khóa tạm thời",
         "SiteSaveDraft"=>"Lưu cấu hình nháp","SitePublish"=>"Áp dụng cấu hình","SiteRestoreDraft"=>"Khôi phục cấu hình","DisclosureCatalogConfirmed"=>"Xác nhận danh mục công khai thông tin",

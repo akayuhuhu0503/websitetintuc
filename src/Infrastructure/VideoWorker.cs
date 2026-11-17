@@ -29,7 +29,9 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
             foreach(var old in await expired.ToListAsync(ct)){old.State=old.Attempts>=3?VideoState.Failed:VideoState.Pending;old.Error="VIDEO_LEASE_EXPIRED";old.LeaseToken=null;old.LeaseUntilUtc=null;}
             await db.SaveChangesAsync(ct);
             if(await db.Set<VideoFile>().AnyAsync(x=>(x.State==VideoState.Scanning||x.State==VideoState.Processing)&&x.LeaseUntilUtc>=Now,ct)){await tx.CommitAsync(ct);return false;}
-            var queue=db.Set<VideoFile>().Where(x=>(x.State==VideoState.Pending||x.State==VideoState.ScanFailed||x.State==VideoState.Failed)&&x.Attempts<3&&x.AvailableUtc<=Now && (x.Original.ValidationStatus!=VideoOptions.NoAvPending || options.ApprovedManagedVideoWithoutAv));
+            var queue=db.Set<VideoFile>().Where(x=>((x.State==VideoState.Pending||x.State==VideoState.ScanFailed||x.State==VideoState.Failed)&&x.Attempts<3 ||
+                x.State==VideoState.Pending&&x.Attempts==3&&x.Error==VideoTimeoutRecovery.Authorized&&options.ProcessSeconds>=VideoOptions.DefaultProcessSeconds)
+                &&x.AvailableUtc<=Now && (x.Original.ValidationStatus!=VideoOptions.NoAvPending || options.ApprovedManagedVideoWithoutAv));
             if(onlyManaged)queue=queue.Where(x=>x.Original.ValidationStatus==VideoOptions.NoAvPending);
             if(only.HasValue)queue=queue.Where(x=>x.MediaAssetId==only.Value);
             var job=await queue.Include(x=>x.Original).OrderBy(x=>x.AvailableUtc).ThenBy(x=>x.MediaAssetId).FirstOrDefaultAsync(ct);if(job==null){await tx.CommitAsync(ct);return false;}
@@ -50,7 +52,7 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
                 db.ChangeTracker.Clear();
                 if(id!=Guid.Empty&&lease!=Guid.Empty)await db.Set<VideoFile>().Where(x=>x.MediaAssetId==id&&x.LeaseToken==lease&&(x.State==VideoState.Scanning||x.State==VideoState.Processing))
                     .ExecuteUpdateAsync(s=>s.SetProperty(x=>x.State,VideoState.Pending)
-                        .SetProperty(x=>x.Error,"VIDEO_HOST_STOPPED")
+                        .SetProperty(x=>x.Error,x=>x.Attempts==4?VideoTimeoutRecovery.Authorized:"VIDEO_HOST_STOPPED")
                         .SetProperty(x=>x.LeaseToken,(Guid?)null).SetProperty(x=>x.LeaseUntilUtc,(DateTimeOffset?)null)
                         .SetProperty(x=>x.AvailableUtc,Now).SetProperty(x=>x.Attempts,x=>x.Attempts>0?x.Attempts-1:0),cleanup.Token);
             }
@@ -61,6 +63,7 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
     }
     private async Task<bool> ProcessClaimAsync(Guid id,Guid lease,byte[] version,CancellationToken ct)
     {
+        processor.ResetOperationObservation(); // A pre-processing failure must not report the previous job's native phase.
         var watch=Stopwatch.StartNew();InquiryScanResult? scan=null;VideoOutput? output=null;var state=VideoState.Failed;var error="VIDEO_UNKNOWN_FAILURE";
         var file=await db.Set<VideoFile>().Include(x=>x.Original).AsNoTracking().SingleAsync(x=>x.MediaAssetId==id,ct);var session=await db.Set<VideoUploadSession>().AsNoTracking().SingleAsync(x=>x.Id==file.UploadSessionId,ct);
         var noAv=options.ApprovedManagedVideoWithoutAv && file.Original.ValidationStatus==VideoOptions.NoAvPending && file.Original.ScanStatus=="NotScanned" && file.ScannedUtc==null && file.ScannerProvider==null;
@@ -96,7 +99,7 @@ public sealed class VideoWorker(PortalDbContext db,StorageOptions storage,VideoO
             if(scan!=null){current.ScannerProvider=scan.Provider;current.ScannerVersion=scan.EngineVersion;current.SignatureVersion=scan.SignatureVersion;current.SignatureUpdatedUtc=scan.SignatureUpdatedUtc;current.ScannedUtc=Now;current.ScannedSha256=scan.State is InquiryScanState.Clean or InquiryScanState.Infected?file.Original.Sha256:null;current.Original.ScanStatus=scan.State.ToString();}
             if(state==VideoState.Ready&&output!=null){current.Mp4Key=output.Mp4;current.Mp4Sha256=output.Mp4Hash;current.Mp4Bytes=output.Mp4Bytes;current.PosterKey=output.Poster;current.PosterSha256=output.PosterHash;current.PosterBytes=output.PosterBytes;current.VideoCodec=output.Probe.Codec;current.AudioCodec=output.Probe.Audio;current.Width=output.Probe.Width;current.Height=output.Probe.Height;current.DurationSeconds=output.Probe.Duration;current.ReadyUtc=Now;current.Original.ValidationStatus=noAv?VideoOptions.NoAvValidated:"VideoValidated";}
             current.Original.IsQuarantined=true; // Originals are never served by generic media routes, even after Clean.
-            db.AuditLogs.Add(new(){Actor="video-worker",Action="video.processing.completed",ContentId=session.ContentId,Detail=JsonSerializer.Serialize(new{AssetId=id,Lease=lease,current.Attempts,Bytes=file.Original.ByteLength,file.Original.Sha256,State=state.ToString(),Policy=noAv?VideoOptions.NoAvValidated:"ScannerRequired",ScanStatus=noAv?"NotScanned":scan?.State.ToString(),current.Error,scan?.Provider,scan?.EngineVersion,scan?.SignatureVersion,scan?.SignatureUpdatedUtc,scan?.OutputSha256,Tools=processor.LastHealth,NativeCpuMs=output?.NativeCpuMilliseconds,Reused=output?.Reused,SourceProbe=output?.OriginalProbe,OutputProbe=output?.Probe,OutputHash=output?.Mp4Hash,PosterHash=output?.PosterHash,LatencyMs=watch.ElapsedMilliseconds,Utc=Now})});
+            db.AuditLogs.Add(new(){Actor="video-worker",Action="video.processing.completed",ContentId=session.ContentId,Detail=JsonSerializer.Serialize(new{AssetId=id,Lease=lease,current.Attempts,Bytes=file.Original.ByteLength,file.Original.Sha256,State=state.ToString(),Policy=noAv?VideoOptions.NoAvValidated:"ScannerRequired",ScanStatus=noAv?"NotScanned":scan?.State.ToString(),current.Error,scan?.Provider,scan?.EngineVersion,scan?.SignatureVersion,scan?.SignatureUpdatedUtc,scan?.OutputSha256,Tools=processor.LastHealth,options.ProcessSeconds,options.Threads,Operation=processor.LastOperation,DeadlineSeconds=processor.LastDeadlineSeconds,NativeCpuMs=output?.NativeCpuMilliseconds,Reused=output?.Reused,SourceProbe=output?.OriginalProbe,OutputProbe=output?.Probe,OutputHash=output?.Mp4Hash,PosterHash=output?.PosterHash,LatencyMs=watch.ElapsedMilliseconds,Utc=Now})});
             try{await db.SaveChangesAsync();await tx.CommitAsync();}catch(DbUpdateConcurrencyException){await tx.RollbackAsync();}
         }
         if(state==VideoState.Ready){db.ChangeTracker.Clear();await AttachReadyAsync(id,ct);}

@@ -17,6 +17,19 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
         ViewData["ManagedVideoNoAv"]=options.ApprovedManagedVideoWithoutAv;
         var actor=await permissions.GetAsync(UserId);if(!actor.Has(Permissions.ManageVideos)||!new[]{Permissions.ViewOwn,Permissions.ViewAll,Permissions.EditOwn,Permissions.EditAll,Permissions.Review}.Any(actor.Has))return Forbid();if(q?.Length>200)return BadRequest();
         ViewData["CanViewVideoDiagnostics"]=actor.Has(Permissions.ManageSettings);
+        ViewData["VideoProcessSeconds"]=options.ProcessSeconds;
+        if(actor.Has(Permissions.ManageSettings)&&actor.Has(Permissions.ManageMedia))
+        {
+            var retryScope=permissions.Scope(db.Contents.AsNoTracking(),actor)
+                .Where(c=>!c.IsTrashed&&(c.State==WorkflowState.Draft||c.State==WorkflowState.Rejected)&&
+                    (actor.Has(Permissions.EditAll)||c.OwnerUserId==UserId&&actor.Has(Permissions.EditOwn)));
+            ViewData["TimeoutRetries"]=await (from v in db.Set<VideoFile>().AsNoTracking()
+                join s in db.Set<VideoUploadSession>() on v.UploadSessionId equals s.Id
+                join c in retryScope on s.ContentId equals c.Id
+                where v.State==VideoState.Failed&&v.Error=="VIDEO_PROCESSOR_TIMEOUT"&&v.Attempts==3&&s.State==VideoUploadState.Completed
+                orderby s.CreatedUtc descending
+                select new VideoTimeoutRetryItem(v.MediaAssetId,c.Id,v.Original.OriginalName,v.Original.ByteLength,v.Attempts)).Take(50).ToListAsync();
+        }
         ViewData["VideoTools"]=await processor.HealthAsync(HttpContext.RequestAborted);
         var workerStatus=processor.WorkerStatus();
         ViewData["VideoWorkerCode"]=workerStatus.Code;
@@ -123,6 +136,13 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
     {
         var file=await db.Set<VideoFile>().Include(x=>x.Original).SingleOrDefaultAsync(x=>x.MediaAssetId==id&&x.Original.UploadedByUserId==UserId)??throw new MediaUploadException("Không tìm thấy video.",404);var session=await uploads.GetAsync(file.UploadSessionId,UserId);await uploads.AuthorizeAsync(UserId,session.ContentId,true);
         if(file.State is not(VideoState.Blocked or VideoState.ScanFailed or VideoState.Failed)||file.Attempts>=3)throw new MediaUploadException("Trạng thái hoặc giới hạn ba lần thử không cho retry.",409);file.State=VideoState.Pending;file.AvailableUtc=DateTimeOffset.UtcNow;file.Error="";db.AuditLogs.Add(new(){Actor=UserId,Action="video.processing.retry",ContentId=session.ContentId,Detail=id.ToString()});await db.SaveChangesAsync();return Json(new{queued=true});
+    });
+    [HttpPost("admin/videos/{id:guid}/retry-timeout"),ValidateAntiForgeryToken,RequestSizeLimit(4096)]
+    public Task<IActionResult> RetryTimeout(Guid id,CancellationToken ct)=>Guard(async()=>
+    {
+        await new VideoTimeoutRecovery(db,storage,options,permissions).QueueAsync(id,UserId,ct);
+        if(Request.HasFormContentType)return RedirectToAction(nameof(Index));
+        return Json(new{queued=true,maximumAttempts=4,notice="Đã cho phép thêm một lượt xử lý bản gốc, tối đa 30 phút chuyển mã. Không cần tải lại; chưa công khai video."});
     });
     [HttpPost("admin/videos/{id:guid}/cancel-job")]
     public Task<IActionResult> CancelJob(Guid id)=>Guard(async()=>

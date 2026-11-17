@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 if (args is ["--maintenance"]) { await MaintenanceChecks.RunAsync(); return; }
+if (args.Length == 4 && args[0] == "--timeout") { await TimeoutChecks.RunAsync(args[1], args[2], args[3]); return; }
 if (args.Length == 3 && args[0] == "--publication") { await PublicationChecks.RunAsync(args[1], args[2]); return; }
 
 // Lifecycle delta only: the existing 60-case HTTP workflow suite remains separate.
