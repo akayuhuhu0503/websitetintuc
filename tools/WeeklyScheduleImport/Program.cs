@@ -9,16 +9,22 @@ using Microsoft.Extensions.Configuration;
 // No automatic .env discovery, migrations, publication, backup SQL or operator grants.
 try
 {
-    if (args.Length == 0 || args[0] is not ("inspect" or "dry-run" or "import" or "reconcile" or "sync-links"))
-        throw new ArgumentException("Dùng inspect | dry-run | import | reconcile | sync-links. Xem docs/weekly-schedule-import.md.");
+    if (args.Length == 0 || args[0] is not ("preflight" or "inspect" or "dry-run" or "import" or "reconcile" or "sync-links"))
+        throw new ArgumentException("Dùng preflight | inspect | dry-run | import | reconcile | sync-links. Xem docs/weekly-schedule-import.md.");
     string Required(string key)
     {
         var i = Array.IndexOf(args, key); if (i < 1 || i + 1 >= args.Length || args[i + 1].StartsWith("--")) throw new ArgumentException("Thiếu " + key);
         return args[i + 1];
     }
-    var zip = Path.GetFullPath(Required("--zip")); var package = WeeklyPackage.Read(zip);
+    if (args.Contains("--iis-web") && args.Contains("--config")) throw new ArgumentException("Chỉ dùng --iis-web hoặc --config, không trộn hai cấu hình.");
+    if (args[0] == "preflight" && !args.Contains("--iis-web")) throw new ArgumentException("Tiền kiểm IIS cần --iis-web trỏ đúng web đang chạy.");
+    var zip = Path.GetFullPath(Required("--zip"));
     var output = Path.GetFullPath(Required("--out"));
-    if (args[0] is "inspect" or "dry-run")
+    // Verify the sealed installed bundle and real IIS/storage boundary BEFORE any SQL or output writes.
+    using var bundle = args.Contains("--iis-web") ? IisBundleRuntime.Load(Required("--iis-web")) : null;
+    bundle?.ValidateOperatorPaths(zip, output);
+    var package = WeeklyPackage.Read(zip);
+    async Task SaveSource()
     {
         if (Directory.Exists(output)) throw new IOException("Chọn thư mục kết quả mới để giữ bản đối soát cũ.");
         Directory.CreateDirectory(output);
@@ -27,15 +33,18 @@ try
         await File.WriteAllBytesAsync(Path.Combine(output, "original.xlsx"), package.Workbook);
         await WeeklyImporter.AtomicJson(Path.Combine(output, "inventory.json"), new { summary = package.Summary(), rows = package.Rows });
         package.WriteWorkbook(Path.Combine(output, "LichCT-pages-reviewed.xlsx"), new Dictionary<int, string?>());
-        if (args[0] == "inspect") { Console.WriteLine(JsonSerializer.Serialize(package.Summary(), WeeklyPackage.Json)); return; }
     }
-    else if (!Directory.Exists(output)) throw new IOException("Cần thư mục dry-run chứa bản sao lưu nguồn.");
-    if (WeeklyPackage.Hash(File.ReadAllBytes(Path.Combine(output, "source-backup.zip"))) != package.ZipSha256
-        || WeeklyPackage.Hash(File.ReadAllBytes(Path.Combine(output, "original.xlsx"))) != package.WorkbookSha256)
-        throw new InvalidDataException("Bản sao nguồn/Excel đã đổi; chưa mở SQL.");
-    var configPath = Path.GetFullPath(Required("--config"));
-    var config = new ConfigurationBuilder().AddJsonFile(configPath, false, false).Build();
-    if (string.IsNullOrWhiteSpace(config["WorkspaceRoot"])) config["WorkspaceRoot"] = Path.GetDirectoryName(configPath);
+    if (args[0] == "inspect") { await SaveSource(); Console.WriteLine(JsonSerializer.Serialize(package.Summary(), WeeklyPackage.Json)); return; }
+    if (args[0] is not ("dry-run" or "preflight"))
+    {
+        if (!Directory.Exists(output)) throw new IOException("Cần thư mục dry-run chứa bản sao lưu nguồn.");
+        if (WeeklyPackage.Hash(File.ReadAllBytes(Path.Combine(output, "source-backup.zip"))) != package.ZipSha256
+            || WeeklyPackage.Hash(File.ReadAllBytes(Path.Combine(output, "original.xlsx"))) != package.WorkbookSha256)
+            throw new InvalidDataException("Bản sao nguồn/Excel đã đổi; chưa mở SQL.");
+    }
+    var configPath = bundle == null ? Path.GetFullPath(Required("--config")) : null;
+    var config = bundle?.Configuration ?? new ConfigurationBuilder().AddJsonFile(configPath!, false, false).Build();
+    if (string.IsNullOrWhiteSpace(config["WorkspaceRoot"])) config["WorkspaceRoot"] = Path.GetDirectoryName(configPath!);
     var environment = config["DOTNET_ENVIRONMENT"] ?? config["ASPNETCORE_ENVIRONMENT"] ?? "Production";
     // The existing runtime profile/transport/boundary guards remain authoritative.
     if (!UatDeployment.Validate(config, environment) && !LanDemoDeployment.Validate(config, environment))
@@ -43,6 +52,15 @@ try
     var storage = StorageOptions.FromConfiguration(config); MediaService.ValidateStorage(storage);
     var policy = MediaUploadOptions.FromConfiguration(config, environment);
     await using var db = new PortalDbContext(DatabaseSettings.Options(config));
+    var target = bundle == null ? null : await bundle.VerifySqlAsync(db);
+    if (args[0] == "preflight")
+    {
+        Console.WriteLine(JsonSerializer.Serialize(new { status = "PREFLIGHT_PASS", site = bundle!.Site, publicUrl = config["Public:BaseUrl"],
+            server = target!.Server, database = target.Database, role = target.Principal, migrations = target.Migrations.Length,
+            mediaRoot = storage.MediaRoot, tempRoot = storage.TempRoot, managedPdfWithoutAv = policy.ApprovedManagedDocumentsWithoutAv,
+            source = package.Summary(), sqlWrites = 0, filesCreated = 0, note = "Quyền Windows kiểm tra bằng handle thư mục; chưa thử ghi. Quyền CMS và scanner sẽ kiểm tra ở Dry-run/Import." }, WeeklyPackage.Json));
+        return;
+    }
     var username = Required("--user");
     var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.NormalizedUserName == username.Normalize().ToUpperInvariant());
     if (user == null || user.IsDisabled || user.MustChangePassword || user.LockoutEnd > DateTimeOffset.UtcNow || user.TwoFactorEnabled || string.IsNullOrEmpty(user.PasswordHash))
@@ -55,7 +73,8 @@ try
     var importer = new WeeklyImporter(db, storage, policy, user.Id, config);
     if (args[0] == "dry-run")
     {
-        var plan = await importer.PlanAsync(package); var path = Path.Combine(output, "plan.json");
+        var plan = await importer.PlanAsync(package);
+        await SaveSource(); var path = Path.Combine(output, "plan.json");
         await WeeklyImporter.AtomicJson(path, plan);
         Console.WriteLine("DRY-RUN: " + string.Join(", ", plan.Rows.GroupBy(r => r.Action).Select(g => g.Key + "=" + g.Count())));
         Console.WriteLine("Plan SHA256: " + WeeklyPackage.Hash(File.ReadAllBytes(path))); return;
@@ -86,7 +105,7 @@ try
 catch (Exception error)
 {
     // Do not dump SQL exceptions, connection strings, config or stack traces to an operator log.
-    Console.Error.WriteLine(error is InvalidDataException or ArgumentException or UnauthorizedAccessException or IOException or MediaUploadException
+    Console.Error.WriteLine(error is WeeklyIisException iis ? "BLOCKED " + iis.Code + ": " + iis.Message : error is InvalidDataException or ArgumentException or UnauthorizedAccessException or IOException or MediaUploadException
         ? "BLOCKED: " + error.Message : "BLOCKED: " + error.GetType().Name + ". Dừng trước khi thử lại; chạy reconcile và xem báo cáo nguồn/plan. Không in cấu hình bí mật.");
     Environment.ExitCode = 1;
 }

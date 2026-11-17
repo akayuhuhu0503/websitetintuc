@@ -17,6 +17,10 @@ Gói đã kiểm kê: 43 PDF, 120 trang. Chỉ E48 (STT 42) sai: **2 → 3**. Gi
 
 Bốn hồ sơ vẫn có thể lưu nháp đúng tiêu đề nguồn; cán bộ phải đối soát trước khi gửi duyệt. Công cụ không sửa tiêu đề hoặc suy diễn tuần đúng. Các ngày dạng số chỉ được cảnh báo để rà soát, không chuyển đổi.
 
+## Chạy trực tiếp trên IIS (cập nhật PR #17)
+
+Dùng [hướng dẫn IIS](weekly-schedule-iis.md): chuyển CLI đã publish và ZIP nguồn ra ngoài webroot, chạy `NHAP-LICH.ps1` theo thứ tự Preflight → DryRun → Import → Reconcile → SyncLinks. CLI đọc và kiểm tra WebBundle hiện hành; không tạo bản sao cấu hình/secret.
+
 ## Chạy công cụ
 
 Build một lần trên máy Developer có .NET 10:
@@ -35,12 +39,12 @@ Kết quả gồm `source-backup.zip`, `original.xlsx`, `inventory.json` và `Li
 
 ### Dry-run và Import tại môi trường được cấp quyền
 
-Chỉ thực hiện sau khi chủ hệ thống cấp quyền thực thi trên đích. Cần cấu hình JSON runtime hiện hành hợp lệ, có đường dẫn storage thực sự và cùng Application Role, TLS, danh tính SQL của ứng dụng. CLI **không nhận cấu hình portable chưa xác định storage**, không tự sửa JSON/manifest hay đoán kho IIS. Chạy tại nơi có quyền truy cập đúng kho tệp của môi trường đích; không dùng một kho trên Developer để giả làm kho IIS.
+Chỉ thực hiện sau khi chủ hệ thống cấp quyền thực thi trên đích. Với IIS WebBundle, dùng `--iis-web` trỏ đúng thư mục web đang chạy. Công cụ kiểm tra manifest/hash, metadata IIS, HTTPS và kho thực tế trước khi mở SQL hoặc ghi tệp; tái sử dụng cấu hình/secret trong bộ nhớ. Không cần runtime.json mới. Cách cũ `--config` chỉ dành cho cấu hình đã xác định đầy đủ storage ngoài WebBundle; không trộn hai cách hoặc dùng kho Developer thay IIS.
 
 Tài khoản CMS cần quyền soạn/sửa bài, tải tài liệu và phạm vi chuyên mục 76. Dùng tài khoản hiện có; nhập mật khẩu trực tiếp ở console, không đặt vào lệnh/file. Tài khoản khóa, chưa đổi mật khẩu hoặc yêu cầu MFA sẽ bị chặn; CLI không vượt các điều kiện này.
 
 ```powershell
-dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll dry-run --zip C:\website_upload\website_upload.zip --config C:\GDLA-Private\runtime.json --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
+dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll dry-run --zip C:\website_upload\website_upload.zip --iis-web D:\WWW_GDLA\publish\TTDL-IIS\web --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
 ```
 
 Đọc `inventory.json` và `plan.json`: mỗi STT có Create/Reuse/Resume/AlreadyImported/Conflict. Plan ràng buộc ZIP, workbook, SQL server/database/schema 18, Application Role, kho media và người nhập. Không tạo chuyên mục 76 nếu thiếu; không ghi đè hồ sơ trùng tiêu đề hoặc PDF chưa đối soát được. Nếu có Conflict, dừng trước khi ghi.
@@ -48,7 +52,7 @@ dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll dry-run --zip C:\webs
 Sau khi kiểm tra đúng plan và được phép nhập, dùng SHA256 **thực tế do dry-run in ra**:
 
 ```powershell
-dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll import --zip C:\website_upload\website_upload.zip --config C:\GDLA-Private\runtime.json --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import --confirm-plan SHA256_CUA_PLAN
+dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll import --zip C:\website_upload\website_upload.zip --iis-web D:\WWW_GDLA\publish\TTDL-IIS\web --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import --confirm-plan SHA256_CUA_PLAN
 ```
 
 Chỉ tạo **StaticPage / chuyên mục 76 / bản nháp**, giữ nguyên PDF/tên/hash, gắn Attachment. Không thiết lập `WeeklyYear`, `WeeklyWeek`, bảng lịch suy diễn hoặc `WeeklyScheduleRelease`. Năm/tuần đã có lịch phát hành nhưng không khớp hồ sơ sẽ được báo Conflict để xử lý từ hồ sơ hiện hữu.
@@ -66,7 +70,7 @@ Chính sách PDF hiện hành vẫn áp dụng: kiểm định cấu trúc thậ
 Đối soát chỉ đọc, có thể dựng lại receipt bị mất:
 
 ```powershell
-dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll reconcile --zip C:\website_upload\website_upload.zip --config C:\GDLA-Private\runtime.json --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
+dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll reconcile --zip C:\website_upload\website_upload.zip --iis-web D:\WWW_GDLA\publish\TTDL-IIS\web --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
 ```
 
 ## Sync Links sau khi cán bộ công bố
@@ -74,7 +78,7 @@ dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll reconcile --zip C:\we
 Cán bộ xem từng ContentId trong CMS, đối chiếu PDF/cảnh báo rồi dùng luồng **gửi duyệt → duyệt → xuất bản** hiện hành. Công cụ không có lệnh thực hiện thay các thao tác này.
 
 ```powershell
-dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll sync-links --zip C:\website_upload\website_upload.zip --config C:\GDLA-Private\runtime.json --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
+dotnet .local/tools/weekly-import/WeeklyScheduleImport.dll sync-links --zip C:\website_upload\website_upload.zip --iis-web D:\WWW_GDLA\publish\TTDL-IIS\web --user TEN_CAN_BO --out C:\GDLA-Private\weekly-import
 ```
 
 Sync đọc PublishedRevisionId hiện hành, tiêu đề/chuyên mục/attachment, chính sách file; GET bài thật và PDF không đăng nhập, yêu cầu HTTP 200/MIME đúng/hash khớp, kiểm tra lại trạng thái SQL rồi mới điền D. Không chấp nhận redirect, trang đăng nhập, bài nháp, tệp khác hoặc bài đã thu hồi. Link dùng `/bai-viet/{ContentId}` trên host runtime thật.
