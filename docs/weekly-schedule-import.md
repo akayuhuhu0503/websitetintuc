@@ -1,5 +1,7 @@
 # Nhập lịch công tác từ Excel/PDF
 
+**Phương án hiện hành:** [WEB IMPORT từ máy Developer qua HTTPS Admin](weekly-schedule-web.md). Không cần thao tác trên IIS hoặc kết nối SQL trực tiếp. Phần dưới giữ tài liệu CLI SQL cũ, chỉ dùng khi được cấp quyền riêng.
+
 Công cụ CLI độc lập, không cần cập nhật website để chạy. Không có lệnh xuất bản, migration, cấp quyền hay thay cấu hình. Dữ liệu được ghi qua `WorkflowService` và `EditorialDocumentService`, tài khoản CMS được xác thực tại console và kiểm tra lại quyền theo từng thao tác.
 
 ## Đầu vào và kết quả kiểm kê

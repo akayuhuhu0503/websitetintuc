@@ -1,5 +1,7 @@
 # Nhập 43 lịch tuần trực tiếp trên IIS
 
+**Phương án cũ, giữ để tương thích.** Yêu cầu hiện hành dùng [WEB IMPORT trên máy Developer](weekly-schedule-web.md), không chuyển công cụ hay chạy lệnh trên IIS.
+
 Chỉ chuyển **toàn bộ thư mục CLI đã publish** và `website_upload.zip` vào một thư mục riêng, ví dụ `D:\GDLA-WeeklyImport`. Không đặt trong `web`, `.runtime`, `wwwroot`, kho media hoặc virtual directory nào. Không copy/chỉnh `.env`, `uat.json`, manifest; không tạo `runtime.json` hoặc bản sao secret. Không cần deploy lại website.
 
 Developer publish công cụ (không build/deploy Web):
