@@ -6,7 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Infrastructure;
 
-public sealed class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null, VideoOptions? videoOptions = null)
+public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html, MediaUploadOptions? mediaOptions = null, StorageOptions? storage = null, TimeProvider? clock = null, VideoOptions? videoOptions = null)
 {
     public async Task<IReadOnlyDictionary<string,string>> InspectRequirementsAsync(Guid id)
     {

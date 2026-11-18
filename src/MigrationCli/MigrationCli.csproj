@@ -1,1 +1,1 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../Infrastructure/Infrastructure.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../Infrastructure/Infrastructure.csproj" /><Compile Remove="SafeSourceClient.cs;SourceParser.cs;SourceSrcset.cs" /></ItemGroup></Project>

@@ -1,0 +1,15 @@
+@using LandPortal.Infrastructure
+@model SourceSyncPage
+<div class="source-sync-summary">
+<p><strong>@(Model.Settings.Enabled?"Đang bật":"Đang tắt")</strong> · @(Model.Running?"Đang kiểm tra nguồn":"Sẵn sàng")</p>
+<p>Kiểm tra gần nhất: @(Model.Settings.LastCheckedUtc?.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm dd/MM/yyyy")??"Chưa kiểm tra")</p>
+<p>Mới phát hiện: @Model.Counts.GetValueOrDefault("Queued") · Chờ biên tập: @Model.Counts.GetValueOrDefault("Ready") · Nguồn cập nhật: @Model.Counts.GetValueOrDefault("Changed") · Cần kiểm tra/lỗi: @(Model.Counts.GetValueOrDefault("Review")+Model.Counts.GetValueOrDefault("Error"))</p>
+@if(Model.Settings.LastError is string error){<p class="validation-summary-errors">@error</p>}
+</div>
+<div class="table-responsive"><table><thead><tr><th>Bài nguồn</th><th>Trạng thái</th><th>Kiểm tra gần nhất</th><th>Thao tác</th></tr></thead><tbody>
+@foreach(var row in Model.Items){<tr><td><a href="/admin/source-sync/@row.Id">@(string.IsNullOrEmpty(row.Title)?"Chờ lấy tiêu đề từ nguồn":row.Title)</a>@if(row.Error!=null){<small class="source-sync-warning">@row.Error</small>}</td><td>@SourceSyncPolicy.Label(row.Status)</td><td>@row.UpdatedUtc.ToOffset(TimeSpan.FromHours(7)).ToString("HH:mm dd/MM/yyyy")</td><td><a href="@row.Url" target="_blank" rel="noopener noreferrer">Xem nguồn</a> · <a href="/admin/source-sync/@row.Id">Xem trước</a>
+@if(row.Status!="Ignored"){<form action="/admin/source-sync/@row.Id/state" method="post" data-sync-form>@Html.AntiForgeryToken()<input type="hidden" name="action" value="ignore" /><button class="link-button">Bỏ qua</button></form>}
+@if(row.Status is "Error" or "Review"){<form action="/admin/source-sync/@row.Id/state" method="post" data-sync-form>@Html.AntiForgeryToken()<input type="hidden" name="action" value="retry" /><button class="link-button">Thử lại</button></form>}</td></tr>}
+@if(Model.Items.Count==0){<tr><td colspan="4">Không có bài trong danh sách này. Đồng bộ không tự công bố nội dung.</td></tr>}
+</tbody></table></div>
+<nav class="pagination" aria-label="Phân trang hàng chờ">@if(Model.Page>1){<a href="@Url.Action("Index",new{page=Model.Page-1,q=Model.Query,status=Model.Status})">Trang trước</a>}<span>Trang @Model.Page · @Model.Total bài</span>@if(Model.Page*20<Model.Total){<a href="@Url.Action("Index",new{page=Model.Page+1,q=Model.Query,status=Model.Status})">Trang sau</a>}</nav>

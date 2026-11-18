@@ -1,0 +1,16 @@
+@using LandPortal.Infrastructure
+@using LandPortal.Domain
+@model SourceSyncCheckpoint
+@{Layout="_AdminLayout";ViewData["Title"]="Xem bài đồng bộ";var item=(CrawlItem)ViewBag.Item;var existing=ViewBag.Existing as ContentRevision;}
+<a href="/admin/source-sync">← Hàng chờ QLDD</a><h1>@(Model.Title.Length>0?Model.Title:"Bài chưa thu thập được")</h1>
+<p>@SourceSyncPolicy.Label(item.Status) · <a href="@item.SourceUrl" target="_blank" rel="noopener noreferrer">Xem bài gốc tại QLDD</a></p>
+<div id="sync-feedback" role="status" aria-live="polite"></div>
+@if(Model.Warnings.Count>0){<div class="validation-summary-errors"><h2>Cần kiểm tra trước khi gửi duyệt</h2><ul>@foreach(var warning in Model.Warnings){<li>@warning</li>}</ul></div>}
+@if(Model.Source is {} source){<dl><dt>Ngày đăng nguồn</dt><dd>@(source.OriginalDateText.Length==0?"Nguồn không cung cấp":source.OriginalDateText) (@source.DatePrecision)</dd><dt>Tác giả</dt><dd>@(source.Author.Length==0?"Nguồn không cung cấp":source.Author)</dd><dt>Chuyên mục nguồn</dt><dd>@source.PrimaryCategoryId</dd></dl>
+<div class="source-sync-comparison"><section><h2>Nội dung nhận từ nguồn</h2><p><strong>@source.Summary</strong></p><div class="source-sync-preview">@Html.Raw(SourceSyncMedia.Preview(source))</div></section>
+@if(existing!=null){<section><h2>Bản CMS hiện tại (không bị thay đổi)</h2><h3>@existing.Title</h3><p>@existing.Summary</p><div>@(new HtmlPolicy().PlainText(existing.BodyHtml))</div></section>}</div>
+<h2>Tài nguyên đã lưu riêng</h2><p>Chưa gắn vào bài và chưa được coi là đã quét virus. Khi chuyển sang nháp, hệ thống kiểm định theo chính sách hiện hành; tệp không đạt sẽ bị loại và ghi cảnh báo.</p>
+<ul>@foreach(var file in Model.Assets){<li>@file.Name · @(file.Bytes/1024) KB · @file.Mime</li>}</ul>}
+@if(ViewBag.ExistingId is Guid id){<p><a class="button" href="/admin/edit/@id">Mở bài hiện có trong CMS</a></p>}
+else if(item.Status is "Ready" or "Review" && (bool)ViewBag.CanCreate){<form method="post" action="/admin/source-sync/@item.Id/draft" data-sync-form>@Html.AntiForgeryToken()<input type="hidden" name="hash" value="@Model.Hash"/><button class="button">Chuyển vào bản nháp biên tập</button></form>}
+@section Scripts {<link rel="stylesheet" href="~/css/source-sync.css" asp-append-version="true"/><script src="~/js/source-sync.js" asp-append-version="true" defer></script>}

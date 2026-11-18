@@ -1,0 +1,22 @@
+@using LandPortal.Infrastructure
+@using LandPortal.MigrationCli
+@using LandPortal.Domain
+@model SourceSyncPage
+@{ Layout="_AdminLayout"; ViewData["Title"]="Đồng bộ QLDD"; var categories=(List<Category>)ViewBag.Categories; }
+<header class="page-header"><div><h1>Đồng bộ QLDD</h1><p>Nhận tin từ qldd.mae.gov.vn vào hàng chờ. Cán bộ kiểm tra và gửi duyệt như bài viết thông thường.</p></div></header>
+<p class="help-text">Mỗi lượt xem tối đa 20 bài gần đây, lấy tối đa 3 bài chi tiết; không quét toàn bộ lịch sử. Tự kiểm tra mỗi 5 phút khi website đang hoạt động. IIS dừng/nghỉ thì việc kiểm tra sẽ tiếp tục khi Web chạy lại.</p>
+<div id="sync-feedback" role="status" aria-live="polite"></div>
+<div class="source-sync-actions">
+<form method="post" action="/admin/source-sync/check" data-sync-form>@Html.AntiForgeryToken()<button class="button">Kiểm tra bài mới ngay</button></form>
+<form method="post" action="/admin/source-sync/configure" data-sync-form>@Html.AntiForgeryToken()<label>Đồng bộ định kỳ <select name="enabled"><option value="false" selected="@(!Model.Settings.Enabled)">Tắt</option><option value="true" selected="@Model.Settings.Enabled">Bật</option></select></label><button class="button secondary">Lưu</button></form>
+</div>
+<details class="settings-panel"><summary>Ánh xạ chuyên mục nguồn → chuyên mục GDLA</summary>
+<p>Chọn đúng chuyên mục đích; không tự đoán theo tên hoặc số ID. Lựa chọn này không sửa cấu trúc chuyên mục CMS.</p>
+@foreach(var source in SourceCatalog.Categories.Where(x=>SourceSyncStore.Categories.Contains(x.Id))){
+<form method="post" action="/admin/source-sync/configure" class="source-sync-mapping" data-sync-form>
+@Html.AntiForgeryToken()<input type="hidden" name="sourceCategory" value="@source.Id" /><label for="mapping-@source.Id">@source.Name</label>
+<select name="targetCategory" id="mapping-@source.Id"><option value="">Chưa ánh xạ</option>@foreach(var category in categories){<option value="@category.Id" selected="@(Model.Settings.Categories.GetValueOrDefault(source.Id)==category.Id)">@category.Name</option>}</select><button class="button secondary">Lưu ánh xạ</button></form>}
+</details>
+<form method="get" class="source-sync-actions" id="sync-filter"><label>Tìm tiêu đề <input name="q" value="@Model.Query" maxlength="200" /></label><label>Trạng thái <select name="status"><option value="">Tất cả</option>@foreach(var s in new[]{"Queued","Ready","Review","Changed","Error","Drafted","Existing","Ignored"}){<option value="@s" selected="@(Model.Status==s)">@SourceSyncPolicy.Label(s)</option>}</select></label><button class="button secondary">Lọc</button></form>
+<div data-sync-results>@await Html.PartialAsync("_Results",Model)</div>
+@section Scripts {<link rel="stylesheet" href="~/css/source-sync.css" asp-append-version="true" /><script src="~/js/source-sync.js" asp-append-version="true" defer></script>}
