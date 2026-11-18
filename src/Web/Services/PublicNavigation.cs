@@ -48,6 +48,7 @@ public sealed class PublicNavigation(PortalDbContext db, PublicSiteService sites
     {
         var categories = VisibleCategories(site.Revision);
         var items = site.Menus.ToList();
+        var expanded = new HashSet<Guid>();
         // Identify the configured News route, never infer a category from its name.
         foreach (var news in site.Menus.Where(x => x.Position == "main" && x.Url == "/tin-tuc"))
         {
@@ -55,6 +56,21 @@ public sealed class PublicNavigation(PortalDbContext db, PublicSiteService sites
             if (news.ParentId is Guid parent)
             {
                 var group = site.Menus.SingleOrDefault(x => x.Id == parent);
+                // Older CMS menus already list categories beside the News overview.
+                // Expand that group once, not the overview into a duplicate submenu.
+                if (group is not null && site.Revision.Menus.Any(x => x.ParentId == parent && x.TargetKind == "Category"))
+                {
+                    if (!expanded.Add(parent)) continue;
+                    var replaced = items.Where(x => x.ParentId == parent &&
+                        (x.Url == "/tin-tuc" || x.Url?.StartsWith("/chuyen-muc/", StringComparison.Ordinal) == true))
+                        .Select(x => x.Id).ToHashSet();
+                    for (var depth = 0; depth < 4; depth++)
+                        replaced.UnionWith(items.Where(x => x.ParentId is Guid p && replaced.Contains(p)).Select(x => x.Id).ToArray());
+                    items.RemoveAll(x => replaced.Contains(x.Id));
+                    items[items.FindIndex(x => x.Id == parent)] = group with { Url = "/tin-tuc" };
+                    items.AddRange(CategoryItems(categories, parent));
+                    continue;
+                }
                 // Do not turn a generic parent containing unrelated routes into News.
                 var siblings = site.Revision.Menus.Where(x => x.ParentId == parent);
                 if (group is not null && !siblings.Any(x => x.TargetKind == "Route" && x.RouteKey != "News")) root = group;
