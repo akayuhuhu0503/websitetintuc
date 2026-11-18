@@ -97,7 +97,11 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
     editor.editor.setAttribute('aria-label', 'Nội dung bài viết');
     document.querySelectorAll<HTMLInputElement>('input[id^="jodit-toolbar-focus-helper"],input[name^="jodit-toolbar-focus-helper"]').forEach(input => input.setAttribute('aria-label', 'Điều hướng thanh công cụ soạn thảo'));
     source.hidden = true;
-    const notify = (message: string, error = false) => { feedback.textContent = message; feedback.classList.toggle('has-error', error); };
+    const notify = (message: string, error = false) => {
+        for(const target of [feedback,document.querySelector<HTMLElement>('#editor-action-feedback')]){
+            if(target){target.textContent=message;target.classList.toggle('has-error',error);}
+        }
+    };
     const changed = () => {
         if (!canSave || conflicted) return;
         dirty = true; generation++; form.querySelectorAll<HTMLButtonElement>('[data-readiness-blocked]').forEach(b=>{b.disabled=false;delete b.dataset.readinessBlocked;}); notify('Có thay đổi chưa lưu. Hệ thống sẽ tự lưu sau khi bạn ngừng nhập.');

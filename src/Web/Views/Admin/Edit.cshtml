@@ -38,6 +38,7 @@
 <details class="editor-advanced" open="@(Model.Kind is LandPortal.Domain.ContentKind.LegalDocument or LandPortal.Domain.ContentKind.DraftDocument || Model.Metadata.WeeklyYear != null)"><summary>Thông tin theo loại bài và tùy chọn nâng cao</summary><partial name="_TypedMetadata" model="Model" /><partial name="_V05Metadata" model="Model" /></details>
     </div>
     <aside class="editor-settings" id="editor-actions" tabindex="-1">
+        <p id="editor-action-feedback" class="editor-feedback" role="status" aria-live="polite"></p>
         <section class="settings-panel"><h2>Hoàn tất bài viết</h2><div id="editor-workflow-readiness" class="editor-workflow-readiness" role="status" aria-live="polite">Lưu nháp để kiểm tra các thông tin còn thiếu. Bạn vẫn có thể lưu khi chưa hoàn chỉnh.</div><p class="form-help">Mỗi lần duyệt gắn với phiên bản cụ thể. Bản sửa sau duyệt cần được gửi duyệt lại.</p>
             @if (Model.CanSave) { <button class="button secondary full-width" type="submit" name="intent" value="Save" data-save>Lưu bản nháp</button> }
             @if (Model.CanSubmit && Model.CanSave) { <button class="button full-width" type="submit" name="intent" value="Submit" data-save-submit>Gửi duyệt</button> }

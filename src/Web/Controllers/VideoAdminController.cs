@@ -30,8 +30,15 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
                 orderby s.CreatedUtc descending
                 select new VideoTimeoutRetryItem(v.MediaAssetId,c.Id,v.Original.OriginalName,v.Original.ByteLength,v.Attempts)).Take(50).ToListAsync();
         }
-        ViewData["VideoTools"]=await processor.HealthAsync(HttpContext.RequestAborted);
         var workerStatus=processor.WorkerStatus();
+        // The running Web processor already checks tools every 30 seconds and
+        // signs its observation. Listing videos must not hash both binaries and
+        // launch three native processes again. This is display only; processing
+        // and publication still perform all existing proof/hash checks.
+        var toolHealth=!options.Enabled?new VideoToolHealth(false,"VIDEO_DISABLED"):
+            workerStatus.Code is "VIDEO_WORKER_READY" or "VIDEO_WORKER_BLOCKED" && workerStatus.Observation is {} observation
+                ?observation.Tools:new VideoToolHealth(false,workerStatus.Code);
+        ViewData["VideoTools"]=toolHealth;
         ViewData["VideoWorkerCode"]=workerStatus.Code;
         ViewData["VideoWorkerObservation"]=workerStatus.Observation;
         var contents=permissions.Scope(db.Contents.AsNoTracking(),actor).Where(x=>x.Kind==ContentKind.Video);
@@ -50,7 +57,7 @@ public sealed class VideoAdminController(PortalDbContext db,VideoOptions options
                 if(fileStatus=="Ready"&&(!options.Enabled||!proofs.Any(v=>v.MediaAssetId==file.MediaAssetId&&VideoReadiness.HasProof(v,environment.IsDevelopment(),options))))fileStatus="PolicyBlocked";
                 return item with{FileState=fileStatus,AssetId=file.MediaAssetId,Uploader=file.Uploader??"Tài khoản không còn hoạt động"};}).ToList();
         }
-        return View("~/Views/VideoAdmin/Index.cshtml",new VideoIndexModel{Items=items,Query=q,State=state,Page=page,Total=total,Enabled=options.Enabled,CanCreate=actor.Has(Permissions.Create),Processor=processor.LastHealth!.Code});
+        return View("~/Views/VideoAdmin/Index.cshtml",new VideoIndexModel{Items=items,Query=q,State=state,Page=page,Total=total,Enabled=options.Enabled,CanCreate=actor.Has(Permissions.Create),Processor=toolHealth.Code});
     }
     [HttpGet("admin/videos/upload/{contentId:guid}")]
     public async Task<IActionResult> Upload(Guid contentId)

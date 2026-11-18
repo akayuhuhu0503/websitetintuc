@@ -98,6 +98,44 @@ public sealed class PublicContentQuery(PortalDbContext db, MediaUploadOptions? m
         // revision between the two reads is omitted, never served from a cache.
         return ids.Where(byRevision.ContainsKey).Select(id=>byRevision[id]).ToList();
     }
+    // SQL TOP per category, then one narrow materialization with a fresh public
+    // pointer check. Empty/quiet categories cannot be crowded out by busy ones.
+    public async Task<Dictionary<int,List<PublicRow>>> CategoryCardsAsync(int[] categoryIds,int limit=4,Guid[]? pins=null)
+    {
+        if(categoryIds.Length>200 || limit is <1 or >12)throw new ArgumentOutOfRangeException(nameof(limit));
+        if(categoryIds.Length==0)return [];
+        var articles=HomeArticles();
+        // Candidate IDs only: same public/disclosure/weekly fences as HomeArticles,
+        // without card/search/configuration/media joins in every per-group sort.
+        // Published() rechecks the pointer and all media policy on materialization.
+        var eligible=from c in db.Contents.AsNoTracking()
+            join r in db.Revisions.AsNoTracking() on c.PublishedRevisionId equals (Guid?)r.Id
+            where c.IsPublic&&!c.IsTrashed&&c.Kind==ContentKind.Article&&r.Metadata.WeeklyWeek==null
+                && !db.Categories.Any(cat=>cat.Id==r.PrimaryCategoryId&&cat.Slug=="lich-tuan")
+                && (r.Metadata.DisclosureGroupId==null||db.DisclosureGroups.Any(g=>g.Id==r.Metadata.DisclosureGroupId&&g.Status=="NameApproved"))
+            select new {c.Id,RevisionId=r.Id,SourceDate=r.Metadata.PublicationDate??c.SourcePublishedDate,c.PublishedAtUtc};
+        var keys=await db.Categories.Where(c=>categoryIds.Contains(c.Id)).SelectMany(category=>eligible
+            .Where(r=>db.RevisionCategories.Any(rc=>rc.RevisionId==r.RevisionId&&rc.CategoryId==category.Id))
+            .OrderByDescending(x=>x.SourceDate??(x.PublishedAtUtc==null?(DateOnly?)null:DateOnly.FromDateTime(x.PublishedAtUtc.Value.AddHours(7).Date)))
+            .ThenByDescending(x=>x.PublishedAtUtc).ThenBy(x=>x.Id).Take(limit)
+            .Select(x=>new CategoryCardKey{CategoryId=category.Id,RevisionId=x.RevisionId}))
+            .TagWith("HomeCategoryKeys").ToListAsync();
+        if(pins is {Length:>0}){
+            var pinKeys=await (from r in articles where pins.Contains(r.Id)
+                join rc in db.RevisionCategories on r.RevisionId equals rc.RevisionId
+                where categoryIds.Contains(rc.CategoryId) select new CategoryCardKey{CategoryId=rc.CategoryId,RevisionId=r.RevisionId}).ToListAsync();
+            keys.AddRange(pinKeys);
+        }
+        var ids=keys.Select(x=>x.RevisionId).Distinct().ToArray();
+        if(ids.Length==0)return [];
+        var rows=await ForDisplay(Published(requireCleanThumbnail:true).Where(x=>ids.Contains(x.RevisionId))).TagWith("HomeCategoryCards").ToDictionaryAsync(x=>x.RevisionId);
+        return keys.GroupBy(x=>x.CategoryId).ToDictionary(g=>g.Key,g=>g.Select(x=>x.RevisionId).Distinct()
+            .Where(rows.ContainsKey).Select(id=>rows[id])
+            .OrderByDescending(x=>x.SourceDate??(x.PublishedUtc==null?(DateOnly?)null:DateOnly.FromDateTime(x.PublishedUtc.Value.AddHours(7).Date)))
+            .ThenByDescending(x=>x.PublishedUtc).ThenBy(x=>x.Id).ToList());
+    }
+    private sealed class CategoryCardKey { public int CategoryId {get;init;} public Guid RevisionId {get;init;} }
+
     public IQueryable<PublicRow> DocumentRows(Guid[] revisionIds)=>Published().Where(x=>revisionIds.Contains(x.RevisionId))
         .Select(x=>new PublicRow{Id=x.Id,RevisionId=x.RevisionId,Kind=x.Kind,Title=x.Title,SourceDate=x.SourceDate,PublishedUtc=x.PublishedUtc,OriginalDateText=x.OriginalDateText,CategoryName=x.CategoryName,CategorySlug=x.CategorySlug,Number=x.Number,Authority=x.Authority,DocumentType=x.DocumentType,IssuedDate=x.IssuedDate,EffectivenessStatus=x.EffectivenessStatus});
     public static IOrderedQueryable<PublicRow> Relevant(IQueryable<PublicRow> rows, string? query)

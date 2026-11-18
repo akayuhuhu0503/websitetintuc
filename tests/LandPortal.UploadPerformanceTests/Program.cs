@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -18,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
+if(args.Length==2 && args[0]=="--video-health") { await VideoHealthMeasurement.Run(args[1]); return; }
 if(args.Length!=6 || !Regex.IsMatch(args[0],"^LPPerf_[a-f0-9]{12}$"))throw new ArgumentException("New isolated LocalDB instance/run/host required");
 var root=Directory.GetCurrentDirectory();var run=Path.GetFullPath(args[1]);var host=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests","perf-upload-"),StringComparison.OrdinalIgnoreCase)||!host.StartsWith(run+Path.DirectorySeparatorChar)||!File.Exists(host)||File.Exists(Path.Combine(run,"result.json")))throw new Exception("New exact test run required");
@@ -50,6 +51,10 @@ try {
   var user=new PortalUser{UserName="fixture-"+entry.Item1,Email=entry.Item1+"@example.invalid",DisplayName="Isolated "+entry.Item1,EmailConfirmed=true,LockoutEnabled=true};var password="Aa1!"+Convert.ToHexString(RandomNumberGenerator.GetBytes(12));
   Check((await users.CreateAsync(user,password)).Succeeded,"Identity fixture "+entry.Item1);
   Check((await users.AddClaimsAsync(user,entry.Item2.Select(p=>new Claim("permission",p)))).Succeeded,"Scoped claims "+entry.Item1);accounts[entry.Item1]=(user,password);
+ }
+ if(args[4] is "Ux" or "UxHome"){
+ await users.AddClaimsAsync(accounts["writer"].User,new[]{Permissions.ViewAll,Permissions.EditAll,Permissions.Review,Permissions.ManageSettings,Permissions.ManageSite,Permissions.ViewSite}.Select(p=>new Claim("permission",p)));
+ await UxMeasurement.Seed(options,accounts["writer"].User.Id);
  }
  stage="start-real-http";
  var listener=new System.Net.Sockets.TcpListener(IPAddress.Loopback,0);listener.Start();var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();var url="http://127.0.0.1:"+port;
@@ -84,6 +89,20 @@ web=Process.Start(start)!;stdout=web.StandardOutput.ReadToEndAsync();stderr=web.
  async Task<HttpResponseMessage> Upload(HttpClient c,string route,string filename,string mime,byte[] bytes,bool csrf=true){using var form=new MultipartFormDataContent();var file=new ByteArrayContent(bytes);file.Headers.ContentType=new(mime);form.Add(file,"file",filename);using var req=new HttpRequestMessage(HttpMethod.Post,route){Content=form};if(csrf)req.Headers.Add("X-CSRF-TOKEN",await Token(c));return await c.SendAsync(req);}
  byte[] Image(SKEncodedImageFormat f){using var bitmap=new SKBitmap(12,8);bitmap.Erase(SKColors.DarkRed);using var image=SKImage.FromBitmap(bitmap);using var bytes=image.Encode(f,90);return bytes.ToArray();}
  byte[] Office(bool word){using var mem=new MemoryStream();using(var zip=new ZipArchive(mem,ZipArchiveMode.Create,true)){void Entry(string n,string s){using var w=new StreamWriter(zip.CreateEntry(n).Open());w.Write(s);}var main=word?"word/document.xml":"xl/workbook.xml";var type=word?OfficeDocumentPolicy.Docx+".main+xml":OfficeDocumentPolicy.Xlsx+".main+xml";Entry("[Content_Types].xml","<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/"+main+"\" ContentType=\""+type+"\"/>"+(word?"":"<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>")+"</Types>");Entry("_rels/.rels","<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\""+main+"\"/></Relationships>");Entry(main,word?"<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Fixture document</w:t></w:r></w:p></w:body></w:document>":"<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Fixture\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");if(!word){Entry("xl/_rels/workbook.xml.rels","<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>");Entry("xl/worksheets/sheet1.xml","<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Fixture</t></is></c></row></sheetData></worksheet>");}}return mem.ToArray();}
+if(args[4]=="UxHome"){ await UxMeasurement.ReadPages(guest,run,Check,homeOnly:true); if(args[5]!="baseline")await UxCorrectness.Run(options,guest,run,Check); stage="COMPLETE";return; }
+if(args[4]=="Ux"){
+ await UxMeasurement.ReadPages(writer,run,Check,guest:guest);
+ var draft=await Save();var uxCid=Id(draft);
+ for(int i=0;i<4;i++){await Page(writer,"/admin/edit/"+uxCid);draft=await Save(draft);}
+ using(var image=await Upload(writer,"/admin/media/upload?contentId="+uxCid,"fixture.png","image/png",Image(SKEncodedImageFormat.Png))){Check(image.IsSuccessStatusCode,"UX PNG upload");cover=JsonDocument.Parse(await image.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();}
+ var stale=draft;draft=await Save(draft);
+ try{await Save(stale);throw new Exception("Stale rowversion accepted");}catch(Exception e)when(e.Message.Contains("status 409")){Check(true,"Stale editor rejected");}
+ draft=await Act(writer,draft,"Submit");draft=await Act(reviewer,draft,"Approve");draft=await Act(publisher,draft,"PublishApproved");
+ Check((await Page(guest,"/bai-viet/"+uxCid)).QuerySelector("h1")!=null,"HTTP submit approve publish and public page");
+ await PermissionChecks.Run(options,Check);
+ if(args[5]!="baseline")await UxCorrectness.Run(options,guest,run,Check);
+ stage="COMPLETE";return;
+}
 if(args[4]=="Video"){await VideoMeasurement.Run(options,writer,args[5],run,c=>Token(c),Check);stage="COMPLETE";return;}
  byte[] LargePdf(){
   using var m=new MemoryStream();void Raw(string text){m.Write(Encoding.ASCII.GetBytes(text));}var offsets=new List<long>{0};

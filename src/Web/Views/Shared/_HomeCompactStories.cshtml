@@ -1,5 +1,6 @@
 @model IReadOnlyList<ContentCard>
 <div class="home-compact-stories">
+@if(Model.Count==0){<p class="scope-note">Chưa có tin được công bố trong chuyên mục này.</p>}
 @foreach (var item in Model)
 {
     <article class="home-compact-story @(string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? "home-compact-story--text" : "")">

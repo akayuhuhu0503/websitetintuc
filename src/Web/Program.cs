@@ -198,6 +198,7 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<PublicRequestConnectionMiddleware>(true);
 app.Use(async (context, next) =>
 {
     if (FirstLoginPasswordGate.Restricts(context))
@@ -210,8 +211,17 @@ app.Use(async (context, next) =>
 });
 app.UseAuthorization();
 app.UseMiddleware<DuePublicationMiddleware>();
+// Preserve public scheduling/authentication order; CMS lifetime starts earlier
+// so permission checks can share its own already role-validated connection.
 app.UseMiddleware<PublicRequestConnectionMiddleware>();
 app.MapGet("/health", () => Results.Ok(new { status = "running", phase = "2B" }));
+// A lightweight UTC sample. Accuracy comes from the host's synchronized Windows
+// clock, not this endpoint itself. No SQL, authentication data or publication work.
+app.MapGet("/time", (HttpContext context) => {
+    context.Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+    context.Response.Headers.Pragma = "no-cache";
+    return Results.Json(new { utc = DateTimeOffset.UtcNow });
+});
 app.MapGet("/ready", async (PortalDbContext db) => await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 app.MapGet("/robots.txt", () => Results.Text("User-agent: *\nDisallow: /\n", "text/plain"));
 app.MapControllers();

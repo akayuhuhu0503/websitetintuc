@@ -163,7 +163,10 @@
     } finally { busy = false; abort = null; controls(); await refresh(); }
   }
   async function guarded(action) { try { await action(); } catch (error) { processing(error.message || 'Thao tác chưa thành công; dữ liệu đã nhận được giữ nguyên.'); } }
-  fileInput.addEventListener('change', () => { file = fileInput.files[0] || null; });
+  fileInput.addEventListener('change', () => {
+    file = fileInput.files[0] || null;
+    message(file ? `Đã chọn: ${file.name}. Bấm tải video để gửi tệp; chưa gắn vào bản nháp.` : 'Chưa chọn tệp video.');
+  });
   button('start').addEventListener('click', () => guarded(() => upload(true)));
   button('resume').addEventListener('click', () => guarded(() => upload(false)));
   button('pause').addEventListener('click', () => { paused = true; abort?.abort(); processing('Đang tạm dừng tải…'); });

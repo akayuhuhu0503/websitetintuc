@@ -124,7 +124,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         revision.Blocks.Add(new() { Type = "Announcements", Title = "Thông báo", Limit = 5, SortOrder = 1 });
         i = 2;
         // These are existing homepage category groups, not copies of their content.
-        foreach (var category in categories.Where(x => x.SortOrder < 6)) revision.Blocks.Add(new() { Type = "Category", Title = category.Name, CategoryId = category.Id, Limit = 3, SortOrder = i++ });
+        foreach (var category in categories.Where(x => x.SortOrder >= 0 && x.SortOrder < 14)) revision.Blocks.Add(new() { Type = "Category", Title = category.Name, CategoryId = category.Id, Limit = 4, SortOrder = i++ });
         revision.Blocks.Add(new() { Type = "LegalDocuments", Title = "Văn bản mới cập nhật", Limit = 4, SortOrder = i++ });
         revision.Blocks.Add(new() { Type = "Videos", Title = "Video", Limit = 2, SortOrder = i });
         var legal = await db.LegalDocuments.AsNoTracking().ToListAsync();

@@ -112,7 +112,14 @@
     editor.editor.setAttribute('aria-label', 'Nội dung bài viết');
     document.querySelectorAll('input[id^="jodit-toolbar-focus-helper"],input[name^="jodit-toolbar-focus-helper"]').forEach(input => input.setAttribute('aria-label', 'Điều hướng thanh công cụ soạn thảo'));
     source.hidden = true;
-    const notify = (message, error = false) => { feedback.textContent = message; feedback.classList.toggle('has-error', error); };
+    const notify = (message, error = false) => {
+        for (const target of [feedback, document.querySelector('#editor-action-feedback')]) {
+            if (target) {
+                target.textContent = message;
+                target.classList.toggle('has-error', error);
+            }
+        }
+    };
     const changed = () => {
         if (!canSave || conflicted)
             return;

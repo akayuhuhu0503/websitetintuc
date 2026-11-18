@@ -119,7 +119,9 @@ public sealed partial class AdminController(PortalDbContext db, SignInManager<Po
             else if (!string.IsNullOrWhiteSpace(status)) { if (!Enum.TryParse<WorkflowState>(status, out var state) || !Enum.IsDefined(state)) return BadRequest(); rows = rows.Where(x => x.State == state); }
         }
         page = Math.Clamp(page, 1, 10000);
-        var total = await rows.CountAsync();
+        // Reuse counts from the exact same permission/search/category scope;
+        // uncommon workflow states still get their own scoped count.
+        var total = counts.TryGetValue(status ?? "", out var knownCount) ? knownCount : await rows.CountAsync();
         // Sort/page identifiers and ordering keys only. Materialize titles after
         // SQL paging, preserving both the permission scope and deterministic order.
         var ids = await rows.OrderByDescending(x => x.UpdatedUtc).ThenBy(x => x.Id).Skip((page - 1) * 15).Take(15).Select(x=>x.Id).ToArrayAsync();

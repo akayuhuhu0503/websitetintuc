@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$DotnetPath,[ValidateSet('baseline','baseline-near','after','video')][string]$Label='baseline',[ValidateSet('Full','Near','Video')][string]$Focus='Full',[string]$BaselineHost='', [string]$VideoTools='none')
+﻿param([Parameter(Mandatory=$true)][string]$DotnetPath,[ValidateSet('baseline','baseline-near','after','video')][string]$Label='baseline',[ValidateSet('Full','Near','Video','Ux','UxHome')][string]$Focus='Full',[string]$BaselineHost='', [string]$VideoTools='none')
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $root
@@ -31,7 +31,7 @@ builder.Services.AddSingleton(new VideoOptions{Enabled=true,ApprovedManagedVideo
 var app = builder.Build();
 '@
 $program=$program.Replace($old,$inject)
-$program=$program.Replace('builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => DatabaseSettings.Options(builder.Configuration));','builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => new DbContextOptionsBuilder<PortalDbContext>(DatabaseSettings.Options(builder.Configuration)).AddInterceptors(new PerfMetrics()).Options);')
+$program=$program.Replace('builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => DatabaseSettings.Options(builder.Configuration));','builder.Services.AddScoped<DbContextOptions<PortalDbContext>>(_ => new DbContextOptionsBuilder<PortalDbContext>(DatabaseSettings.Options(builder.Configuration)).AddInterceptors(new PerfMetrics(), new PerfConnections()).Options);')
 $program=$program.Replace('var app = builder.Build();','var app = builder.Build(); app.Use((context,next) => PerfMetrics.Measure(context,next,testRun));')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PerfMetrics.cs') -Destination (Join-Path $hostRoot 'PerfMetrics.cs')
 
