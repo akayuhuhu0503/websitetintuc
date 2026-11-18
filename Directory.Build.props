@@ -1,1 +1,8 @@
-<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><PropertyGroup Condition="'$(LandPortalLanSchema15)'=='true'"><DefineConstants>$(DefineConstants);LANDPORTAL_LAN_SCHEMA15</DefineConstants></PropertyGroup></Project>
+<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><PropertyGroup Condition="'$(LandPortalLanSchema15)'=='true'"><DefineConstants>$(DefineConstants);LANDPORTAL_LAN_SCHEMA15</DefineConstants></PropertyGroup>
+  <!-- Shared libraries and the Windows importer already lock both portable and
+       win-x64 restore graphs. Declare that graph for portable IIS publish too;
+       this does not select a runtime or make Web/Worker self-contained. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Domain' Or '$(MSBuildProjectName)' == 'Application' Or '$(MSBuildProjectName)' == 'Infrastructure' Or '$(MSBuildProjectName)' == 'WeeklyScheduleImport'">
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+</Project>
