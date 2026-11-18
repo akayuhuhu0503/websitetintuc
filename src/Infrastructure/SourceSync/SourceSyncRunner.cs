@@ -233,6 +233,7 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
     {if(response.Status!=200||response.ContentType is not("text/html" or "application/xhtml+xml"))throw new IOException("Trang nguồn chưa sẵn sàng (HTTP "+response.Status+").");}
     static string SafeName(string url)=>Uri.TryCreate(url,UriKind.Absolute,out var u)?Path.GetFileName(Uri.UnescapeDataString(u.AbsolutePath)):"tệp";
     static string SafeError(Exception error)=>error switch{
+        SourceTransportException transport=>transport.SafeSummary,
         RequestBudgetException=>"Đã đạt giới hạn truy cập nguồn; sẽ tiếp tục an toàn ở lượt sau.",
         OperationCanceledException=>"Nguồn phản hồi quá thời gian cho phép; dữ liệu trước đó được giữ nguyên.",
         MediaUploadException=>"Tệp không đạt kiểm định hiện hành.",

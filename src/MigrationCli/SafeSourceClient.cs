@@ -35,7 +35,9 @@ public sealed class SafeSourceClient : IDisposable
             ConnectCallback = async (context, cancellation) =>
             {
                 if (!hosts.Contains(context.DnsEndPoint.Host)) throw new InvalidDataException("Destination outside source allowlist.");
-                var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellation);
+                IPAddress[] addresses;
+                try { addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellation); }
+                catch (SocketException e) { throw new SourceTransportException("DNS", e); }
                 if (addresses.Length == 0 || addresses.Any(ip => !IsPublicAddress(ip))) throw new InvalidDataException("Private or reserved DNS address blocked.");
                 Exception? last = null;
                 foreach (var address in addresses)
@@ -44,7 +46,8 @@ public sealed class SafeSourceClient : IDisposable
                     try { await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellation); return new NetworkStream(socket, ownsSocket: true); }
                     catch (Exception exception) { socket.Dispose(); last = exception; }
                 }
-                throw new HttpRequestException("Source connection failed.", last);
+                cancellation.ThrowIfCancellationRequested();
+                throw new SourceTransportException("TCP", last);
             }
         };
         client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
@@ -88,7 +91,7 @@ public sealed class SafeSourceClient : IDisposable
             {
                 var retry = response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date is DateTimeOffset retryDate ? retryDate - DateTimeOffset.UtcNow : TimeSpan.FromSeconds(10));
                 if (retry < TimeSpan.Zero) retry = TimeSpan.Zero;
-                if (retry > TimeSpan.FromSeconds(60)) throw new HttpRequestException("Source Retry-After exceeds bounded run wait; retry later.");
+                if (retry > TimeSpan.FromSeconds(60)) throw new SourceTransportException("HTTP_RETRY_AFTER");
                 await Task.Delay(retry, cancellation);
             }
             if (response.Content.Headers.ContentLength > maxBytes) throw new InvalidDataException("Source Content-Length exceeds response budget.");
@@ -107,9 +110,44 @@ public sealed class SafeSourceClient : IDisposable
                 RetryAfterUtc = response.Headers.RetryAfter?.Date ?? (response.Headers.RetryAfter?.Delta is TimeSpan delta ? DateTimeOffset.UtcNow + delta : null)
             };
             }
+            catch (HttpRequestException e)
+            {
+                throw new SourceTransportException(SourceTransportException.Classify(e), e,
+                    uri.AbsolutePath == "/robots.txt" ? "robots.txt" : pagesOnly ? "trang nguồn" : "tệp nguồn");
+            }
             finally { lastRequest = DateTimeOffset.UtcNow; }
         }
-        throw new HttpRequestException("Source redirect limit exceeded.");
+        throw new SourceTransportException("REDIRECT_LIMIT", stage: "chuyển hướng");
     }
     public void Dispose() => client.Dispose();
+}
+
+// Only fixed codes and stages may reach CMS/audit. Never expose exception messages,
+// request URLs, proxy credentials, certificate contents or response bodies.
+public sealed class SourceTransportException(string code, Exception? inner = null, string stage = "kết nối")
+    : HttpRequestException("Source transport failed: " + code, inner)
+{
+    public string Code { get; } = code;
+    public string Stage { get; } = stage;
+    public string SafeSummary => $"Không kết nối được nguồn tại {Stage} [{Code}]. Dữ liệu hàng chờ được giữ nguyên; thử lại có giới hạn.";
+    public static string Classify(Exception error)
+    {
+        for (Exception? e = error; e != null; e = e.InnerException)
+        {
+            if (e is SourceTransportException source) return source.Code;
+            if (e is System.Security.Authentication.AuthenticationException) return "TLS";
+            if (e is InvalidDataException) return "NETWORK_POLICY";
+        }
+        if (error is HttpRequestException request)
+            return request.HttpRequestError switch
+            {
+                HttpRequestError.NameResolutionError => "DNS",
+                HttpRequestError.SecureConnectionError => "TLS",
+                HttpRequestError.ConnectionError => "TCP",
+                HttpRequestError.ProxyTunnelError => "PROXY",
+                HttpRequestError.HttpProtocolError or HttpRequestError.InvalidResponse or HttpRequestError.ResponseEnded => "HTTP_RESPONSE",
+                _ => "HTTP_TRANSPORT"
+            };
+        return error is OperationCanceledException ? "TIMEOUT_OR_CANCELLED" : "NETWORK_UNKNOWN";
+    }
 }
