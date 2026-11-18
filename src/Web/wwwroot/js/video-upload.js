@@ -21,7 +21,7 @@
   const show=state=>{
     session=state;el('video-progress').value=state.expectedBytes?state.receivedBytes/state.expectedBytes*100:0;
     text('video-status',`Đã tải ${Math.floor(state.receivedBytes/state.expectedBytes*100)}%. ${label(state.state)}.`);
-    text('video-job',state.job?`Tệp: ${label(state.job.state)}. ${state.job.error?'Cần kiểm tra nhật ký xử lý.':''} · Lần thử ${state.job.attempts}/3`:'Chưa có kết luận quét/xử lý.');
+    text('video-job',state.job?`Tệp: ${label(state.job.state)}. ${state.job.error?'Cần kiểm tra nhật ký xử lý.':''} · Đã nhận xử lý ${state.job.attempts} lượt${state.job.attempts>=4?' (bao gồm lượt bổ sung)':''}`:'Chưa có kết luận quét/xử lý.');
     el('video-cancel-job').hidden=!state.mediaAssetId||['Ready','Infected','Cancelled'].includes(state.job?.state);
     const preview=el('video-preview');preview.replaceChildren();if(state.job?.state==='Ready'){const v=document.createElement('video');v.controls=true;v.playsInline=true;v.preload='metadata';v.className='article-video';v.setAttribute('aria-label','Xem trước video trong bản nháp');v.src=`/admin/videos/media/${state.mediaAssetId}/play?contentId=${content}`;v.poster=`/admin/videos/media/${state.mediaAssetId}/poster?contentId=${content}`;preview.append(v);}
     el('video-select').hidden=!state.mediaAssetId;el('video-retry').hidden=!state.mediaAssetId||!['Blocked','ScanFailed','Failed'].includes(state.job?.state)||state.job.attempts>=3;

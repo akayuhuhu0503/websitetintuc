@@ -17,6 +17,7 @@ public sealed class VideoIndexModel
     public string Processor {get;init;}="";
 }
 public sealed record VideoUploadModel(Guid ContentId,string Title,string RowVersion,long MaxFileBytes,int ChunkBytes,string Processor);
+public sealed record VideoTimeoutRetryItem(Guid AssetId,Guid ContentId,string Name,long Bytes,int Attempts);
 public sealed record VideoEmbedModel(Guid Id,string Caption,IReadOnlyList<Guid> Tracks);
 
 public static class VideoCmsLabels

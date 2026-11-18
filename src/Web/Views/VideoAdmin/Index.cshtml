@@ -8,6 +8,7 @@
 @if(ViewData["CanViewVideoDiagnostics"] is true&&ViewData["VideoTools"] is LandPortal.Infrastructure.VideoToolHealth tools){
 <details class="video-diagnostics"><summary>Thông tin kỹ thuật dành cho quản trị hệ thống</summary>
 <dl class="video-panel">
+    <dt>Giới hạn chuyển mã mỗi lượt</dt><dd>@ViewData["VideoProcessSeconds"] giây (không bao gồm kiểm định và tạo ảnh đại diện)</dd>
     <dt>FFmpeg (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.Ready?"Sẵn sàng · "+tools.FfmpegVersion:tools.FfmpegFound?"Đã tìm thấy; chưa đủ điều kiện xử lý":"Chưa tìm thấy")</dd>
     <dt>FFprobe (tài khoản Web)</dt><dd>@(tools.Code=="VIDEO_DISABLED"?"Chưa kiểm tra vì chức năng video đang tắt":tools.FfprobeVersion!=null?"Sẵn sàng · "+tools.FfprobeVersion:tools.FfprobeFound?"Đã tìm thấy; chưa xác minh thực thi":"Chưa tìm thấy")</dd>
     <dt>Xử lý video trong website</dt><dd>@AdminLabels.State(ViewData["VideoWorkerCode"] as string ?? "VIDEO_WORKER_UNKNOWN")</dd>
@@ -24,6 +25,24 @@
 </details>
 }
 @if(ViewData["ManagedVideoNoAv"] is true){<p class="scope-note">Video tải mới theo chính sách CMS không antivirus: kiểm định định dạng, chuyển mã và tạo poster; trạng thái vẫn là Chưa quét antivirus. Chỉ công khai sau duyệt và xuất bản.</p>}
+@if(ViewData["TimeoutRetries"] is IReadOnlyList<VideoTimeoutRetryItem> retries && retries.Count>0){
+<section class="video-panel" aria-labelledby="timeout-retry-title">
+    <h2 id="timeout-retry-title">Video hết thời gian sau 3 lượt</h2>
+    <p>Quản trị viên có thể cho phép thêm đúng một lượt chuyển mã 30 phút bằng bản gốc đã tải. Không đặt lại số lượt, không tự xuất bản. Nếu có hai phiên tải cùng một video, chỉ chọn một phiên cần dùng.</p>
+    @if(!Model.Enabled || (ViewData["VideoProcessSeconds"] is int seconds && seconds<1800)){
+        <p role="status">Cần bật video và cập nhật gói Publish có giới hạn chuyển mã 1.800 giây trước khi thử lại.</p>
+    }else{
+        <ul>@foreach(var retry in retries){<li>
+            <span>@retry.Name · @((retry.Bytes/1024d/1024).ToString("N1")) MiB · @retry.Attempts lượt · Mã tệp @(retry.AssetId.ToString("N")[..8])</span>
+            <a href="/admin/edit/@retry.ContentId">Xem bản nháp</a>
+            <form method="post" action="/admin/videos/@retry.AssetId/retry-timeout">
+                @Html.AntiForgeryToken()
+                <button class="button secondary" type="submit">Cho phép thêm 1 lượt xử lý (30 phút)</button>
+            </form>
+        </li>}</ul>
+    }
+</section>
+}
 <form method="get"><label for="video-query">Tìm tiêu đề video</label><input id="video-query" name="q" maxlength="200" value="@Model.Query" /><label for="video-filter">Trạng thái biên tập</label><select id="video-filter" name="state"><option value="">Tất cả</option>@foreach(var value in Enum.GetValues<LandPortal.Domain.WorkflowState>()){<option value="@value" selected="@(Model.State==value.ToString())">@AdminLabels.State(value)</option>}</select><button class="button" type="submit">Tìm</button></form>
 <div class="table-scroll"><table><thead><tr><th scope="col">Ảnh đại diện / tiêu đề</th><th scope="col">Trạng thái bài viết</th><th scope="col">Trạng thái tệp video</th><th scope="col">Ngày tạo / người tải</th><th scope="col">Thao tác</th></tr></thead><tbody>@foreach(var item in Model.Items){<tr><td>@if(item.AssetId!=null&&item.FileState=="Ready"){<img src="/admin/videos/media/@item.AssetId/poster?contentId=@item.Id" alt="Ảnh đại diện video" width="120" loading="lazy" />} @item.Title</td><td class="video-editorial-state">@VideoCmsLabels.Article(item.State,item.IsPublic)</td><td>Video: @VideoCmsLabels.File(item.FileState).@if(item.FileState!="Ready"){<p class="video-next-step">Chỉ phiên bản có tệp đạt kiểm định mới được xuất bản.</p>}</td><td>@item.CreatedUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")<br />@item.Uploader</td><td><a href="/admin/edit/@item.Id">Mở biên tập và tải video</a></td></tr>}</tbody></table></div>
 <nav class="pagination" aria-label="Phân trang video">@if(Model.Page>1){<a href="?page=@(Model.Page-1)&amp;q=@Uri.EscapeDataString(Model.Query??"")&amp;state=@Model.State">Trang trước</a>}<span>Trang @Model.Page · @Model.Total nội dung</span>@if(Model.Page*15<Model.Total){<a href="?page=@(Model.Page+1)&amp;q=@Uri.EscapeDataString(Model.Query??"")&amp;state=@Model.State">Trang sau</a>}</nav>

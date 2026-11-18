@@ -48,6 +48,8 @@ function Read-IisEnvironment([string]$Path,[switch]$ForPublish) {
 }
 
 function Assert-IisPublishConfiguration($Settings) {
+ $processSeconds=0
+ if(-not [int]::TryParse([string]$Settings.Video.ProcessSeconds,[ref]$processSeconds) -or $processSeconds -lt 10 -or $processSeconds -gt 1800){throw 'Video__ProcessSeconds phải là số nguyên từ 10 đến 1800 giây'}
  Assert-UatSqlConfiguration $Settings
  if($Settings.Sql.ExpectedDatabase -ieq 'LandPortal_LanDemo'){throw 'LAN demo is forbidden for this handoff'}
  if([string]$Settings.Sql.CompatibilityLevel -cne '160'){throw 'SQL Server 2022 compatibility 160 required'}

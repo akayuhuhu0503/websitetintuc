@@ -65,6 +65,7 @@
     "ApprovedSignerThumbprints": ""
   },
   "Video": {
+    "ProcessSeconds": "1800",
     "Enabled": "false",
     "AllowManagedVideoWithoutAv": "false",
     "FfmpegPath": "",
