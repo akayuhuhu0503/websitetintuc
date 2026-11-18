@@ -47,9 +47,11 @@ public sealed class WeeklyScheduleController(PortalDbContext db,CurrentPermissio
                         Structured=publicReleases.Any(r=>r.RevisionId==row.RevisionId)
                     };
         var yearText=y.ToString(CultureInfo.InvariantCulture);var weekText=w.ToString(CultureInfo.InvariantCulture);
+        var previousYearText=(y-1).ToString(CultureInfo.InvariantCulture);var nextYearText=(y+1).ToString(CultureInfo.InvariantCulture);
         // SQL prefilter keeps this a narrow header-only read. Exact matching below prevents week 4 matching 42.
         var candidates=await headers.Where(x=>!x.Structured&&(
-                x.Year==y&&x.Week==w || x.Year==null&&x.Week==null&&x.Title.Contains(yearText)&&x.Title.Contains(weekText)))
+                x.Year==y&&x.Week==w || x.Year==null&&x.Week==null&&x.Title.Contains(weekText)
+                    && (x.Title.Contains(yearText) || (w==1||w>=52) && (x.Title.Contains(previousYearText)||x.Title.Contains(nextYearText)))))
             .OrderByDescending(x=>x.SourceDate).ThenByDescending(x=>x.PublishedUtc).ThenBy(x=>x.Id)
             .Select(x=>new WeeklyScheduleArticle(x.Id,x.Title,x.SourceDate,x.PublishedUtc,x.Year,x.Week,x.Structured)).ToListAsync();
         var weekArticles=candidates.Where(x=>x.Period is { } period&&period.Year==y&&period.Week==w).ToArray();

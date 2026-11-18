@@ -165,7 +165,7 @@ try {
  Check(afterEdit.GetProperty("state").GetString()=="Draft"&&afterEdit.GetProperty("isPublic").GetBoolean()&&Rev(afterEdit)==Rev(editing),"Combined retry after new draft returns current state without publishing it");
  await using(var db=new PortalDbContext(options)){Check(await db.AuditLogs.CountAsync(x=>x.ContentId==cid&&x.Action=="Approve")==1&&await db.AuditLogs.CountAsync(x=>x.ContentId==cid&&x.Action=="PublishApproved")==1,"Combined action retains separate audit records once only");}
  using(var r=await guest.GetAsync("/bai-viet/"+cid))Check(r.IsSuccessStatusCode,"Combined-published article opens publicly");
- foreach(var doc in docs){using var r=await guest.GetAsync("/media/"+doc);Check(r.IsSuccessStatusCode&&r.Content.Headers.ContentDisposition?.DispositionType=="attachment","Published attached document download "+doc.ToString("N")[..6]);}
+ foreach(var doc in docs){using var r=await guest.GetAsync("/media/"+doc+"?download=true");Check(r.IsSuccessStatusCode&&r.Content.Headers.ContentDisposition?.DispositionType=="attachment","Published attached document download "+doc.ToString("N")[..6]);}
  stage="cms-schedule";
  var scheduled=await SaveContent(null,title:"SCHEDULE FIXTURE");scheduled=await Act(writer,scheduled,"Submit");scheduled=await Act(reviewer,scheduled,"Approve");
  var due=DateTime.UtcNow.AddHours(9).ToString("yyyy-MM-ddTHH:mm");

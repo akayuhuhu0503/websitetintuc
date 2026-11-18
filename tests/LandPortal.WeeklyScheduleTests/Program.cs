@@ -15,6 +15,25 @@ Period("Lịch tuần 42 năm 2026".Normalize(NormalizationForm.FormD),2026,42);
 Period("Lịch tuần 53 năm 2020",2020,53);
 Period("Lịch tuần 53 năm 2026",2026,53);
 Period("Lịch tuần 1 năm 2027",2027,1);
+Period("Tuần 45. Từ ngày 02/11/2026 đến ngày 08/11/2026",2026,45);
+Period("Lịch công tác tuần thứ Tuần 3. Từ ngày 12/01/2026 đến ngày 18/01/2026",2026,3);
+Period("TUẦN 4. TỪ NGÀY 19/01/2026 ĐẾN NGÀY 25/01/2026".Normalize(NormalizationForm.FormD),2026,4);
+Period("Tuần 1. Từ ngày 29/12/2025 đến ngày 04/01/2026",2026,1);
+Period("Tuần 53. Từ ngày 28/12/2026 đến ngày 03/01/2027",2026,53);
+Period("Tuần 1. Từ ngày 29/12/2025 đến ngày 31/12/2025",2026,1);
+Period("Tuần 45 năm 2026. Từ ngày 2/11/2026 đến 8/11/2026",2026,45);
+Unknown("Tuần 41. Từ ngày 12/10/2026 đến ngày 18/10/2026");
+Unknown("Tuần 42. Từ ngày 19/10/2026 đến ngày 25/10/2026");
+Unknown("Tuần 43. Từ ngày 26/10/2026 đến ngày 01/11/2026");
+Unknown("Tuần 44. Từ ngày 02/11/2026 đến ngày 08/11/2026");
+Unknown("Tuần 45. Từ ngày 08/11/2026 đến ngày 02/11/2026");
+Unknown("Tuần 45. Từ ngày 02/11/2026 đến ngày 09/11/2026");
+Unknown("Tuần 45. Từ ngày 02/11/2026 đến ngày 31/11/2026");
+Unknown("Tuần 45 năm 2026. Từ ngày 2/11/2026 đến ngày không rõ");
+Unknown("Tuần 45 năm 2025. Từ ngày 02/11/2026 đến ngày 08/11/2026");
+Unknown("Tuần 45. Từ ngày 02/11/2026 đến ngày 08/11/2026 và tuần 46");
+Unknown("Tuần 45. Từ ngày 02/11/2026 đến ngày 08/11/2026; từ ngày 02/11/2026 đến ngày 08/11/2026");
+Check(WeeklyScheduleTitle.Period("Tuần 44. Từ ngày 02/11/2026 đến ngày 08/11/2026",2026,45)==new WeeklyScheduleKey(2026,45),"Validated metadata wins over conflicting title");
 Unknown("Lịch tuần 53 năm 2021");
 Unknown("Lịch tuần 0 năm 2026");
 Unknown("Lịch tuần 54 năm 2026");
@@ -41,3 +60,11 @@ Check((article with{Title="Lịch công tác",SourceDate=null}).Period==null,"Un
 var vietnamDate=article with{SourceDate=null,PublishedUtc=new DateTimeOffset(2026,10,18,18,0,0,TimeSpan.Zero)};
 Check(vietnamDate.DisplayDate==new DateOnly(2026,10,19),"Display date uses Vietnam timezone");
 Console.WriteLine($"PASS: {checks} weekly schedule title/link checks (no database or IIS).");
+if(args.Length==2)
+{
+    var rows=System.Text.Json.JsonSerializer.Deserialize<SourceTitle[]>(File.ReadAllText(args[0]),new System.Text.Json.JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+    var report=rows.Select(row=>new{row.Stt,row.Title,period=WeeklyScheduleTitle.Inspect(row.Title).Period,review=WeeklyScheduleTitle.Inspect(row.Title).ReviewReason}).ToArray();
+    File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(report,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
+    Console.WriteLine($"SOURCE REVIEW: {report.Length} titles; {report.Count(x=>x.review!=null)} need review; read-only, no publication dates changed.");
+}
+record SourceTitle(int Stt,string Title);
