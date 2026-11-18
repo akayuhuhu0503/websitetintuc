@@ -113,7 +113,7 @@ public sealed class WeeklyPackage
     public void WriteWorkbook(string destination, IReadOnlyDictionary<int, string?> links)
     {
         if (File.Exists(destination)) throw new IOException("File kết quả đã tồn tại; chọn tên mới, không ghi đè workbook.");
-        if (links.Keys.Any(k => k is < 1 or > 43)) throw new InvalidDataException("STT link ngoài phạm vi.");
+        if (links.Keys.Any(k => !Rows.Any(r => r.Stt == k))) throw new InvalidDataException("STT link ngoài phạm vi.");
         using var source = new ZipArchive(new MemoryStream(Workbook));
         var xml = Xml(ReadEntry(source.GetEntry(SheetPath)!));
         var relPath = Path.GetDirectoryName(SheetPath)!.Replace('\\', '/') + "/_rels/" + Path.GetFileName(SheetPath) + ".rels";

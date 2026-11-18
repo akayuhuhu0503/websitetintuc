@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 // No automatic .env discovery, migrations, publication, backup SQL or operator grants.
 try
 {
+    if (args.FirstOrDefault()?.StartsWith("planning-", StringComparison.Ordinal) == true) { await PlanningCommand.RunAsync(args); return; }
     if (args.FirstOrDefault()?.StartsWith("web-", StringComparison.Ordinal) == true) { await WebImportCommand.RunAsync(args); return; }
     if (args.Length == 0 || args[0] is not ("preflight" or "inspect" or "dry-run" or "import" or "reconcile" or "sync-links"))
         throw new ArgumentException("Dùng preflight | inspect | dry-run | import | reconcile | sync-links. Xem docs/weekly-schedule-import.md.");

@@ -901,8 +901,9 @@
             return;
         if (documentUploadBusy)
             return;
-        if (!/\.(pdf|docx|xlsx)$/i.test(file.name) || file.size > 10 * 1024 * 1024) {
-            documentFeedback.textContent = 'Chọn PDF, DOCX hoặc XLSX không quá 10 MB.';
+        const fileMaximum = Number(/\.pdf$/i.test(file.name) ? input.dataset.pdfMaximum : input.dataset.officeMaximum);
+        if (!/\.(pdf|docx|xlsx)$/i.test(file.name) || !Number.isSafeInteger(fileMaximum) || fileMaximum < 1 || file.size > fileMaximum) {
+            documentFeedback.textContent = 'Chọn PDF tối đa 104 MiB; DOCX hoặc XLSX tối đa 10 MiB.';
             return;
         }
         documentUploadBusy = true;
@@ -924,7 +925,7 @@
                 documentStatus('Chưa chuẩn bị được bản nháp. Kiểm tra thông báo lưu bài; nội dung vẫn được giữ.', 'unconfirmed');
                 return;
             }
-            // WebCrypto hashes at most the configured 10 MiB off the UI thread.
+            // WebCrypto hashes only the bounded file selected above; the server verifies the hash independently.
             // Plain HTTP LAN may not expose SubtleCrypto; it must never fake a hash.
             const sha256 = crypto.subtle ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('') : null;
             const pendingKey = draft.id + '|' + (sha256 || fileKey);

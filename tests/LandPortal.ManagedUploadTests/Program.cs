@@ -18,6 +18,8 @@ using System.Text;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
+if (args.FirstOrDefault() == "--editorial-pdf-limits") { await EditorialPdfLimitChecks.RunAsync(args); return; }
+
 using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
 var options = new DbContextOptionsBuilder<PortalDbContext>().UseSqlite(connection).Options;

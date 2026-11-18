@@ -34,13 +34,14 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (InvalidOperationException error) { return BadRequest(error.Message); }
     }
-    [HttpPost("admin/documents/{id:guid}"), RequestSizeLimit(11 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 11 * 1024 * 1024)]
+    [HttpPost("admin/documents/{id:guid}"), RequestSizeLimit(EditorialDocumentPolicy.RequestMaximum), RequestFormLimits(MultipartBodyLengthLimit = EditorialDocumentPolicy.RequestMaximum, MemoryBufferThreshold = 65536)]
     public async Task<IActionResult> Upload(Guid id, IFormFile? file, CancellationToken ct, string? format = null)
     {
         try
         {
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
-            if (file == null || file.Length is < 1 or > EditorialDocumentService.Maximum || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu tối đa 10 MiB.");
+            if (file == null || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu.");
+            EditorialDocumentPolicy.RequireSize(file.Length, OfficeDocumentPolicy.Mime(file.FileName));
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
             if (format == "json") return Json(Describe(asset));
             TempData["Success"] = asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation

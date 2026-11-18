@@ -31,7 +31,7 @@ if($DeferTarget){
 }else{Assert-UatRuntimeConfiguration $settings $runtimeHome ([IO.Path]::Combine($runtimeHome,'uat.json')) $code}
 if($ValidateOnly){Write-Output 'CONFIG VALIDATION PASS (offline; no SQL connection)';return}
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
-foreach($v in @($web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable)){
+foreach($v in @($web.SelectNodes("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables/environmentVariable"))){
  if(-not $DeferTarget -and $v.name -ceq 'Deployment__TargetApproved'){[void]$v.ParentNode.RemoveChild($v);continue}
  if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',$(if($DeferTarget){''}else{[string]$runtimeHome}))}
  if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',$(if($DeferTarget){''}else{[string]([IO.Path]::Combine($runtimeHome,'uat.json'))}))}

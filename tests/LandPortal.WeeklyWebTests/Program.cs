@@ -18,10 +18,14 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
+if (args.Length == 3 && args[2] == "--planning-pdf-readback") { await PlanningPdfReadbackChecks.RunAsync(args[0], args[1]); return; }
+if (args.Length == 3 && args[2] == "--planning-pdf-overrides") { PlanningPdfOverrideChecks.Run(args[0], args[1]); return; }
+if (args.Length == 3 && args[2] == "--planning-confirmations") { await PlanningConfirmationChecks.RunAsync(args[0], args[1]); return; }
 if (args.Length == 2 && args[1] == "--date-column-only") { await WeeklyDateColumnChecks.RunAsync(args[0]); return; }
 if (args.Length == 2 && args[1] == "--date-plan-guards") { WeeklyDateChecks.PlanGuards(WeeklyPackage.Read(args[0])); return; }
-if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--dates") throw new ArgumentException("source ZIP, new test output, optional --dates required");
-var datesOnly = args.Length == 3;
+if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] is not ("--dates" or "--planning")) throw new ArgumentException("source ZIP, new test output, optional --dates / --planning required");
+var datesOnly = args.Length == 3 && args[2] == "--dates";
+var planningOnly = args.Length == 3 && args[2] == "--planning";
 var root = Directory.GetCurrentDirectory(); var run = Path.GetFullPath(args[1]);
 if (!run.StartsWith(Path.Combine(root, ".local", "tests", "weekly-web-"), StringComparison.OrdinalIgnoreCase) || Directory.Exists(run)) throw new ArgumentException("New isolated test folder required");
 Directory.CreateDirectory(run);
@@ -38,8 +42,10 @@ async Task LocalDb(string operation)
 }
 try
 {
-    var package = WeeklyPackage.Read(args[0]); var first = package.Rows[0];
-    Check(package.Rows.Count == 43 && package.Rows.Sum(x => x.Pages) == 120 && package.Rows.Single(x => x.Stt == 42).Pages == 3, "43 source PDFs / 120 pages / STT42 3 pages");
+    var planning = planningOnly ? PlanningPackage.Read(args[0]) : null;
+    var package = planning == null ? WeeklyPackage.Read(args[0]) : new WeeklyPackage { ZipSha256=planning.Dates.ZipSha256, WorkbookSha256=planning.Dates.WorkbookSha256, Workbook=planning.Dates.Workbook, SheetPath=planning.Dates.SheetPath, Rows=planning.Rows.Select(x=>x.Source).ToArray(), PdfBytes=new Dictionary<int,byte[]>() };
+    var first = package.Rows[0];
+    if (!planningOnly) Check(package.Rows.Count == 43 && package.Rows.Sum(x => x.Pages) == 120 && package.Rows.Single(x => x.Stt == 42).Pages == 3, "43 source PDFs / 120 pages / STT42 3 pages");
     await LocalDb("create"); await LocalDb("start");
     var cs = new SqlConnectionStringBuilder { DataSource = @"(localdb)\" + instance, InitialCatalog = "LandPortal_Test", IntegratedSecurity = true, Encrypt = true, TrustServerCertificate = true, Pooling = false };
     await using (var sql = new SqlConnection(new SqlConnectionStringBuilder(cs.ConnectionString) { InitialCatalog = "master" }.ConnectionString))
@@ -53,7 +59,7 @@ try
     await using (var setup = new PortalDbContext(setupOptions))
     {
         await setup.Database.MigrateAsync(); Check((await setup.Database.GetAppliedMigrationsAsync()).Count() == 18, "Test schema18");
-        setup.Categories.Add(new() { Id = 76, Name = "Lịch tuần", Slug = "lich-tuan" }); await setup.SaveChangesAsync();
+        setup.Categories.Add(planningOnly ? new() { Id = 77, Name = PlanningPackage.Label, Slug = "quy-hoach-su-dung-dat" } : new() { Id = 76, Name = "Lịch tuần", Slug = "lich-tuan" }); await setup.SaveChangesAsync();
         await RuntimeRoleInterceptor.ProvisionAsync(setup, roleSecret);
     }
     var storage = new StorageOptions { MediaRoot = Path.Combine(run,"media"), TempRoot = Path.Combine(run,"temp"), KeysRoot = Path.Combine(run,"keys"), SnapshotRoot = Path.Combine(run,"snapshots") };
@@ -103,7 +109,12 @@ try
     using var cms = new WebCmsClient(new Uri(app.Urls.Single()), true); using var outsider = new WebCmsClient(cms.Origin,true);
     Task<(string,string,string)> Answer(string who,string question) { var n=Regex.Matches(question,@"\d+").Select(x=>int.Parse(x.Value)).ToArray(); if(n.Length!=2||!question.Contains("cộng")&&!question.Contains("trừ"))throw new Exception("Unknown test CAPTCHA"); return Task.FromResult(("web-weekly-"+who,accounts[who].Password,(question.Contains("cộng")?n[0]+n[1]:n[0]-n[1]).ToString())); }
     await cms.LoginAsync(q=>Answer("writer",q)); Check(cms.UserId == accounts["writer"].Id,"Real HTTP Identity/CAPTCHA/CSRF login; no stored password/cookie");
-    if (datesOnly)
+    if (planningOnly)
+    {
+        await outsider.LoginAsync(q=>Answer("outsider",q));
+        await PlanningChecks.RunAsync(planning!,cms,outsider,options,policy,storage,accounts,run,Check,Denied,value=>loseResponse=value);
+    }
+    else if (datesOnly)
     {
         await WeeklyDateChecks.RunAsync(package,cms,options,policy,storage,accounts,run,Check,Denied,value=>loseResponse=value);
     }

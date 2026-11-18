@@ -279,39 +279,47 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         throw new MediaUploadException("Tệp trùng thuộc phạm vi riêng tư của người khác. Không cấp quyền bằng cách tải lại byte giống nhau.", 403);
     }
 
+    internal static int ValidatePdfContent(string path, int maximumPages, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var file = System.IO.File.OpenRead(path);
+        Span<byte> prefix = stackalloc byte[8];
+        if (file.Read(prefix) < 8 || !prefix[..5].SequenceEqual("%PDF-"u8))
+            throw new MediaUploadException("Tệp không có định dạng PDF hợp lệ.");
+        file.Seek(-Math.Min(file.Length, 2048), SeekOrigin.End);
+        var trailer = new byte[Math.Min(file.Length, 2048)];
+        file.ReadExactly(trailer);
+        if (!System.Text.Encoding.ASCII.GetString(trailer).Contains("%%EOF", StringComparison.Ordinal))
+            throw new MediaUploadException("PDF bị thiếu phần kết thúc hoặc bị cắt dở.");
+        try
+        {
+            file.Position = 0;
+            using var pdf = PdfDocument.Open(file, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
+            if (pdf.NumberOfPages < 1 || pdf.NumberOfPages > maximumPages)
+                throw new MediaUploadException("Số trang PDF vượt giới hạn hoặc không có trang hợp lệ.");
+            // Resolve every page through the actual parser; a magic prefix alone never passes validation.
+            for (var number = 1; number <= pdf.NumberOfPages; number++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var page = pdf.GetPage(number);
+                if (page.Width <= 0 || page.Height <= 0 || page.Width > 144_000 || page.Height > 144_000)
+                    throw new MediaUploadException("Kích thước trang PDF không hợp lệ.");
+            }
+            return pdf.NumberOfPages;
+        }
+        catch (MediaUploadException) { throw; }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        { throw new MediaUploadException("PDF không đọc được bằng bộ phân tích; tệp lỗi hoặc cần mật khẩu."); }
+    }
+
     public (string Mime, int? Width, int? Height) ValidateContent(string path, string expectedMime, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (expectedMime == "application/pdf")
         {
-            using var file = System.IO.File.OpenRead(path);
-            Span<byte> prefix = stackalloc byte[8];
-            if (file.Read(prefix) < 8 || !prefix[..5].SequenceEqual("%PDF-"u8))
-                throw new MediaUploadException("Tệp không có định dạng PDF hợp lệ.");
-            file.Seek(-Math.Min(file.Length, 2048), SeekOrigin.End);
-            var trailer = new byte[Math.Min(file.Length, 2048)];
-            file.ReadExactly(trailer);
-            if (!System.Text.Encoding.ASCII.GetString(trailer).Contains("%%EOF", StringComparison.Ordinal))
-                throw new MediaUploadException("PDF bị thiếu phần kết thúc hoặc bị cắt dở.");
-            try
-            {
-                using var pdf = PdfDocument.Open(path, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
-                if (pdf.NumberOfPages < 1 || pdf.NumberOfPages > options.MaxPdfPages)
-                    throw new MediaUploadException("Số trang PDF vượt giới hạn hoặc không có trang hợp lệ.");
-                // Resolve every page through the actual parser; a magic prefix alone never passes validation.
-                for (var number = 1; number <= pdf.NumberOfPages; number++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var page = pdf.GetPage(number);
-                    if (page.Width <= 0 || page.Height <= 0 || page.Width > 144_000 || page.Height > 144_000)
-                        throw new MediaUploadException("Kích thước trang PDF không hợp lệ.");
-                }
-                return ("application/pdf", null, null);
-            }
-            catch (MediaUploadException) { throw; }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception error) when (error is not OutOfMemoryException)
-            { throw new MediaUploadException("PDF không đọc được bằng bộ phân tích; tệp lỗi hoặc cần mật khẩu."); }
+            ValidatePdfContent(path, options.MaxPdfPages, cancellationToken);
+            return ("application/pdf", null, null);
         }
         using var codec = SKCodec.Create(path);
         if (codec is null) throw new MediaUploadException("Không giải mã được ảnh; không chỉ kiểm tra đuôi tệp.");

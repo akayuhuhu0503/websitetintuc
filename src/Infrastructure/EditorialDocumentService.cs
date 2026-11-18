@@ -12,7 +12,7 @@ namespace LandPortal.Infrastructure;
 public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions storage, MediaService media, CurrentPermissionService rights,
     MediaUploadOptions? uploadOptions = null)
 {
-    public const long Maximum = 10 * 1024 * 1024;
+    public const long Maximum = EditorialDocumentPolicy.OfficeMaximum; // Existing legacy/weekly callers retain their 10 MiB bound.
     public async Task EnqueueLegacyPdfAsync(Guid contentId, Guid assetId, ContentActor actor, CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -69,14 +69,13 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             {
                 var buffer = new byte[65536]; using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                 int count; while ((count = await input.ReadAsync(buffer, ct)) != 0)
-                { asset.ByteLength += count; if (asset.ByteLength > Maximum) throw new InvalidOperationException("Tài liệu tối đa 10 MiB."); hash.AppendData(buffer, 0, count); await output.WriteAsync(buffer.AsMemory(0, count), ct); }
+                { asset.ByteLength += count; if (asset.ByteLength > EditorialDocumentPolicy.MaximumFor(mime)) throw new MediaUploadException(EditorialDocumentPolicy.SizeHelp, 413); hash.AppendData(buffer, 0, count); await output.WriteAsync(buffer.AsMemory(0, count), ct); }
                 if (asset.ByteLength == 0) throw new InvalidOperationException("Tệp rỗng."); asset.Sha256 = Convert.ToHexStringLower(hash.GetHashAndReset());
             }
             if (noAv)
             {
                 // Format validation only, not malware scanning. Does not execute PDF/Office content.
-                OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv: true);
-                if (mime == "application/pdf") ManagedPdfPolicy.Validate(path);
+                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: true, ct);
             }
             var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == asset.Sha256, ct);
             if (duplicate != null)
@@ -181,7 +180,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             {
                 file.Position = 0; result = await scanner.ScanAsync(file, ct);
                 file.Position = 0; if (Convert.ToHexStringLower(await SHA256.HashDataAsync(file, ct)) != asset.Sha256) result = new(InquiryScanState.ScanFailed, "FileChangedDuringScan", null);
-                if (result.State == InquiryScanState.Clean) OfficeDocumentPolicy.Validate(MediaService.ResolveMediaPath(storage, asset.StorageKey), asset.MimeType, media);
+                if (result.State == InquiryScanState.Clean) await EditorialDocumentPolicy.ValidateAsync(MediaService.ResolveMediaPath(storage, asset.StorageKey), asset.MimeType, media, managedWithoutAv: false, ct);
             }
         }
         catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or System.Xml.XmlException or OperationCanceledException or MediaUploadException)

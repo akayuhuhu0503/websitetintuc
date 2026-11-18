@@ -19,7 +19,7 @@ public sealed class WebJournalRow
 public sealed record WebJournal(string Origin, string UserId, string ZipSha256, string WorkbookSha256, List<WebJournalRow> Rows);
 public sealed record WebEditor(Guid Id, string State, bool CanSave, string Fingerprint, IElement Form);
 
-public sealed class WebWeeklyImporter(WebCmsClient cms)
+public sealed class WebWeeklyImporter(WebCmsClient cms, int categoryId = 76)
 {
     const string Body = "<p>Lịch công tác tuần được đính kèm trong tài liệu PDF.</p>";
     public async Task PreflightAsync()
@@ -28,9 +28,9 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         var doc = await cms.HtmlAsync("/admin/create?kind=StaticPage");
         var form = doc.QuerySelector("#editor-form");
         if (form == null || form.GetAttribute("data-can-save") != "true" || form.GetAttribute("data-user-id") != cms.UserId
-            || !form.QuerySelectorAll("select[name='CategoryId'] option").Any(o => o.GetAttribute("value") == "76")
+            || !form.QuerySelectorAll("select[name='CategoryId'] option").Any(o => o.GetAttribute("value") == categoryId.ToString(System.Globalization.CultureInfo.InvariantCulture))
             || form.QuerySelector("#editor-document-file") == null || WebCmsClient.Value(form, "Kind") != "StaticPage")
-            throw new UnauthorizedAccessException("CMS chưa cho phép tạo StaticPage/chuyên mục 76/tải PDF. Kiểm tra quyền tài khoản hoặc phiên bản CMS; không đổi quyền tự động.");
+            throw new UnauthorizedAccessException($"CMS chưa cho phép tạo StaticPage/chuyên mục {categoryId}/tải PDF. Kiểm tra quyền tài khoản hoặc phiên bản CMS; không đổi quyền tự động.");
     }
     public async Task<WebPlan> PlanAsync(WeeklyPackage source)
     {
@@ -84,7 +84,7 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         var doc = await cms.HtmlAsync("/admin/edit/" + id);
         var form = doc.QuerySelector("#editor-form") ?? throw Conflict(row, "Không tìm thấy form biên tập.");
         if (WebCmsClient.Value(form, "Id") != id.ToString() || WebCmsClient.Value(form, "Title") != row.Title
-            || WebCmsClient.Value(form, "Kind") != "StaticPage" || WebCmsClient.Value(form, "CategoryId") != "76"
+            || WebCmsClient.Value(form, "Kind") != "StaticPage" || WebCmsClient.Value(form, "CategoryId") != categoryId.ToString(System.Globalization.CultureInfo.InvariantCulture)
             || form.GetAttribute("data-user-id") != cms.UserId)
             throw Conflict(row, "ID, tiêu đề, loại nội dung, chuyên mục hoặc phiên CMS không khớp.");
         var fields = Fields(form);
@@ -121,13 +121,14 @@ public sealed class WebWeeklyImporter(WebCmsClient cms)
         if (bytes.LongLength != row.Bytes || WeeklyPackage.Hash(bytes) != row.PdfSha256) throw Conflict(row, "PDF đính kèm không khớp byte/SHA256 nguồn.");
         return attachments[0];
     }
-    async Task<Guid> VerifyAssetAsync(Guid content, WeeklyRow row, JsonElement asset)
+    internal async Task<Guid> VerifyAssetAsync(Guid content, WeeklyRow row, JsonElement asset, long maximum = 10 * 1024 * 1024)
     {
         if (asset.GetProperty("originalName").GetString() != row.FileName || asset.GetProperty("mimeType").GetString() != "application/pdf"
             || asset.GetProperty("byteLength").GetInt64() != row.Bytes || !asset.GetProperty("usable").GetBoolean())
             throw Conflict(row, "Tên/định dạng/dung lượng/chính sách PDF chưa hợp lệ; không giả Clean.");
         var id = asset.GetProperty("id").GetGuid();
-        var bytes = await cms.BytesAsync($"/admin/documents/file/{id}?contentId={content}", "application/pdf", 10 * 1024 * 1024);
+        if (row.Bytes < 1 || row.Bytes > maximum) throw Conflict(row, "PDF vượt giới hạn của luồng nhập hiện tại.");
+        var bytes = await cms.BytesAsync($"/admin/documents/file/{id}?contentId={content}", "application/pdf", maximum);
         if (bytes.LongLength != row.Bytes || WeeklyPackage.Hash(bytes) != row.PdfSha256) throw Conflict(row, "PDF IIS tải về không khớp byte/SHA256 nguồn.");
         return id;
     }

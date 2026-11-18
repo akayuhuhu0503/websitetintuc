@@ -108,7 +108,7 @@ try{
   $inputSettings.Settings|Add-Member -NotePropertyName PortableRuntime -NotePropertyValue ([pscustomobject]@{DataHome=[string]$inputSettings.Metadata.LANDPORTAL_HOME}) -Force
   [IO.File]::WriteAllText((Join-Path $portableHome 'uat.json'),($inputSettings.Settings|ConvertTo-Json -Depth 16),[Text.UTF8Encoding]::new($false))
   [xml]$bound=Get-Content -LiteralPath $config -Raw -Encoding UTF8
-  $vars=$bound.configuration.location.'system.webServer'.aspNetCore.environmentVariables
+  $vars=$bound.SelectSingleNode("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables")
   foreach($v in @($vars.environmentVariable)){if($v.name -in @('LANDPORTAL_HOME','LANDPORTAL_CONFIG','Deployment__TargetApproved')){[void]$v.ParentNode.RemoveChild($v)}}
   $flag=$bound.CreateElement('environmentVariable');$flag.SetAttribute('name','LANDPORTAL_PORTABLE_UAT');$flag.SetAttribute('value','1');[void]$vars.AppendChild($flag)
   [IO.File]::WriteAllText($config,$bound.OuterXml,[Text.UTF8Encoding]::new($false))

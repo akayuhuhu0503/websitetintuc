@@ -64,7 +64,7 @@ $encoding=[Text.UTF8Encoding]::new($false)
 [IO.File]::WriteAllText((Join-Path $output 'target.json'),($t|ConvertTo-Json -Depth 5),$encoding)
 [IO.File]::WriteAllText((Join-Path $output 'schema-bound.sqlcmd'),($header+$schemaBody),$encoding)
 [xml]$web=Get-Content -LiteralPath (Join-Path $code 'web/web.config') -Raw -Encoding UTF8
-foreach($v in $web.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable){if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',[string]$homePath)};if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',[string]$config)}}
+foreach($v in $web.SelectNodes("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables/environmentVariable")){if($v.name -eq 'LANDPORTAL_HOME'){$v.SetAttribute('value',[string]$homePath)};if($v.name -eq 'LANDPORTAL_CONFIG'){$v.SetAttribute('value',[string]$config)}}
 $web.Save((Join-Path $output 'web.config'))
 $files=@(Get-ChildItem -LiteralPath $output -File|ForEach-Object {@{path=$_.Name;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
 [IO.File]::WriteAllText((Join-Path $output 'target-manifest.json'),(@{status='PREPARED_NOT_INSTALLED';packageManifestSha256=(Get-FileHash -LiteralPath (Join-Path $code 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant();files=$files;database=$t.Database;approvalReference=$t.ApprovalReference;secretsIncluded=$false;sqlExecuted=$false;servicesInstalled=0;productionReady=$false}|ConvertTo-Json -Depth 7),$encoding)

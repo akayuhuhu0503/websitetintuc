@@ -123,7 +123,7 @@ try{$bytes=$encoding.GetBytes(($c|ConvertTo-Json -Depth 16));$stream.Write($byte
 $webConfig=Join-Path $code 'web/web.config'
 Copy-Item -LiteralPath $webConfig -Destination (Join-Path $targetDataHome 'web.config.before')
 [xml]$xml=Get-Content -LiteralPath $webConfig -Raw -Encoding UTF8
-foreach($v in @($xml.configuration.location.'system.webServer'.aspNetCore.environmentVariables.environmentVariable)){
+foreach($v in @($xml.SelectNodes("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables/environmentVariable"))){
  # Remove packaging's fail-closed override; authority now comes from the
  # validated private JSON, so later revocation there cannot be masked by IIS.
  if($v.name -ceq 'Deployment__TargetApproved'){[void]$v.ParentNode.RemoveChild($v);continue}

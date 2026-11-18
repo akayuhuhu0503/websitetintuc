@@ -10,7 +10,10 @@ public sealed record WeeklyDateRow(int Stt, string Cell, string RawValue, string
     string DisplayInterpretation, string? StoredDate, string? SwappedCandidate, string? ProposedDate,
     string Status, string[] Warnings);
 public sealed record DateDecision(int Stt, string? ConfirmedDate, string? ConfirmedBy);
-public sealed record DateDecisions(string ZipSha256, string WorkbookSha256, IReadOnlyList<DateDecision> Rows);
+public sealed record DateDecisions(string ZipSha256, string WorkbookSha256, IReadOnlyList<DateDecision> Rows)
+{
+    public string? SheetName { get; init; }
+}
 
 public static class WeeklyDates
 {
@@ -37,7 +40,7 @@ public static class WeeklyDates
         string Value(XElement cell) => (string?)cell.Attribute("t") == "s" ? shared[int.Parse(cell.Element(WeeklyPackage.S + "v")!.Value, CultureInfo.InvariantCulture)]
             : (string?)cell.Attribute("t") == "inlineStr" ? string.Concat(cell.Descendants(WeeklyPackage.S + "t").Select(t => t.Value)) : cell.Element(WeeklyPackage.S + "v")?.Value ?? "";
         var result = new List<WeeklyDateRow>();
-        for (var stt = 1; stt <= 43; stt++)
+        for (var stt = 1; stt <= source.Count; stt++)
         {
             var excelRow = stt + 6;
             var a = sheet.Descendants(WeeklyPackage.S + "c").Single(x => (string?)x.Attribute("r") == "A" + excelRow);
@@ -64,6 +67,10 @@ public static class WeeklyDates
                 else warnings.Add("Số ngày Excel không hợp lệ, có phần giờ hoặc nằm ngoài phạm vi hỗ trợ.");
             }
             else if (type is "s" or "inlineStr" && TryVietnamese(value, out var parsed)) { stored = parsed; proposed = Iso(parsed); }
+            else if (source.AllowDoubleSlashCandidate && type is "s" or "inlineStr"
+                && System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), @"^\d{1,2}//\d{1,2}/\d{4}$")
+                && TryVietnamese(value.Replace("//", "/"), out var corrected))
+            { swapped = corrected; warnings.Add("Ô B có hai dấu /. Ứng viên sửa lỗi ký tự cần chủ dữ liệu xác nhận; chưa dùng làm ngày đăng."); }
             else warnings.Add("Không đọc được ngày text đúng ngày/tháng/năm Việt Nam.");
             var status = type != "n" && stored != null && warnings.Count == 0 ? "VerifiedText" : "NeedsConfirmation";
             result.Add(new(stt, "B" + excelRow, value, type, format, display,
@@ -79,7 +86,8 @@ public static class WeeklyDates
         var report = Inspect(source); var resolved = report.Where(x => x.Status == "VerifiedText").ToDictionary(x => x.Stt, x => x.StoredDate!);
         if (decisions == null) return resolved;
         if (decisions.ZipSha256 != source.ZipSha256 || decisions.WorkbookSha256 != source.WorkbookSha256
-            || decisions.Rows.Any(x => x.Stt is < 1 or > 43) || decisions.Rows.GroupBy(x => x.Stt).Any(x => x.Count() != 1))
+            || (decisions.SheetName ?? WeeklyPackage.SheetName) != source.SheetName
+            || decisions.Rows.Any(x => x.Stt < 1 || x.Stt > source.Count) || decisions.Rows.GroupBy(x => x.Stt).Any(x => x.Count() != 1))
             throw new InvalidDataException("Xác nhận ngày không khớp nguồn hoặc trùng STT.");
         foreach (var item in decisions.Rows.Where(x => x.ConfirmedDate != null))
         {

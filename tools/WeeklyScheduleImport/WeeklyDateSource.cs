@@ -5,6 +5,9 @@ namespace LandPortal.WeeklyImport;
 // Date review reads the workbook only. It never opens/parses a PDF or infers a date from its title.
 public sealed record WeeklyDateSource(string ZipSha256, string WorkbookSha256, byte[] Workbook, string SheetPath)
 {
+    public int Count { get; init; } = 43;
+    public string SheetName { get; init; } = WeeklyPackage.SheetName;
+    public bool AllowDoubleSlashCandidate { get; init; }
     public static WeeklyDateSource From(WeeklyPackage source) => new(source.ZipSha256, source.WorkbookSha256, source.Workbook, source.SheetPath);
 
     public static WeeklyDateSource Read(string path)

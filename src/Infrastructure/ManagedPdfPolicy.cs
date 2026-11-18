@@ -7,15 +7,18 @@ namespace LandPortal.Infrastructure;
 // Structural validation for the opt-in CMS path only. This is NOT an antivirus result.
 public static class ManagedPdfPolicy
 {
-    public static void Validate(string path)
+    public static void Validate(string path, CancellationToken ct = default)
     {
         try
         {
-            using var pdf = PdfDocument.Open(path, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
+            ct.ThrowIfCancellationRequested();
+            using var input = File.OpenRead(path);
+            using var pdf = PdfDocument.Open(input, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
             var seen = new HashSet<IndirectReference>();
             var count = 0;
             void Visit(IToken token, int depth)
             {
+                ct.ThrowIfCancellationRequested();
                 if (++count > 100_000 || depth > 64) throw new InvalidDataException("PDF vượt giới hạn cấu trúc.");
                 switch (token)
                 {

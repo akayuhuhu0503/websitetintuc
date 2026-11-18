@@ -4,6 +4,10 @@
   <ItemGroup>
     <None Update="NHAP-LICH.ps1" CopyToPublishDirectory="PreserveNewest" />
     <None Update="NHAP-LICH-WEB.ps1" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="NHAP-QHKHSDD-WEB.ps1" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/planning-document-web-import.md" Link="HUONG-DAN-QHKHSDD.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/planning-pdf-limits-20261118.md" Link="planning-pdf-limits-20261118.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/planning-pdf-remediation.md" Link="planning-pdf-remediation.md" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../docs/weekly-schedule-web.md" Link="HUONG-DAN-WEB.md" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../docs/weekly-schedule-dates.md" Link="HUONG-DAN-NGAY.md" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../docs/weekly-schedule-iis.md" Link="HUONG-DAN-IIS.md" CopyToPublishDirectory="PreserveNewest" />

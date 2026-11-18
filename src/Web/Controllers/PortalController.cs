@@ -27,7 +27,7 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
     [HttpGet("lich-tuan/nguon")]
     public Task<IActionResult> WeeklySchedule(string? q, int page = 1) => List("Lịch tuần", query.Published().Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == 76) || x.CategoryId == 76), q, page);
     [HttpGet("quy-hoach-su-dung-dat")]
-    public Task<IActionResult> LandUsePlanning(string? q, int page = 1) => List("Quy hoạch sử dụng đất", query.Published().Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == 77) || x.CategoryId == 77), q, page);
+    public Task<IActionResult> LandUsePlanning(string? q, int page = 1) => List("Quy hoạch, kế hoạch sử dụng đất", query.Published().Where(x => db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == 77) || x.CategoryId == 77), q, page);
     [HttpGet("van-ban-chi-dao-dieu-hanh")]
     public IActionResult DirectiveDocuments() => View("Status", new StatusModel("Văn bản chỉ đạo điều hành", "Chưa có văn bản được công bố trong mục này. Bạn có thể tra cứu tại cổng thông tin nguồn.", "https://qldd.mae.gov.vn/van-ban-chi-dao-dieu-hanh.htm", "Tra cứu tại cổng thông tin nguồn"));
     [HttpGet("chuyen-muc/{slug}")]

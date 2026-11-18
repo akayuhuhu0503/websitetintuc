@@ -84,7 +84,7 @@ public sealed class PublicNavigation(PortalDbContext db, PublicSiteService sites
         items.Add(new(news, null, "main", "Tin tức", "/tin-tuc", false, 2));
         items.AddRange(CategoryItems(visible, news));
         items.Add(new(documents, null, "main", "Văn bản", null, false, 4));
-        Route("Legal", 0, documents); Route("DraftDocuments", 1, documents); Route("Materials", 2, documents);
+        Route("Legal", 0, documents); Route("DraftDocuments", 1, documents); Route("LandPlanning", 2, documents); Route("Materials", 3, documents);
         Route("Disclosure", 3); Route("Announcements", 5); Route("Videos", 6); Route("Weekly", 7); Route("Handbook", 8); Route("Questions", 9); Route("Contact", 10);
         return new(items, visible);
     }

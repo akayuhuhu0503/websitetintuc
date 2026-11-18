@@ -16,9 +16,9 @@ function ConvertTo-IisWebBundle([string]$Staging) {
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'run-web-worker.ps1') -Destination (Join-Path $runtime 'run-worker.ps1')
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../docs/iis-web-only.md') -Destination (Join-Path $runtime 'README.md')
  [xml]$xml=Get-Content -LiteralPath (Join-Path $web 'web.config') -Raw -Encoding UTF8
- $vars=$xml.configuration.location.'system.webServer'.aspNetCore.environmentVariables
+ $vars=$xml.SelectSingleNode("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables")
  $flag=$xml.CreateElement('environmentVariable');$flag.SetAttribute('name','LANDPORTAL_WEB_BUNDLE');$flag.SetAttribute('value','1');[void]$vars.AppendChild($flag)
- $filter=$xml.configuration.location.'system.webServer'.security.requestFiltering
+ $filter=$xml.SelectSingleNode("/configuration/location[@path='.']/system.webServer/security/requestFiltering")
  $hidden=$xml.CreateElement('hiddenSegments')
  foreach($segment in @('.runtime','.env')){$add=$xml.CreateElement('add');$add.SetAttribute('segment',$segment);[void]$hidden.AppendChild($add)}
  [void]$filter.AppendChild($hidden)

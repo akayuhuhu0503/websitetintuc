@@ -27,7 +27,7 @@ public sealed class SiteConfigurationService(PortalDbContext db, StorageOptions 
         ["DraftDocuments"] = ("Văn bản dự thảo", "/du-thao"), ["Materials"] = ("Tài liệu", "/tai-lieu"), ["Videos"] = ("Video", "/video"),
         ["Questions"] = ("Hỏi đáp", "/hoi-dap"), ["Contact"] = ("Liên hệ", "/lien-he"),
         ["Handbook"] = ("Sổ tay đất đai", "/so-tay"), ["ExecutiveDocuments"] = ("Văn bản chỉ đạo điều hành", "/van-ban-chi-dao-dieu-hanh"),
-        ["LandPlanning"] = ("Quy hoạch sử dụng đất", "/quy-hoach-su-dung-dat"), ["Weekly"] = ("Lịch tuần", "/lich-tuan"),
+        ["LandPlanning"] = ("Quy hoạch, kế hoạch sử dụng đất", "/quy-hoach-su-dung-dat"), ["Weekly"] = ("Lịch tuần", "/lich-tuan"),
         ["Disclosure"] = ("Công khai thông tin", "/cong-khai-thong-tin"),
         ["DisclosureCertificates"] = ("Giấy chứng nhận sai hỏng, hủy", "/cong-khai-thong-tin/giay-chung-nhan-sai-hong-huy"),
         ["DisclosureForeignResidents"] = ("Người nước ngoài định cư ở Việt Nam", "/cong-khai-thong-tin/nguoi-nuoc-ngoai-dinh-cu-o-viet-nam"),
