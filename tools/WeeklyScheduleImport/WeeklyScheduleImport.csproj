@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>WeeklyScheduleImport</AssemblyName></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Infrastructure/Infrastructure.csproj" /></ItemGroup>
+  <ItemGroup>
+    <None Update="NHAP-LICH.ps1" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="NHAP-LICH-WEB.ps1" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/weekly-schedule-web.md" Link="HUONG-DAN-WEB.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/weekly-schedule-dates.md" Link="HUONG-DAN-NGAY.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../docs/weekly-schedule-iis.md" Link="HUONG-DAN-IIS.md" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
