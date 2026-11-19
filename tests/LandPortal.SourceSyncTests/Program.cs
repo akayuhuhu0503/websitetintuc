@@ -23,9 +23,12 @@ using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
 if(args.Length==2&&args[0]=="probe"){await SourceProbe.Run(args[1]);return;}
+if(args.Length==2&&args[0]=="image-probe"){await SourceImageProbe.Run(args[1]);return;}
+if(args.Length==2&&args[0]=="resource-tests"){await SourceResourceTests.Run(args[1]);return;}
 // A new, uniquely named LocalDB instance and database; no operational config is read.
 var networkOnly=args.Length==5&&args[4]=="--network-only";
-if((args.Length!=4&&!networkOnly)||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
+var imageOnly=args.Length==5&&args[4]=="--image-only";
+if((args.Length!=4&&!networkOnly&&!imageOnly)||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
 var root=Path.GetFullPath(args[0]);var run=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Directory.Exists(run))throw new Exception("New isolated run required");
 Directory.CreateDirectory(run);
@@ -63,7 +66,7 @@ try
     var source=new FixtureSource();
     using(var bitmap=new SKBitmap(64,32)){bitmap.Erase(SKColors.Brown);using var image=SKImage.FromBitmap(bitmap);using var bytes=image.Encode(SKEncodedImageFormat.Png,100);source.Png=bytes.ToArray();}
     var pdf=new PdfDocumentBuilder();pdf.AddPage(UglyToad.PdfPig.Content.PageSize.A4).AddText("Isolated fixture",12,new(20,700),pdf.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica));source.Pdf=pdf.Build();
-    if(!networkOnly){
+    if(!networkOnly&&!imageOnly){
     var saved=await File.ReadAllTextAsync(args[3]);var parsed=SourceParser.Parse(saved,"https://qldd.mae.gov.vn/cuc-quan-ly-dat-dai-trao-doi-huong-dan-thao-go-vuong-mac-trong-quan-ly-dat-dai-tai-son-la-3681.htm",ContentKind.Article,"3681");
     Check(parsed.Title.Length>20&&parsed.BodyHtml.Length>100&&parsed.PrimaryCategoryId!=null,"Previously saved real QLDD HTML still parses with verified identity/category");
     Check(SourceSyncPolicy.Id(parsed.CanonicalUrl)=="3681","Saved canonical identity remains correct");
@@ -100,6 +103,43 @@ try
     using(var r=await Post("/admin/source-sync/check"))Check(r.IsSuccessStatusCode&&source.Opens==0,"Manual check only enqueues; HTTP never crawls");
     await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync());
     var entry=await Entry();Check(entry.Item.Status=="Ready"&&entry.Data.Assets.Count==2,"Bounded discovery, full content and PNG/PDF staged privately");
+    if(imageOnly)
+    {
+        using var capture=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(args[3],"result.json")));
+        source.ReplayPages=new Dictionary<string,byte[]>();source.ReplayAssets=new Dictionary<string,SourceResponse>();
+        foreach(var id in new[]{"3758","3767"})source.ReplayPages[id]=await File.ReadAllBytesAsync(Path.Combine(args[3],id+".html"));
+        foreach(var fact in capture.RootElement.GetProperty("facts").EnumerateArray().Where(x=>x.TryGetProperty("requested",out _)))
+        {
+            var bytes=await File.ReadAllBytesAsync(Path.Combine(args[3],fact.GetProperty("sha256").GetString()+".bin"));
+            Check(Convert.ToHexStringLower(SHA256.HashData(bytes))==fact.GetProperty("sha256").GetString(),"Captured real image hash intact");
+            source.ReplayAssets[fact.GetProperty("requested").GetString()!]=new(fact.GetProperty("final").GetString()!,200,fact.GetProperty("ContentType").GetString()!,bytes,DateTimeOffset.UtcNow);
+        }
+        await InScope(async s=>{await s.GetRequiredService<SourceSyncStore>().ConfigureAsync("admin",false,53,1);return true;});
+        foreach(var id in new[]{"3758","3767"})
+        {
+            source.SourceId=id;source.ReplayBlocked=true;await Due();await Cycle();var held=await Entry(id);
+            Check(held.Item.Status=="Review"&&held.Data.Assets.Count==0&&held.Data.Warnings.Any(x=>x.Contains("CONTENT_TYPE")),id+": invalid header keeps required resource in Review");
+            source.ReplayBlocked=false;await Due();
+            using(var r=await Post($"/admin/source-sync/{held.Item.Id}/state",new(){["action"]="retry"}))Check(r.IsSuccessStatusCode,id+": scoped retry through CMS");
+            await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync());var ready=await Entry(id);
+            Check(ready.Item.Id==held.Item.Id&&ready.Item.Status=="Ready"&&ready.Data.Assets.Count==1&&ready.Data.Warnings.Count==0,id+": same checkpoint Review -> Ready with captured JPEG/image-png response");
+            var staged=ready.Data.Assets.Single();
+            Check(staged.Mime=="image/jpeg"&&Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(storage.ResolveSnapshot(staged.Key))))==staged.Sha256,id+": snapshot exact SHA and canonical JPEG MIME");
+            await Due();await Cycle();
+            await using(var db=new PortalDbContext(options))Check(await db.Jobs.CountAsync(x=>x.IdempotencyKey==SourceSyncPolicy.Key(id))==1&&await db.Contents.CountAsync()==(id=="3758"?0:1),id+": repeated discovery creates no duplicate or automatic CMS content");
+            using(var r=await Post($"/admin/source-sync/{ready.Item.Id}/draft",new(){["hash"]=ready.Data.Hash}))Check(r.IsSuccessStatusCode,id+": receive into draft through existing workflow");
+            var received=await Entry(id);
+            await using(var db=new PortalDbContext(options))
+            {
+                var content=await db.Contents.SingleAsync(x=>x.Id==received.Data.ContentId);var draft=await db.ContentDrafts.SingleAsync(x=>x.ContentId==content.Id);
+                var asset=await db.MediaAssets.SingleAsync(x=>x.Id==draft.CoverAssetId);
+                Check(content.State==WorkflowState.Draft&&content.PublishedRevisionId==null&&draft.BodyHtml.Contains("/media/"+asset.Id)&&!draft.BodyHtml.Contains("media-qldd.mae.gov.vn"),id+": image placed in body and cover, no hotlink or publication");
+                Check(asset.ScanStatus=="NotScanned"&&asset.ValidationStatus==MediaUploadOptions.ManagedImageNoAvValidation,id+": real decode policy, never fake Clean");
+            }
+        }
+        await File.WriteAllTextAsync(Path.Combine(run,"result.json"),JsonSerializer.Serialize(new{passed=checks.Count,checks,operationalSqlTouched=false}));
+        Console.WriteLine("PASS focused image recovery checks: "+checks.Count);return;
+    }
     if(networkOnly)
     {
         await Due();await Cycle();
@@ -232,6 +272,7 @@ sealed class FixtureAuth(IOptionsMonitor<AuthenticationSchemeOptions> options,IL
 }
 sealed class FixtureSource:IQlddSourceFactory
 {
+    public Dictionary<string,byte[]>? ReplayPages;public Dictionary<string,SourceResponse>? ReplayAssets;public bool ReplayBlocked;
     public byte[] Png=[],Pdf=[];public int Opens;public bool Changed,Fail,InvalidAsset;public string SourceId="900001";
     public TaskCompletionSource? Gate,Entered;
     public IQlddSourceSession Open(){Opens++;return new Session(this);}
@@ -244,6 +285,8 @@ sealed class FixtureSource:IQlddSourceFactory
             RequestsUsed++;if(RequestsUsed>SourceSyncPolicy.RequestsPerRun)throw new InvalidOperationException("Fixture budget exceeded");
             if(f.Gate!=null){f.Entered!.TrySetResult();await f.Gate.Task.WaitAsync(ct);}
             if(f.Fail)throw new HttpRequestException("Isolated source outage");
+            if(f.ReplayAssets?.TryGetValue(url,out var captured)==true)return captured with { ContentType=f.ReplayBlocked?"text/html":captured.ContentType };
+            if(SourceSyncPolicy.Id(url)==f.SourceId&&f.ReplayPages?.TryGetValue(f.SourceId,out var html)==true)return new(url,200,"text/html",html,DateTimeOffset.UtcNow);
             var uri=new Uri(url);byte[] bytes;var mime="text/html";
             if(uri.AbsolutePath=="/robots.txt"){bytes=Encoding.UTF8.GetBytes("User-agent: *\nDisallow:\n");mime="text/plain";}
             else if(uri.AbsolutePath.EndsWith(".png")){bytes=f.InvalidAsset?Encoding.UTF8.GetBytes("fake image"):f.Png;mime="image/png";}

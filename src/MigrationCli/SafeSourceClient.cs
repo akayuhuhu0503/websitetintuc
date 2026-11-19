@@ -72,7 +72,7 @@ public sealed class SafeSourceClient : IDisposable
         var uri = new Uri(url);
         for (var redirect = 0; redirect <= 4; redirect++)
         {
-            if (uri.Scheme is not ("https" or "http") || !AllowedHosts.Contains(uri.Host)&&!exactResources.Contains(uri.AbsoluteUri) || pagesOnly && uri.Host != "qldd.mae.gov.vn" || !uri.IsDefaultPort || uri.UserInfo.Length != 0) throw new InvalidDataException("Source URI blocked by allowlist/scheme/port policy.");
+            ValidateDestination(uri,pagesOnly,redirect);
             if (RequestsUsed >= budget) throw new RequestBudgetException();
             var pause = TimeSpan.FromSeconds(2.05) - (DateTimeOffset.UtcNow - lastRequest);
             if (pause > TimeSpan.Zero) await Task.Delay(pause + TimeSpan.FromMilliseconds(Random.Shared.Next(20, 120)), cancellation);
@@ -94,14 +94,14 @@ public sealed class SafeSourceClient : IDisposable
                 if (retry > TimeSpan.FromSeconds(60)) throw new SourceTransportException("HTTP_RETRY_AFTER");
                 await Task.Delay(retry, cancellation);
             }
-            if (response.Content.Headers.ContentLength > maxBytes) throw new InvalidDataException("Source Content-Length exceeds response budget.");
+            if (response.Content.Headers.ContentLength > maxBytes) throw new SourceTransportException("BYTE_LIMIT",stage:"tệp nguồn");
             await using var input = await response.Content.ReadAsStreamAsync(cancellation);
             using var output = new MemoryStream();
             var buffer = new byte[64 * 1024];
             int count;
             while ((count = await input.ReadAsync(buffer, cancellation)) > 0)
             {
-                if (output.Length + count > maxBytes) throw new InvalidDataException("Source decompressed response exceeds byte budget.");
+                if (output.Length + count > maxBytes) throw new SourceTransportException("BYTE_LIMIT",stage:"tệp nguồn");
                 await output.WriteAsync(buffer.AsMemory(0, count), cancellation);
             }
             return new(uri.AbsoluteUri, (int)response.StatusCode, response.Content.Headers.ContentType?.MediaType ?? "", output.ToArray(), DateTimeOffset.UtcNow)
@@ -115,9 +115,16 @@ public sealed class SafeSourceClient : IDisposable
                 throw new SourceTransportException(SourceTransportException.Classify(e), e,
                     uri.AbsolutePath == "/robots.txt" ? "robots.txt" : pagesOnly ? "trang nguồn" : "tệp nguồn");
             }
+            catch (OperationCanceledException e) when (!cancellation.IsCancellationRequested)
+            { throw new SourceTransportException("TIMEOUT",e,uri.AbsolutePath=="/robots.txt"?"robots.txt":pagesOnly?"trang nguồn":"tệp nguồn"); }
             finally { lastRequest = DateTimeOffset.UtcNow; }
         }
         throw new SourceTransportException("REDIRECT_LIMIT", stage: "chuyển hướng");
+    }
+    void ValidateDestination(Uri uri,bool pagesOnly,int redirect)
+    {
+        if (uri.Scheme is not ("https" or "http") || !AllowedHosts.Contains(uri.Host)&&!exactResources.Contains(uri.AbsoluteUri) || pagesOnly && uri.Host != "qldd.mae.gov.vn" || !uri.IsDefaultPort || uri.UserInfo.Length != 0)
+            throw new SourceTransportException(redirect==0?"URL_POLICY":"REDIRECT_BLOCKED",stage:redirect==0?"địa chỉ nguồn":"chuyển hướng");
     }
     public void Dispose() => client.Dispose();
 }
@@ -129,7 +136,14 @@ public sealed class SourceTransportException(string code, Exception? inner = nul
 {
     public string Code { get; } = code;
     public string Stage { get; } = stage;
-    public string SafeSummary => $"Không kết nối được nguồn tại {Stage} [{Code}]. Dữ liệu hàng chờ được giữ nguyên; thử lại có giới hạn.";
+    public string SafeSummary => Code switch
+    {
+        "BYTE_LIMIT"=>"Phản hồi nguồn vượt giới hạn dung lượng [BYTE_LIMIT].",
+        "REDIRECT_BLOCKED" or "REDIRECT_LIMIT"=>"Chuyển hướng nguồn bị chặn theo chính sách ["+Code+"].",
+        "URL_POLICY" or "NETWORK_POLICY"=>"Địa chỉ nguồn bị chặn theo chính sách an toàn ["+Code+"].",
+        "TIMEOUT"=>"Nguồn phản hồi quá thời gian cho phép [TIMEOUT].",
+        _=>$"Không kết nối được nguồn tại {Stage} [{Code}]. Dữ liệu hàng chờ được giữ nguyên; thử lại có giới hạn."
+    };
     public static string Classify(Exception error)
     {
         for (Exception? e = error; e != null; e = e.InnerException)
