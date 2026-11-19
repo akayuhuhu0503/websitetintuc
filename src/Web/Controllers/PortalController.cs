@@ -140,7 +140,9 @@ public sealed class PortalController(PortalDbContext db, PublicContentQuery quer
         {
             "chuc-nang-nhiem-vu" => rows.Where(x => x.Title.Contains("chức năng") || x.Title.Contains("nhiệm vụ")),
             "co-cau-to-chuc" => rows.Where(x => x.Title.Contains("cơ cấu tổ chức") && !x.Title.Contains("chức năng") && !x.Title.Contains("nhiệm vụ")),
-            _ => rows.Where(x => x.Title.Contains("lãnh đạo"))
+            // Weekly schedules also mention leadership. This introduction route
+            // identifies the dedicated page, never a title-keyword news search.
+            _ => rows.Where(x => x.Title.Trim() == "Lãnh đạo cục")
         };
         var count = await rows.CountAsync();
         if (count == 0) return View("Status", new StatusModel(name, "Chưa có nội dung riêng đã được duyệt để công khai tại mục này. Các quyết định về chức năng, nhiệm vụ của các đơn vị được đăng tại mục Chức năng nhiệm vụ."));

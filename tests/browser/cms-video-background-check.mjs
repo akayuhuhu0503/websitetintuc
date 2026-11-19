@@ -10,7 +10,7 @@ const assets = resolve(root, 'src/Web/wwwroot');
 const content = '11111111-1111-4111-8111-111111111111';
 const video = '22222222-2222-4222-8222-222222222222';
 const initialVersion = 'MDAwMDAwMDE=', attachedVersion = 'MDAwMDAwMDI=';
-let renderedVersion = initialVersion, saveCalls = 0, releaseSave, holdSave = false;
+let renderedVersion = initialVersion, saveCalls = 0, releaseSave, holdSave = false, releasePoll;
 const errors = [];
 function html() {
   return `<!doctype html><html lang="vi"><meta charset="utf-8"><body>
@@ -30,6 +30,11 @@ const context = await browser.newContext(); context.setDefaultTimeout(10000);
 await context.route('**/*', async route => {
   const url = new URL(route.request().url());
   if (url.hostname !== 'fixture.test') return route.abort();
+  if (url.pathname === '/admin/videos/editor/' + content) {
+    const observed = renderedVersion;
+    await new Promise(resolve => { releasePoll = resolve; });
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({rowVersion:observed,canUpload:true,sessions:[],attached:[]}) });
+  }
   if (url.pathname === '/admin/save') {
     saveCalls++;
     if (holdSave) await new Promise(resolve => { releaseSave = resolve; });
@@ -85,9 +90,39 @@ try {
   check(await selected.evaluate(v => window.landPortalEditor.acceptServerVideoState({ rowVersion: v }), attachedVersion) === 'conflict', 'Unsaved file selection outside form prevents destructive automatic reload');
   check(await selected.locator('#outside-file').evaluate(input => input.files[0].name) === 'new.png', 'Selected local file is retained for operator review');
   await selected.close();
+
+  // Reproduce a real image autosave racing with the video panel's readonly GET.
+  // The old GET finishes AFTER save; it must not pause the freshly saved editor.
+  renderedVersion = initialVersion;
+  const stalePoll = await page();
+  await stalePoll.evaluate(id => {
+    const section=document.createElement('section');section.id='editor-video';section.dataset.contentId=id;
+    section.innerHTML='<input id="editor-video-file" type="file"><progress id="editor-video-progress"></progress><p data-video-message></p><p data-video-processing></p><div data-video-preview></div><div data-video-attached></div><div data-video-sessions></div>'+['start','pause','resume','cancel','attach','retry'].map(a=>'<button type="button" data-video-action="'+a+'"></button>').join('');
+    document.querySelector('form').append(section);
+  },content);
+  await stalePoll.addScriptTag({ url:'http://fixture.test/js/editor-video.js' });
+  for(let i=0;i<100&&!releasePoll;i++)await stalePoll.waitForTimeout(20);
+  assert(releasePoll,'Video poll started');
+  await stalePoll.locator('[name=Title]').fill('Saved while old video GET remains pending');
+  await stalePoll.locator('button[type=submit]').click();
+  await stalePoll.waitForFunction(v=>document.querySelector('[name=RowVersion]').value===v,attachedVersion);
+  // Retain a selected image, as the actual upload control does after success.
+  await stalePoll.locator('#outside-file').setInputFiles({name:'uploaded.png',mimeType:'image/png',buffer:Buffer.from('fixture')});
+  const oldResponse=stalePoll.waitForResponse(r=>new URL(r.url()).pathname==='/admin/videos/editor/'+content);
+  releasePoll();releasePoll=undefined;await oldResponse;await stalePoll.waitForTimeout(100);
+  check(!await stalePoll.locator('#editor-video-reconcile').count() && !(await stalePoll.locator('#editor-feedback').textContent()).includes('tự lưu đã tạm dừng'),'Old video GET cannot falsely conflict with completed image autosave');
+  check(await stalePoll.locator('[name=RowVersion]').inputValue()===attachedVersion,'Stale poll does not roll back confirmed rowversion');
+  check(await stalePoll.locator('#outside-file').evaluate(i=>i.files[0].name)==='uploaded.png','Ignoring stale poll preserves selected image');
+  renderedVersion='MDAwMDAwMDM=';
+  for(let i=0;i<250&&!releasePoll;i++)await stalePoll.waitForTimeout(20);
+  assert(releasePoll,'Next bounded poll started');releasePoll();releasePoll=undefined;
+  await stalePoll.waitForFunction(()=>!!document.querySelector('#editor-video-reconcile'));
+  check((await stalePoll.locator('#editor-feedback').textContent()).includes('tự lưu đã tạm dừng'),'Genuine later server change still requires conflict reconciliation');
+  await stalePoll.close({runBeforeUnload:false});
   check(errors.length === 0, 'Real editor/Jodit bridge has no JavaScript errors');
   console.log(`CMS_VIDEO_BACKGROUND_BROWSER ${passed}/${passed} PASS (mock HTTP; no SQL, no screenshots)`);
 } finally {
   if (releaseSave) releaseSave();
+  if (releasePoll) releasePoll();
   await browser.close();
 }

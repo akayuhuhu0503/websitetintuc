@@ -81,7 +81,14 @@
     if (!contentId || polling || busy || attaching) return;
     polling = true;
     try {
-      const state = await api(`/admin/videos/editor/${contentId}`); editable = state.canUpload;
+      const requestedContent = contentId;
+      const requestedVersion = form?.querySelector('[name="RowVersion"]')?.value;
+      const state = await api(`/admin/videos/editor/${requestedContent}`);
+      // A save can commit while this GET is in flight. Do not interpret its old
+      // rowversion as a newer background attachment or overwrite current controls.
+      // The next bounded poll will compare against the newly saved draft.
+      if (contentId !== requestedContent || form?.querySelector('[name="RowVersion"]')?.value !== requestedVersion) return;
+      editable = state.canUpload;
       const reconciliation = bridge()?.acceptServerVideoState?.(state) || 'current';
       if (reconciliation !== 'current') {
         if (reconciliation === 'conflict') {
