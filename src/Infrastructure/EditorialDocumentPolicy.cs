@@ -5,13 +5,15 @@ public static class EditorialDocumentPolicy
 {
     public const long OfficeMaximum = 10 * 1024 * 1024;
     public const long PdfMaximum = 104 * 1024 * 1024;
-    public const long RequestMaximum = PdfMaximum + 1024 * 1024; // Multipart overhead, not a larger file limit.
+    public const long RequestMaximum = EditorialZipPolicy.Maximum + 1024 * 1024; // Multipart overhead; PDF stays 104 MiB.
     public const int PdfMaximumPages = 2000;
     public const int PdfValidationSeconds = 60;
-    public const string SizeHelp = "PDF tối đa 104 MiB, 2.000 trang; DOCX/XLSX tối đa 10 MiB.";
+    public const string SizeHelp = "PDF tối đa 104 MiB, 2.000 trang; DOCX/XLSX tối đa 10 MiB; ZIP tối đa 128 MiB và bắt buộc quét antivirus.";
     private static readonly SemaphoreSlim PdfSlot = new(1, 1);
 
-    public static long MaximumFor(string mime) => mime == "application/pdf" ? PdfMaximum : OfficeMaximum;
+    public static bool IsDocument(string mime) => mime == EditorialZipPolicy.Mime || OfficeDocumentPolicy.IsDocument(mime);
+    public static string Mime(string name) => Path.GetExtension(name).Equals(".zip", StringComparison.OrdinalIgnoreCase) ? EditorialZipPolicy.Mime : OfficeDocumentPolicy.Mime(name);
+    public static long MaximumFor(string mime) => mime == EditorialZipPolicy.Mime ? EditorialZipPolicy.Maximum : mime == "application/pdf" ? PdfMaximum : OfficeMaximum;
     public static void RequireSize(long bytes, string mime)
     {
         if (bytes < 1 || bytes > MaximumFor(mime)) throw new MediaUploadException(SizeHelp, 413);
@@ -21,6 +23,12 @@ public static class EditorialDocumentPolicy
     {
         ct.ThrowIfCancellationRequested();
         RequireSize(new FileInfo(path).Length, mime);
+        if (mime == EditorialZipPolicy.Mime)
+        {
+            if (managedWithoutAv) throw new MediaUploadException("ZIP không được áp dụng chính sách tài liệu không antivirus.");
+            await EditorialZipPolicy.ValidateAsync(path, ct);
+            return null;
+        }
         if (mime != "application/pdf")
         {
             OfficeDocumentPolicy.Validate(path, mime, media, managedWithoutAv);

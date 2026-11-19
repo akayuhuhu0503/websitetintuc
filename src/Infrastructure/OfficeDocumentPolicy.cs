@@ -15,7 +15,13 @@ public static class OfficeDocumentPolicy
     public static void Validate(string path, string mime, MediaService media, bool managedWithoutAv = false)
     {
         if (mime == "application/pdf") { media.ValidateContent(path, mime, CancellationToken.None); return; }
-        using var input = File.OpenRead(path); using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        using var input = File.OpenRead(path);
+        ValidateOffice(input, mime, managedWithoutAv);
+    }
+    internal static void ValidateOffice(Stream input, string mime, bool managedWithoutAv)
+    {
+        if (mime is not (Docx or Xlsx)) throw new InvalidDataException("Loại Office không hợp lệ.");
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
         if (zip.Entries.Count is < 2 or > 100 || zip.Entries.Sum(x => x.Length) > 20 * 1024 * 1024) throw new InvalidDataException("Office vượt giới hạn ZIP.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in zip.Entries)

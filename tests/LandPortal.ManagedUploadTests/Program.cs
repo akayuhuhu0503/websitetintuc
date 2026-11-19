@@ -19,6 +19,7 @@ using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
 if (args.FirstOrDefault() == "--editorial-pdf-limits") { await EditorialPdfLimitChecks.RunAsync(args); return; }
+if (args.FirstOrDefault() == "--editorial-zip") { await EditorialZipChecks.RunAsync(); return; }
 
 using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();

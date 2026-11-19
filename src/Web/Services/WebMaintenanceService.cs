@@ -37,7 +37,8 @@ public sealed class WebMaintenanceService(
                 {
                     EditorialDocumentService.RequireTestInfrastructure(configuration,environment.EnvironmentName);
                     await using(var scope=scopes.CreateAsyncScope())
-                        await scope.ServiceProvider.GetRequiredService<EditorialDocumentService>().ScanOnceAsync(scanner!,ct:ct);
+                        await scope.ServiceProvider.GetRequiredService<EditorialDocumentService>().ScanOnceAsync(scanner!,ct:ct,
+                            archiveScanner: () => InquiryScannerFactory.Create(configuration, environment.EnvironmentName, EditorialZipPolicy.Maximum));
                     await using(var scope=scopes.CreateAsyncScope())
                     {
                         var files=scope.ServiceProvider.GetRequiredService<InquiryAttachmentService>();

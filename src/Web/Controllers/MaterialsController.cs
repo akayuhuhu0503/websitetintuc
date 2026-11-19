@@ -21,13 +21,13 @@ public sealed class MaterialsController(PortalDbContext db, PublicContentQuery q
         // A deliberately configured catalog scope, never all attachments or an
         // assumed ID 24. Only the current published revision supplies documents.
         var documents = db.MediaAssets.AsNoTracking().Where(x => !x.IsQuarantined && x.Origin == "EditorialDocument"
-            && (x.MimeType == "application/pdf" || x.MimeType == OfficeDocumentPolicy.Docx || x.MimeType == OfficeDocumentPolicy.Xlsx)
+            && (x.MimeType == "application/pdf" || x.MimeType == OfficeDocumentPolicy.Docx || x.MimeType == OfficeDocumentPolicy.Xlsx || x.MimeType == EditorialZipPolicy.Mime)
             && (x.ScanStatus == "Clean" && x.ValidationStatus == "Validated"
-                || policy.ApprovedManagedDocumentsWithoutAv && x.ScanStatus == "NotScanned" && x.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation)
+                || policy.ApprovedManagedDocumentsWithoutAv && x.MimeType != EditorialZipPolicy.Mime && x.ScanStatus == "NotScanned" && x.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation)
             && db.Set<EditorialDocument>().Any(d => d.MediaAssetId == x.Id &&
                 (x.ScanStatus == "Clean" && d.ScanState == InquiryScanState.Clean && d.ScannedSha256 == x.Sha256 && d.ScannedUtc != null
                     && d.EngineVersion != null && d.EngineVersion != "" && (policy.IsDevelopmentLoopback || !d.EngineVersion.StartsWith("Defender/"))
-                || policy.ApprovedManagedDocumentsWithoutAv && x.ScanStatus == "NotScanned" && d.ScanState == InquiryScanState.NotScanned
+                || policy.ApprovedManagedDocumentsWithoutAv && x.MimeType != EditorialZipPolicy.Mime && x.ScanStatus == "NotScanned" && d.ScanState == InquiryScanState.NotScanned
                     && d.Attempts == 0 && d.ScannedSha256 == null && d.ScannedUtc == null && d.EngineVersion == null)));
         var catalog = query.Published().Where(x => x.Kind != ContentKind.LegalDocument && x.Kind != ContentKind.DraftDocument
             && (x.CategoryId == scope || db.RevisionCategories.Any(c => c.RevisionId == x.RevisionId && c.CategoryId == scope))

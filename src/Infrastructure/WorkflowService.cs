@@ -456,7 +456,7 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
             if(asset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset,(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed)))throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
             if (!AllowedMime(asset.MimeType)) throw new InvalidOperationException("Chỉ được chọn ảnh JPEG/PNG/GIF/WebP hoặc PDF.");
             }
-            if (selections[asset.Id].Usage == "Attachment" && !OfficeDocumentPolicy.IsDocument(asset.MimeType) &&
+            if (selections[asset.Id].Usage == "Attachment" && !EditorialDocumentPolicy.IsDocument(asset.MimeType) &&
                 !bodyReferences.Contains(asset.Id) && input.CoverAssetId != asset.Id)
                 throw new InvalidOperationException("Danh sách tài liệu đính kèm chỉ nhận PDF; ảnh phải ở thân bài hoặc ảnh đại diện.");
             var readableRevisions=new CurrentPermissionService(db).ScopeRevisions(db.Revisions.AsNoTracking(),actor).Where(r=>r.ContentId==content.Id).Select(r=>r.Id);
@@ -559,7 +559,7 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
         if(m.DisclosureYear==null)errors["Metadata.DisclosureYear"]="Bổ sung năm thông tin trước khi gửi duyệt.";
         if(errors.Count>0)throw new EditorialValidationException(errors);
     }
-    private static bool AllowedMime(string mime) => mime is "image/jpeg" or "image/png" or "image/gif" or "image/webp" || OfficeDocumentPolicy.IsDocument(mime);
+    private static bool AllowedMime(string mime) => mime is "image/jpeg" or "image/png" or "image/gif" or "image/webp" || EditorialDocumentPolicy.IsDocument(mime);
     private async Task<bool> HasVerifiedAnnouncementPdfAsync(Guid[] attachmentIds)
     {
         if (storage == null || attachmentIds.Length == 0) return false;

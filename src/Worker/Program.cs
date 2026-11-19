@@ -56,7 +56,8 @@ if (args.Contains("--documents"))
     using var stop = new CancellationTokenSource(); Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
     do
     {
-        try { await using var db = new PortalDbContext(DatabaseSettings.Options(config)); await new EditorialDocumentService(db, storage, new MediaService(db, storage, MediaUploadOptions.FromConfiguration(config, environment)), new(db)).ScanOnceAsync(scanner, only, stop.Token); }
+        try { await using var db = new PortalDbContext(DatabaseSettings.Options(config)); await new EditorialDocumentService(db, storage, new MediaService(db, storage, MediaUploadOptions.FromConfiguration(config, environment)), new(db)).ScanOnceAsync(scanner, only, stop.Token,
+            archiveScanner: () => InquiryScannerFactory.Create(config, environment, EditorialZipPolicy.Maximum)); }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { break; }
         catch (Exception error) { Console.Error.WriteLine("Document scan: " + error.GetType().Name + "; SQL lease retained, access stays closed."); if (args.Contains("--once")) return 1; }
         if (args.Contains("--once")) break;
