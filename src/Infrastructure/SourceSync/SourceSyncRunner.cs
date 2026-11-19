@@ -159,12 +159,13 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
                     {
                         try
                         {
-                            if(source.RequestsUsed>=SourceSyncPolicy.RequestsPerRun-1){warnings.Add("Đã đạt giới hạn truy cập; còn tài nguyên chưa nhận.");break;}
+                            if(source.RequestsUsed>=SourceSyncPolicy.RequestsPerRun-1){warnings.Add("Đã đạt giới hạn truy cập; còn tài nguyên chưa nhận [REQUEST_BUDGET].");break;}
                             var asset=await DownloadAsync(source,url,ct);total+=asset.Bytes;
                             if(total>40L*1024*1024){warnings.Add("Tài nguyên vượt 40 MiB/bài; phần còn lại cần kiểm tra.");break;}
                             data.Assets.Add(asset);
                         }
                         catch(OperationCanceledException){throw;}
+                        catch(RequestBudgetException){warnings.Add("Đã hết ngân sách request khi nhận tệp [REQUEST_BUDGET].");break;}
                         catch(Exception e)when(e is IOException or InvalidDataException or InvalidOperationException or HttpRequestException or MediaUploadException){warnings.Add("Không nhận được tệp "+SafeName(url)+": "+SafeError(e));}
                     }
                 }
@@ -209,10 +210,15 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
         var name=SafeName(url);var extension=Path.GetExtension(name).ToLowerInvariant();
         var mime=extension switch{".jpg" or ".jpeg"=>"image/jpeg",".png"=>"image/png",".gif"=>"image/gif",".webp"=>"image/webp",_=>OfficeDocumentPolicy.Mime(name)};
         var response=await source.FetchAsync(url,10*1024*1024,false,ct);
-        if(response.Status!=200||response.ContentType!=mime&&response.ContentType!="application/octet-stream")throw new InvalidDataException("Nguồn trả sai định dạng hoặc không có tệp.");
+        SourceSyncResourcePolicy.ValidateResponse(response,mime);
         var key=await StoreBytesAsync(response.Bytes,"resource",ct);var path=storage.ResolveSnapshot(key);
-        if(mime.StartsWith("image/"))media.ValidateContent(path,mime,ct);
-        else{OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv:true);if(mime=="application/pdf")ManagedPdfPolicy.Validate(path);}
+        try
+        {
+            if(mime.StartsWith("image/"))media.ValidateContent(path,mime,ct);
+            else{OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv:true);if(mime=="application/pdf")ManagedPdfPolicy.Validate(path);}
+        }
+        catch(MediaUploadException e)
+        {throw new SourceResourceException(mime.StartsWith("image/")?(e.StatusCode==413?"IMAGE_LIMIT":"IMAGE_INVALID"):"FILE_INVALID");}
         return new(url,key,Convert.ToHexStringLower(SHA256.HashData(response.Bytes)),response.Bytes.Length,mime,name);
     }
     public async Task SnapshotAsync(Guid run,SourceResponse response,CancellationToken ct)
@@ -233,6 +239,7 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
     {if(response.Status!=200||response.ContentType is not("text/html" or "application/xhtml+xml"))throw new IOException("Trang nguồn chưa sẵn sàng (HTTP "+response.Status+").");}
     static string SafeName(string url)=>Uri.TryCreate(url,UriKind.Absolute,out var u)?Path.GetFileName(Uri.UnescapeDataString(u.AbsolutePath)):"tệp";
     static string SafeError(Exception error)=>error switch{
+        SourceResourceException resource=>resource.SafeSummary,
         SourceTransportException transport=>transport.SafeSummary,
         RequestBudgetException=>"Đã đạt giới hạn truy cập nguồn; sẽ tiếp tục an toàn ở lượt sau.",
         OperationCanceledException=>"Nguồn phản hồi quá thời gian cho phép; dữ liệu trước đó được giữ nguyên.",

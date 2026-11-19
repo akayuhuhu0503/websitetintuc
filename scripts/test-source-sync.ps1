@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$SavedQlddSnapshot,[string]$DotnetPath='dotnet',[switch]$WaitForBrowser)
+param([Parameter(Mandatory=$true)][string]$SavedQlddSnapshot,[string]$DotnetPath='dotnet',[switch]$WaitForBrowser,[switch]$ImagesOnly)
 $ErrorActionPreference='Stop'
 $checkout=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $instance='LPSync_'+[Guid]::NewGuid().ToString('N').Substring(0,12)
@@ -13,7 +13,9 @@ try {
     if($WaitForBrowser){$env:SOURCE_SYNC_BROWSER='1'}
     & SqlLocalDB start $instance
     if($LASTEXITCODE-ne 0){throw 'Cannot start isolated LocalDB instance'}
-    & $dotnet.Source (Join-Path $checkout 'tests\LandPortal.SourceSyncTests\bin\Release\net10.0\LandPortal.SourceSyncTests.dll') $checkout $instance $run ([IO.Path]::GetFullPath($SavedQlddSnapshot))
+    $testArgs=@($checkout,$instance,$run,([IO.Path]::GetFullPath($SavedQlddSnapshot)))
+    if($ImagesOnly){$testArgs+='--image-only'}
+    & $dotnet.Source (Join-Path $checkout 'tests\LandPortal.SourceSyncTests\bin\Release\net10.0\LandPortal.SourceSyncTests.dll') @testArgs
     $testExit=$LASTEXITCODE
     Write-Output ('Focused result directory: '+$run)
     if($testExit-ne 0){throw 'Source sync checks failed; inspect failure.txt in the isolated run'}
