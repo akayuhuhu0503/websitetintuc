@@ -353,7 +353,7 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
         const caption = document.createElement('input'); caption.id = captionLabel.htmlFor; caption.name = 'AttachmentLabels[' + asset.id + ']'; caption.maxLength = 2000; caption.className = 'attachment-caption';
         li.append(captionLabel, caption);
         const name = document.createElement('span'); name.textContent = asset.originalName;
-        const detail=document.createElement('small'); const kind=asset.mimeType==='application/pdf'?'PDF':asset.mimeType.includes('wordprocessingml')?'Word':asset.mimeType.includes('spreadsheetml')?'Excel':'Tài liệu';
+        const detail=document.createElement('small'); const kind=asset.mimeType==='application/zip'?'ZIP':asset.mimeType==='application/pdf'?'PDF':asset.mimeType.includes('wordprocessingml')?'Word':asset.mimeType.includes('spreadsheetml')?'Excel':'Tài liệu';
         detail.textContent=kind+' · '+(asset.byteLength>=1048576?(asset.byteLength/1048576).toLocaleString('vi-VN',{maximumFractionDigits:1})+' MB':Math.max(1,Math.ceil(asset.byteLength/1024))+' KB');
         const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'link-button'; remove.textContent = 'Gỡ khỏi bản nháp'; remove.dataset.removeAttachment = '';
         const view=document.createElement('a');view.href=asset.previewUrl;view.target='_blank';view.rel='noopener';view.textContent='Xem tệp';
@@ -490,8 +490,8 @@ interface PickerMedia { id: string; originalName: string; mimeType: string; byte
     document.querySelector<HTMLInputElement>('#editor-document-file')?.addEventListener('change',async event=>{
         const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];if(!file)return;
         if(documentUploadBusy)return;
-        const fileMaximum=Number(/\.pdf$/i.test(file.name)?input.dataset.pdfMaximum:input.dataset.officeMaximum);
-        if(!/\.(pdf|docx|xlsx)$/i.test(file.name)||!Number.isSafeInteger(fileMaximum)||fileMaximum<1||file.size>fileMaximum){documentFeedback!.textContent='Chọn PDF tối đa 104 MiB; DOCX hoặc XLSX tối đa 10 MiB.';return;}
+        const fileMaximum=Number(/\.pdf$/i.test(file.name)?input.dataset.pdfMaximum:/\.zip$/i.test(file.name)?input.dataset.zipMaximum:input.dataset.officeMaximum);
+        if(!/\.(pdf|docx|xlsx|zip)$/i.test(file.name)||!Number.isSafeInteger(fileMaximum)||fileMaximum<1||file.size>fileMaximum){documentFeedback!.textContent='Chọn PDF tối đa 104 MiB; DOCX/XLSX tối đa 10 MiB; ZIP tối đa 128 MiB và cần quét antivirus.';return;}
         documentUploadBusy=true;input.disabled=true;
         documentStatus('Chuẩn bị '+file.name+'…','preparing');
         if(documentProgress){documentProgress.hidden=false;documentProgress.removeAttribute('value');documentProgress.max=100;}
