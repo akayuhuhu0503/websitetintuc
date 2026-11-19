@@ -81,7 +81,14 @@
     if (!contentId || polling || busy || attaching) return;
     polling = true;
     try {
-      const state = await api(`/admin/videos/editor/${contentId}`); editable = state.canUpload;
+      const requestedContent = contentId;
+      const requestedVersion = form?.querySelector('[name="RowVersion"]')?.value;
+      const state = await api(`/admin/videos/editor/${requestedContent}`);
+      // A save can commit while this GET is in flight. Do not interpret its old
+      // rowversion as a newer background attachment or overwrite current controls.
+      // The next bounded poll will compare against the newly saved draft.
+      if (contentId !== requestedContent || form?.querySelector('[name="RowVersion"]')?.value !== requestedVersion) return;
+      editable = state.canUpload;
       const reconciliation = bridge()?.acceptServerVideoState?.(state) || 'current';
       if (reconciliation !== 'current') {
         if (reconciliation === 'conflict') {
@@ -163,7 +170,10 @@
     } finally { busy = false; abort = null; controls(); await refresh(); }
   }
   async function guarded(action) { try { await action(); } catch (error) { processing(error.message || 'Thao tác chưa thành công; dữ liệu đã nhận được giữ nguyên.'); } }
-  fileInput.addEventListener('change', () => { file = fileInput.files[0] || null; });
+  fileInput.addEventListener('change', () => {
+    file = fileInput.files[0] || null;
+    message(file ? `Đã chọn: ${file.name}. Bấm tải video để gửi tệp; chưa gắn vào bản nháp.` : 'Chưa chọn tệp video.');
+  });
   button('start').addEventListener('click', () => guarded(() => upload(true)));
   button('resume').addEventListener('click', () => guarded(() => upload(false)));
   button('pause').addEventListener('click', () => { paused = true; abort?.abort(); processing('Đang tạm dừng tải…'); });

@@ -22,9 +22,10 @@ public sealed class HomeController(PortalDbContext db, PublicContentQuery query,
         var news = featured.Concat(recent).Select(PublicContentQuery.Card).ToArray();
         var notices = await Take(ContentKind.Announcement, 5);
         var documents = await Take(ContentKind.LegalDocument, 4);
-        // One bounded query for section candidates avoids fetching full article bodies or per-category queries.
-        var categoryRows = await query.CardsPageAsync(PublicContentQuery.Recent(query.Published(requireCleanThumbnail: true).Where(x=>x.Kind==ContentKind.Article&&x.CategoryId!=null)),0,60,requireCleanThumbnail: true);
-        var sections = categoryRows.GroupBy(x => new { x.CategoryName, x.CategorySlug }).Take(6).Select(g => new CategorySection(g.Key.CategoryName!, g.Key.CategorySlug!, g.Take(3).Select(PublicContentQuery.Card).ToList())).ToList();
+        var categories=await db.Categories.AsNoTracking().Where(c=>c.SourceUrl!=""&&c.SortOrder>=0&&c.SortOrder<14)
+            .OrderBy(c=>c.SortOrder).ThenBy(c=>c.Id).ToListAsync();
+        var categoryRows=await query.CategoryCardsAsync(categories.Select(c=>c.Id).ToArray());
+        var sections=categories.Select(c=>new CategorySection(c.Name,c.Slug,categoryRows.GetValueOrDefault(c.Id,[]).Select(PublicContentQuery.Card).ToList())).ToList();
         return View(new HomeModel { News = news, Announcements = notices, Documents = documents, Sections = sections, ImportedCount = await db.SourceRecords.CountAsync() });
     }
 }

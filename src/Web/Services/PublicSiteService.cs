@@ -15,7 +15,7 @@ public sealed class ConfiguredHomeModel
     public required SitePublicConfiguration Site { get; init; }
     public IReadOnlyList<SiteHomeBlockResult> Blocks { get; init; } = [];
     public IEnumerable<SiteHomeBlockResult> VisibleBlocks => Blocks.Where(x=>x.ErrorReference==null &&
-        (x.Items.Count>0 || x.Block.Type=="Links" && Site.Menus.Any(m=>m.Position=="links"&&m.Url!=null)));
+        (x.Items.Count>0 || x.Block.Type=="Category" || x.Block.Type=="Links" && Site.Menus.Any(m=>m.Position=="links"&&m.Url!=null)));
 }
 
 // One immutable snapshot per request: header, navigation, homepage and footer share its revision.
@@ -70,8 +70,20 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
         // Read Featured before Recent so one published article appears only once
         // in the top cluster, including when CMS sorts Recent first.
         var configured = site.Revision.Blocks.Where(x => x.Enabled)
+            .Where(x=>x.Type!="Category" || site.Revision.Categories.Any(c=>c.CategoryId==x.CategoryId&&c.ShowInNavigation))
             .OrderBy(x => x.Type == "Featured" ? 0 : x.Type == "Recent" ? 1 : 2)
             .ThenBy(x => x.SortOrder).ThenBy(x => x.Id).ToList();
+        var categoryBlocks=configured.Where(x=>x.Type=="Category"&&x.CategoryId!=null).ToArray();
+        var categoryIds=categoryBlocks.Select(x=>x.CategoryId!.Value).Distinct().ToArray();
+        var categoryBlockIds=categoryBlocks.Select(x=>x.Id).ToArray();
+        var categoryPins=site.Revision.Pins.Where(x=>categoryBlockIds.Contains(x.BlockId)).Select(x=>x.ContentId).Distinct().ToArray();
+        Dictionary<int,List<PublicRow>> categoryCards=[];
+        string? categoryError=null;
+        try{categoryCards=await query.CategoryCardsAsync(categoryIds,categoryBlocks.Length==0?4:categoryBlocks.Max(x=>x.Limit),categoryPins);}
+        catch(Microsoft.Data.SqlClient.SqlException error){
+            categoryError=context.HttpContext?.TraceIdentifier??Guid.NewGuid().ToString("N");
+            logger?.LogError("Homepage categories unavailable; SQL code {SqlCode}; correlation {Correlation}.",error.Number,categoryError);
+        }
         foreach (var block in configured)
         {
             // Video selection and rendering are shared with fallback via HomeVideos.
@@ -79,6 +91,15 @@ public sealed class PublicSiteService(PortalDbContext db, SiteConfigurationServi
             try
             {
             if (block.Type == "Links") { blocks.Add(new(block, [], "/so-tay")); continue; }
+            if(block.Type=="Category"){
+                if(categoryError!=null){blocks.Add(new(block,[],null,categoryError));continue;}
+                var candidates=categoryCards.GetValueOrDefault(block.CategoryId!.Value,[]);
+                var orderedPins=site.Revision.Pins.Where(x=>x.BlockId==block.Id).OrderBy(x=>x.SortOrder).ThenBy(x=>x.ContentId).Select(x=>x.ContentId);
+                var cards=orderedPins.Select(id=>candidates.FirstOrDefault(x=>x.Id==id)).Where(x=>x!=null).Select(x=>x!)
+                    .Concat(candidates).DistinctBy(x=>x.Id).Take(block.Limit).Select(PublicContentQuery.Card).ToArray();
+                blocks.Add(new(block,cards,"/chuyen-muc/"+site.Revision.Categories.Single(c=>c.CategoryId==block.CategoryId).Slug));
+                continue;
+            }
             var kind = block.Type switch { "Announcements" => ContentKind.Announcement, "LegalDocuments" => ContentKind.LegalDocument, "DraftDocuments" => ContentKind.DraftDocument, "Videos" => ContentKind.Video, _ => ContentKind.Article };
             var topNews = block.Type is "Featured" or "Recent";
             var rows = topNews ? query.HomeArticles() : query.Published(requireCleanThumbnail: true).Where(x => x.Kind == kind);
