@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><RuntimeIdentifiers>win-x64</RuntimeIdentifiers></PropertyGroup>
+  <ItemGroup><Compile Include="../../src/MigrationCli/SafeSourceClient.cs" Link="SafeSourceClient.cs" /></ItemGroup>
+</Project>

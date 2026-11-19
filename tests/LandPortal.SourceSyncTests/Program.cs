@@ -24,7 +24,8 @@ using UglyToad.PdfPig.Writer;
 
 if(args.Length==2&&args[0]=="probe"){await SourceProbe.Run(args[1]);return;}
 // A new, uniquely named LocalDB instance and database; no operational config is read.
-if(args.Length!=4||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
+var networkOnly=args.Length==5&&args[4]=="--network-only";
+if((args.Length!=4&&!networkOnly)||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
 var root=Path.GetFullPath(args[0]);var run=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Directory.Exists(run))throw new Exception("New isolated run required");
 Directory.CreateDirectory(run);
@@ -62,9 +63,11 @@ try
     var source=new FixtureSource();
     using(var bitmap=new SKBitmap(64,32)){bitmap.Erase(SKColors.Brown);using var image=SKImage.FromBitmap(bitmap);using var bytes=image.Encode(SKEncodedImageFormat.Png,100);source.Png=bytes.ToArray();}
     var pdf=new PdfDocumentBuilder();pdf.AddPage(UglyToad.PdfPig.Content.PageSize.A4).AddText("Isolated fixture",12,new(20,700),pdf.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica));source.Pdf=pdf.Build();
+    if(!networkOnly){
     var saved=await File.ReadAllTextAsync(args[3]);var parsed=SourceParser.Parse(saved,"https://qldd.mae.gov.vn/cuc-quan-ly-dat-dai-trao-doi-huong-dan-thao-go-vuong-mac-trong-quan-ly-dat-dai-tai-son-la-3681.htm",ContentKind.Article,"3681");
     Check(parsed.Title.Length>20&&parsed.BodyHtml.Length>100&&parsed.PrimaryCategoryId!=null,"Previously saved real QLDD HTML still parses with verified identity/category");
     Check(SourceSyncPolicy.Id(parsed.CanonicalUrl)=="3681","Saved canonical identity remains correct");
+    }
     var builder=WebApplication.CreateBuilder(new WebApplicationOptions{Args=[],ContentRootPath=Path.Combine(root,"src","Web"),WebRootPath=Path.Combine(root,"src","Web","wwwroot"),EnvironmentName="Staging"});
     builder.Configuration.Sources.Clear();builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{["Public:BaseUrl"]="http://127.0.0.1/"});
     builder.Logging.ClearProviders();builder.Logging.AddConsole().SetMinimumLevel(LogLevel.Warning);builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -97,6 +100,27 @@ try
     using(var r=await Post("/admin/source-sync/check"))Check(r.IsSuccessStatusCode&&source.Opens==0,"Manual check only enqueues; HTTP never crawls");
     await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync());
     var entry=await Entry();Check(entry.Item.Status=="Ready"&&entry.Data.Assets.Count==2,"Bounded discovery, full content and PNG/PDF staged privately");
+    if(networkOnly)
+    {
+        await Due();await Cycle();
+        await using(var db=new PortalDbContext(options))Check(await db.Jobs.CountAsync(x=>x.Type==SourceSyncPolicy.EntryType)==1&&await db.Contents.CountAsync()==0,"Repeated discovery does not duplicate or publish content");
+        source.Fail=true;
+        await InScope(async s=>{await s.GetRequiredService<SourceSyncStore>().ConfigureAsync("admin",true,null,null);return true;});
+        for(var i=1;i<=3;i++)
+        {
+            await Due();await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync());
+            await using var db=new PortalDbContext(options);
+            var sweep=await db.Jobs.SingleAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey);
+            Check(sweep.Status==(i==3?"Paused":"Backoff")&&sweep.AvailableUtc>DateTimeOffset.UtcNow.AddMinutes(15*i-1),"Bounded failure delay "+i);
+            Check(!await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync()),"No automatic retry within delay "+i);
+            using var response=await Post("/admin/source-sync/check");Check(response.StatusCode==HttpStatusCode.Conflict,"Manual request cannot bypass delay "+i);
+        }
+        await Due();Check(!await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync()),"Paused after third failure even when due");
+        source.Fail=false;await Cycle();
+        await using(var db=new PortalDbContext(options))Check((await new SourceSyncStore(db).SettingsAsync()).ConsecutiveFailures==0&&await db.Contents.CountAsync()==0,"Explicit recovery resets failure count, never publishes");
+        await File.WriteAllTextAsync(Path.Combine(run,"result.json"),JsonSerializer.Serialize(new{passed=checks.Count,checks,operationalSqlTouched=false}));
+        Console.WriteLine("PASS focused network/backoff checks: "+checks.Count);return;
+    }
     Check(entry.Data.Source!.DatePrecision=="Day"&&entry.Data.Source.Summary=="Fixture sapo"&&entry.Data.Source.Author=="Fixture author","Source sapo, author and date precision preserved");
     await using(var db=new PortalDbContext(options))Check(!await db.Contents.AnyAsync()&&!await db.MediaAssets.AnyAsync(),"Collecting does not create CMS content or publish media");
     await Get("/admin/source-sync?q=Fixture&status=Ready");var detail=await Get("/admin/source-sync/"+entry.Item.Id);
