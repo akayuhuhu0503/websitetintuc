@@ -41,7 +41,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         {
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
             if (file == null || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu.");
-            EditorialDocumentPolicy.RequireSize(file.Length, OfficeDocumentPolicy.Mime(file.FileName));
+            EditorialDocumentPolicy.RequireSize(file.Length, EditorialDocumentPolicy.Mime(file.FileName));
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
             if (format == "json") return Json(Describe(asset));
             TempData["Success"] = asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
@@ -80,7 +80,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         return asset == null ? NotFound() : Json(Describe(asset));
     }
     private object Describe(MediaAsset asset) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
-        usable = !asset.IsQuarantined && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated" || options.ApprovedManagedDocumentsWithoutAv && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation),
+        usable = options.CanServe(asset),
         previewUrl = "/admin/documents/file/" + asset.Id, url = "/media/" + asset.Id,
         notice = asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation ? "Đã kiểm tra định dạng; chưa quét antivirus. Chưa công khai." : "Tài liệu được giữ trong bài này; chỉ đính kèm khi đạt kiểm định." };
     [HttpGet("admin/documents/file/{id:guid}"), HttpHead("admin/documents/file/{id:guid}")]

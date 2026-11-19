@@ -45,17 +45,17 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
     }
     public async Task<MediaAsset> UploadAsync(Guid contentId, Stream input, string name, string declaredMime, ContentActor actor, CancellationToken ct = default)
     {
-        if (uploadOptions?.ApprovedManagedDocumentsWithoutAv != true) await media.RequireUploadScannerAsync(ct);
         actor = await rights.GetAsync(actor.UserId);
         var content = await db.Contents.SingleOrDefaultAsync(x => x.Id == contentId, ct);
         if (content == null || content.IsTrashed || !actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();
         name = Path.GetFileName(name.Replace('\\', '/'));
         if (name.Length is < 1 or > 200 || name.Any(char.IsControl)) throw new InvalidOperationException("Tên tệp không hợp lệ.");
-        var mime = OfficeDocumentPolicy.Mime(name);
+        var mime = EditorialDocumentPolicy.Mime(name);
         if (uploadOptions?.ApprovedManagedDocumentsWithoutAv != true && mime == OfficeDocumentPolicy.Docx && (content.Kind != ContentKind.StaticPage || content.PrimaryCategoryId != 76 && !await db.ContentDrafts.AnyAsync(x => x.ContentId == contentId && x.PrimaryCategoryId == 76, ct)))
             throw new InvalidOperationException("DOCX dùng cho hồ sơ lịch tuần. Tạo/lưu nháp mẫu lịch tuần trước khi tải tệp.");
         if (declaredMime.Split(';')[0] is var claimed && claimed != mime && claimed != "application/octet-stream") throw new InvalidOperationException("MIME không khớp loại tài liệu.");
-        var noAv=uploadOptions?.ApprovedManagedDocumentsWithoutAv==true;
+        var noAv=uploadOptions?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(mime);
+        if (!noAv) await media.RequireUploadScannerAsync(ct, requireConfigured: mime == EditorialZipPolicy.Mime);
         var asset = new MediaAsset { Origin = "EditorialDocument",
             ValidationStatus = noAv ? MediaUploadOptions.ManagedDocumentNoAvValidation : "PendingScan",
             IsQuarantined = !noAv, ScanStatus = "NotScanned",
@@ -72,10 +72,10 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
                 { asset.ByteLength += count; if (asset.ByteLength > EditorialDocumentPolicy.MaximumFor(mime)) throw new MediaUploadException(EditorialDocumentPolicy.SizeHelp, 413); hash.AppendData(buffer, 0, count); await output.WriteAsync(buffer.AsMemory(0, count), ct); }
                 if (asset.ByteLength == 0) throw new InvalidOperationException("Tệp rỗng."); asset.Sha256 = Convert.ToHexStringLower(hash.GetHashAndReset());
             }
-            if (noAv)
+            if (noAv || mime == EditorialZipPolicy.Mime)
             {
                 // Format validation only, not malware scanning. Does not execute PDF/Office content.
-                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: true, ct);
+                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: noAv, ct);
             }
             var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == asset.Sha256, ct);
             if (duplicate != null)
@@ -116,11 +116,11 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             && proof.ScanState==InquiryScanState.Clean && proof.ScannedSha256==asset.Sha256 && proof.ScannedUtc!=null
             && !string.IsNullOrWhiteSpace(proof.EngineVersion)
             && (development || !proof.EngineVersion.StartsWith("Defender/", StringComparison.Ordinal));
-        var managedNoAv=proof is not null && policy?.ApprovedManagedDocumentsWithoutAv==true
+        var managedNoAv=proof is not null && policy?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(asset.MimeType)
             && asset.ScanStatus=="NotScanned" && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
             && proof.ScanState==InquiryScanState.NotScanned && proof.Attempts==0
             && proof.ScannedSha256==null && proof.ScannedUtc==null && proof.EngineVersion==null;
-        if (proof is null || asset.Origin != "EditorialDocument" || !OfficeDocumentPolicy.IsDocument(asset.MimeType) || asset.IsQuarantined
+        if (proof is null || asset.Origin != "EditorialDocument" || !EditorialDocumentPolicy.IsDocument(asset.MimeType) || asset.IsQuarantined
             || (!validScan && !managedNoAv)) return null;
         FileStream? file = null;
         try
@@ -151,7 +151,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
         }
         catch (Exception error) when (error is IOException or MediaUploadException or UnauthorizedAccessException) { if (file != null) await file.DisposeAsync(); return null; }
     }
-    public async Task<bool> ScanOnceAsync(IInquiryScanner scanner, Guid? only = null, CancellationToken ct = default)
+    public async Task<bool> ScanOnceAsync(IInquiryScanner scanner, Guid? only = null, CancellationToken ct = default, Func<IInquiryScanner>? archiveScanner = null)
     {
         EditorialDocument? item; var now = DateTimeOffset.UtcNow;
         await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct))
@@ -165,7 +165,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (only != null) queue = queue.Where(x => x.MediaAssetId == only);
             item = await queue.OrderBy(x => x.AvailableUtc).ThenBy(x => x.MediaAssetId).FirstOrDefaultAsync(ct);
             if (item == null) { await tx.CommitAsync(ct); return false; }
-            item.ScanState = InquiryScanState.Scanning; item.LeaseToken = Guid.NewGuid(); item.LeaseUntilUtc = now.AddMinutes(2); item.Attempts++;
+            item.ScanState = InquiryScanState.Scanning; item.LeaseToken = Guid.NewGuid(); item.LeaseUntilUtc = now.AddMinutes(await db.MediaAssets.AnyAsync(a => a.Id == item.MediaAssetId && a.MimeType == EditorialZipPolicy.Mime, ct) ? 4 : 2); item.Attempts++;
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         }
         var version = item.RowVersion.ToArray(); var asset = await db.MediaAssets.AsNoTracking().SingleAsync(x => x.Id == item.MediaAssetId, ct);
@@ -178,9 +178,13 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (file.Length != asset.ByteLength || Convert.ToHexStringLower(await SHA256.HashDataAsync(file, ct)) != asset.Sha256) result = new(InquiryScanState.ScanFailed, "FileHashMismatch", null);
             else
             {
-                file.Position = 0; result = await scanner.ScanAsync(file, ct);
+                file.Position = 0;
+                result = asset.MimeType == EditorialZipPolicy.Mime
+                    ? await EditorialZipPolicy.ScanAsync(MediaService.ResolveMediaPath(storage, asset.StorageKey), archiveScanner?.Invoke() ?? scanner, ct)
+                    : await scanner.ScanAsync(file, ct);
                 file.Position = 0; if (Convert.ToHexStringLower(await SHA256.HashDataAsync(file, ct)) != asset.Sha256) result = new(InquiryScanState.ScanFailed, "FileChangedDuringScan", null);
-                if (result.State == InquiryScanState.Clean) await EditorialDocumentPolicy.ValidateAsync(MediaService.ResolveMediaPath(storage, asset.StorageKey), asset.MimeType, media, managedWithoutAv: false, ct);
+                if (result.State == InquiryScanState.Clean && asset.MimeType != EditorialZipPolicy.Mime)
+                    await EditorialDocumentPolicy.ValidateAsync(MediaService.ResolveMediaPath(storage, asset.StorageKey), asset.MimeType, media, managedWithoutAv: false, ct);
             }
         }
         catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or System.Xml.XmlException or OperationCanceledException or MediaUploadException)

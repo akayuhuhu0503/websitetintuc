@@ -21,7 +21,7 @@ else
             <ul class="material-files">
             @foreach(var file in item.Files)
             {
-                <li><span><partial name="_PortalIcon" model='"document"' /> @file.Name</span><a href="/media/@file.Id?download=true&amp;contentId=@item.Content.Id">Tải tài liệu<span class="sr-only"> @file.Name</span> ↓</a></li>
+                <li><span><partial name="_PortalIcon" model='"document"' /> @file.Name</span><a href="/media/@file.Id?download=true&amp;contentId=@item.Content.Id">@(file.ContentType == "application/zip" ? "Tải tệp ZIP về" : "Tải tài liệu")<span class="sr-only"> @file.Name</span> ↓</a></li>
             }
             </ul>
         </article>

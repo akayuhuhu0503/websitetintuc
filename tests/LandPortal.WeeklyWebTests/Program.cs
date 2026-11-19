@@ -18,6 +18,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
+if (args.Length == 2 && args[1] == "--planning-zip") { await PlanningZipChecks.RunAsync(args[0]); return; }
 if (args.Length == 3 && args[2] == "--planning-pdf-readback") { await PlanningPdfReadbackChecks.RunAsync(args[0], args[1]); return; }
 if (args.Length == 3 && args[2] == "--planning-pdf-overrides") { PlanningPdfOverrideChecks.Run(args[0], args[1]); return; }
 if (args.Length == 3 && args[2] == "--planning-confirmations") { await PlanningConfirmationChecks.RunAsync(args[0], args[1]); return; }
