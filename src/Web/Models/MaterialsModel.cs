@@ -4,4 +4,6 @@ public sealed record MaterialItem(ContentCard Content, IReadOnlyList<AttachmentM
 public sealed record MaterialsModel(IReadOnlyList<MaterialItem> Items, int Total, int Page, string? Query)
 {
     public int PageCount => Math.Max(1, (int)Math.Ceiling(Total / 10d));
+    public int? CategoryId { get; init; }
+    public IReadOnlyList<EditorCategory> Categories { get; init; } = [];
 }

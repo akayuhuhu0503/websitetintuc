@@ -16,7 +16,7 @@
 @if(!string.IsNullOrWhiteSpace(Model.Metadata.Tags)){<p class="article-tags">Từ khóa: @Model.Metadata.Tags</p>}
 <div class="article-body">@Html.Raw(Model.BodyHtml)</div>
 
-@if (Model.Attachments.Count > 0) { <section class="attachments"><h2>Tài liệu đính kèm</h2><ul>@foreach (var file in Model.Attachments) { <li><strong>@file.Name</strong><small>@file.ContentType · @((file.Bytes / 1024d).ToString("N0")) KB</small><div class="attachment-links"><a href="/media/@file.Id" target="_blank" rel="noopener noreferrer">Xem tài liệu ↗</a><a href="/media/@file.Id?download=true&amp;contentId=@Model.Content.Id"><span aria-hidden="true">↓</span> Tải về</a></div></li> }</ul></section> }
+@if (Model.Attachments.Count > 0) { <section class="attachments"><h2>Tài liệu đính kèm</h2><ul>@foreach (var file in Model.Attachments) { <li><strong>@file.Name</strong><small>@file.ContentType · @((file.Bytes / 1024d).ToString("N0")) KB</small><div class="attachment-links">@if(file.ContentType != "application/zip"){<a href="/media/@file.Id" target="_blank" rel="noopener noreferrer">Xem tài liệu ↗</a>}<a href="/media/@file.Id?download=true&amp;contentId=@Model.Content.Id"><span aria-hidden="true">↓</span> @(file.ContentType == "application/zip" ? "Tải tệp ZIP về" : "Tải về")</a></div></li> }</ul></section> }
 @if (Model.SourceName is not null || Model.SourceUrl is not null) { <p class="article-source">Nguồn: @Model.SourceName @if (Model.SourceUrl is not null) { <a href="@Model.SourceUrl" target="_blank" rel="noopener noreferrer">Đối chiếu bài gốc ↗</a> }</p> }
 @await Component.InvokeAsync("InternalVideos",new{id=Model.Content.Id,showMissing=Model.IsVideo})
 @await Component.InvokeAsync("ArticleInteractions",new{id=Model.Content.Id})

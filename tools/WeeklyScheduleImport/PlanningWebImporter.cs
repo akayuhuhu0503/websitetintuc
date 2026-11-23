@@ -68,7 +68,9 @@ public sealed class PlanningWebImporter(WebCmsClient cms)
     async Task<Dictionary<string,Guid>> AttachedAsync(WebEditor editor, PlanningRow row)
     {
         var ids = editor.Form.QuerySelectorAll("input[name='AttachmentIds']").Select(x => Guid.Parse(x.GetAttribute("value")!)).ToArray();
-        if (ids.Length != row.Files.Count || ids.Distinct().Count() != ids.Length) throw Conflict(row.Stt, "Số tệp đính kèm khác nguồn; không tự gắn lại tệp bị gỡ.");
+        if (ids.Distinct().Count() != ids.Length) throw Conflict(row.Stt, "Tệp đính kèm bị lặp; không tự sửa mapping.");
+        var supplementary = await PlanningZipSupplement.VerifyExtraAsync(cms, editor, row, ids);
+        if (ids.Length - (supplementary.HasValue ? 1 : 0) != row.Files.Count) throw Conflict(row.Stt, "Số PDF khác nguồn; không tự gắn lại tệp bị gỡ.");
         var map = new Dictionary<string,Guid>();
         foreach (var file in row.Files)
         {
@@ -79,7 +81,7 @@ public sealed class PlanningWebImporter(WebCmsClient cms)
             if (bytes.LongLength != file.Bytes || WeeklyPackage.Hash(bytes) != file.Sha256) throw Conflict(row.Stt, "Byte/hash khác nguồn: " + file.Name);
             map.Add(file.Entry, id);
         }
-        if (map.Values.Distinct().Count() != ids.Length) throw Conflict(row.Stt, "Tệp bị gắn trùng.");
+        if (map.Values.Distinct().Count() != row.Files.Count || supplementary is Guid extra && map.Values.Contains(extra)) throw Conflict(row.Stt, "Tệp bị gắn trùng.");
         return map;
     }
     static bool SameAssets(IReadOnlyDictionary<string,Guid> a, IReadOnlyDictionary<string,Guid> b) => a.Count == b.Count && a.All(x => b.TryGetValue(x.Key, out var id) && id == x.Value);

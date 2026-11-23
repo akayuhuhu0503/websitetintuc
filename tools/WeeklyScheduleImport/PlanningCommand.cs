@@ -8,6 +8,7 @@ public static class PlanningCommand
     public static async Task RunAsync(string[] args)
     {
         var action = args[0];
+        if (action == "planning-zip-check") { await PlanningZipSupplement.RunAsync(args); return; }
         if (action == "planning-pdf-check") { await PlanningPdfCheck.RunAsync(args); return; }
         if (action is not ("planning-report" or "planning-inspect" or "planning-preflight" or "planning-dry-run" or "planning-import" or "planning-reconcile" or "planning-sync-links")) throw new ArgumentException("Lệnh QHKHSDD không hợp lệ.");
         var options = new Dictionary<string,string>();

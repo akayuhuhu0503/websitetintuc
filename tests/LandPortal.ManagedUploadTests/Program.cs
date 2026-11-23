@@ -19,6 +19,9 @@ using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
 if (args.FirstOrDefault() == "--editorial-pdf-limits") { await EditorialPdfLimitChecks.RunAsync(args); return; }
+if (args.FirstOrDefault() == "--editorial-zip") { await EditorialZipChecks.RunAsync(); return; }
+if (args.FirstOrDefault() == "--trusted-internal") { await TrustedInternalChecks.Run(); return; }
+if (args.Length == 3 && args[0] == "--trusted-real") { await TrustedInternalChecks.Real(args[1],args[2]); return; }
 
 using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();

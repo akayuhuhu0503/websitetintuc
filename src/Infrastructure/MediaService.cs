@@ -71,18 +71,18 @@ public sealed class MediaUploadOptions
         };
     }
 
-    public bool CanServe(MediaAsset asset) => InternalMediaExceptionPolicy.Candidate(asset) || (asset.ValidationStatus == BatchMediaProof.Validation
+    public bool CanServe(MediaAsset asset) => (asset.MimeType != EditorialZipPolicy.Mime || asset.Origin == "EditorialDocument") && (InternalMediaExceptionPolicy.Candidate(asset) || (asset.ValidationStatus == BatchMediaProof.Validation
         ? VerifiedSourceAllowed && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
         : asset.Origin == "EditorialDocument"
-        ? !asset.IsQuarantined && OfficeDocumentPolicy.IsDocument(asset.MimeType)
-            && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated"
-                || ApprovedManagedDocumentsWithoutAv && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == ManagedDocumentNoAvValidation)
+        ? !asset.IsQuarantined && EditorialDocumentPolicy.IsDocument(asset.MimeType)
+            && (TrustedInternalDocumentPolicy.Candidate(asset, this) || asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated"
+                || ApprovedManagedDocumentsWithoutAv && OfficeDocumentPolicy.IsDocument(asset.MimeType) && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == ManagedDocumentNoAvValidation)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")
         && (asset.ScanStatus is "NotScanned" or "Clean")
         && (asset.Origin != "Uploaded" || asset.ValidationStatus == "Validated" || (ApprovedManagedImageWithoutAv && asset.ValidationStatus == ManagedImageNoAvValidation))
         && (asset.ScanStatus == "Clean" || (asset.Origin == "Source" && IsDevelopmentLoopback) || (asset.Origin == "Uploaded" && DevelopmentExceptionEnabled)
             || (ApprovedManagedImageWithoutAv && asset.Origin == "Uploaded" && asset.ValidationStatus == ManagedImageNoAvValidation
-                && asset.ScanStatus == "NotScanned" && asset.MimeType is ("image/jpeg" or "image/png"))));
+                && asset.ScanStatus == "NotScanned" && asset.MimeType is ("image/jpeg" or "image/png")))));
 }
 
 public sealed class MediaUploadException(string message, int statusCode = 400) : Exception(message)
@@ -95,9 +95,11 @@ public sealed record MediaUploadResult(MediaAsset Asset, bool Reused);
 /// <summary>Stores immutable uploaded originals outside static roots. No network downloader or video path.</summary>
 public sealed class MediaService(PortalDbContext db, StorageOptions storage, MediaUploadOptions options, IConfiguration? configuration=null)
 {
-    public async Task RequireUploadScannerAsync(CancellationToken ct=default)
+    public async Task RequireUploadScannerAsync(CancellationToken ct=default, bool requireConfigured = false)
     {
-        if(configuration!=null&&UatDeployment.Enabled(configuration)&&!(await InquiryScannerFactory.Create(configuration,"Staging").HealthAsync(ct)).Ready)
+        if (requireConfigured && configuration == null)
+            throw new MediaUploadException("ZIP yêu cầu bộ quét antivirus thật được cấu hình; chính sách PDF/Office không áp dụng.", 503);
+        if(configuration!=null&&(UatDeployment.Enabled(configuration)||requireConfigured)&&!(await InquiryScannerFactory.Create(configuration,UatDeployment.Enabled(configuration)?"Staging":"Development").HealthAsync(ct)).Ready)
             throw new MediaUploadException("Bộ quét virus chưa sẵn sàng. Vui lòng thử tải tệp sau.",503);
     }
     private static readonly Dictionary<string, string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -281,8 +283,12 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
 
     internal static int ValidatePdfContent(string path, int maximumPages, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         using var file = System.IO.File.OpenRead(path);
+        return ValidatePdfContent(file, maximumPages, cancellationToken);
+    }
+    internal static int ValidatePdfContent(Stream file, int maximumPages, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         Span<byte> prefix = stackalloc byte[8];
         if (file.Read(prefix) < 8 || !prefix[..5].SequenceEqual("%PDF-"u8))
             throw new MediaUploadException("Tệp không có định dạng PDF hợp lệ.");

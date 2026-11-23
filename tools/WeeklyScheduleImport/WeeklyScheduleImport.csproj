@@ -2,6 +2,7 @@
   <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>WeeklyScheduleImport</AssemblyName></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/Infrastructure/Infrastructure.csproj" /></ItemGroup>
   <ItemGroup>
+    <None Include="../../docs/editorial-zip-qhkhsdd.md" Link="HUONG-DAN-ZIP.md" CopyToPublishDirectory="PreserveNewest" />
     <None Update="NHAP-LICH.ps1" CopyToPublishDirectory="PreserveNewest" />
     <None Update="NHAP-LICH-WEB.ps1" CopyToPublishDirectory="PreserveNewest" />
     <None Update="NHAP-QHKHSDD-WEB.ps1" CopyToPublishDirectory="PreserveNewest" />

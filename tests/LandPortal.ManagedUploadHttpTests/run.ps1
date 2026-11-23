@@ -1,3 +1,4 @@
+param([switch]$TrustedInternal, [string]$DotnetPath)
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $root
@@ -22,20 +23,22 @@ var testSql=new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connection);
 var testRun=builder.Configuration["ManagedHttpTestRoot"] ?? throw new InvalidOperationException("Test root required");
 if(!System.Text.RegularExpressions.Regex.IsMatch(testSql.DataSource,@"^\(localdb\)\\LPNoAv_[a-f0-9]{12}$") || testSql.InitialCatalog!="LandPortal_Test" || !testSql.IntegratedSecurity || builder.Environment.EnvironmentName!="Development" || !publicUri.IsLoopback || !Path.GetFullPath(storage.MediaRoot).StartsWith(Path.GetFullPath(testRun)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase) || builder.Configuration["Mail:Transport"]!="Disabled") throw new InvalidOperationException("Isolated HTTP test host only");
 Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<MediaUploadOptions>(builder.Services);
-builder.Services.AddSingleton(new MediaUploadOptions { ApprovedManagedImageWithoutAv=true, ApprovedManagedDocumentsWithoutAv=true });
+var trustedInternalTest = builder.Configuration["TrustedHttpTestMode"] == "true";
+builder.Services.AddSingleton(new MediaUploadOptions { ApprovedManagedImageWithoutAv=!trustedInternalTest, ApprovedManagedDocumentsWithoutAv=!trustedInternalTest, NativeUatUploads=trustedInternalTest });
 var app = builder.Build();
 '@
 $program=$program.Replace($old,$inject)
 [IO.File]::WriteAllText((Join-Path $hostRoot 'Program.cs'),$program,[Text.UTF8Encoding]::new($false))
 $web=[Security.SecurityElement]::Escape((Join-Path $root 'src/Web/Web.csproj'))
 [IO.File]::WriteAllText((Join-Path $hostRoot 'HttpHost.csproj'),('<Project Sdk="Microsoft.NET.Sdk.Web"><ItemGroup><ProjectReference Include="'+$web+'" /></ItemGroup></Project>'))
-$dotnet=Join-Path $root '.local/dotnet/dotnet.exe'
+$dotnet=if($DotnetPath){(Resolve-Path -LiteralPath $DotnetPath).Path}else{Join-Path $root '.local/dotnet/dotnet.exe'}
 & $dotnet build (Join-Path $hostRoot 'HttpHost.csproj') -c Release --artifacts-path (Join-Path $run 'build')
 if($LASTEXITCODE){throw 'Test host build failed; no SQL instance created.'}
 & SqlLocalDB.exe create $instance -s
 if($LASTEXITCODE){throw 'New LocalDB instance unavailable.'}
 try {
- & $dotnet run --project (Join-Path $PSScriptRoot 'LandPortal.ManagedUploadHttpTests.csproj') -c Release --artifacts-path (Join-Path $root '.local/build/noav-http-runner') -- $instance $run (Join-Path $run 'build/bin/HttpHost/release/HttpHost.dll')
+ $mode=if($TrustedInternal){'trusted'}else{'managed'}
+ & $dotnet run --project (Join-Path $PSScriptRoot 'LandPortal.ManagedUploadHttpTests.csproj') -c Release --artifacts-path (Join-Path $root '.local/build/noav-http-runner') -- $instance $run (Join-Path $run 'build/bin/HttpHost/release/HttpHost.dll') $mode
  $result=$LASTEXITCODE
 } finally {
  # Stop only the generated instance. Retain its DB and receipt for inspection; no DROP/delete.
