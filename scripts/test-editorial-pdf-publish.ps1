@@ -14,6 +14,11 @@ ConvertTo-IisWebBundle -Staging $run
 [xml]$xml=[IO.File]::ReadAllText((Join-Path $run 'web/web.config'))
 if($xml.SelectSingleNode("/configuration/location[@path='.']/system.webServer/security/requestFiltering/requestLimits").maxAllowedContentLength -ne '20971520'){throw 'Ordinary IIS limit changed'}
 if($xml.SelectSingleNode("/configuration/location[@path='admin/documents']/system.webServer/security/requestFiltering/requestLimits").maxAllowedContentLength -ne '135266304'){throw 'Editorial IIS limit missing'}
+$documentHandlers=$xml.SelectSingleNode("/configuration/location[@path='admin/documents']/system.webServer/handlers")
+if($null -eq $documentHandlers){throw 'Editorial route must explicitly retain ANCM handler'}
+$handler=$documentHandlers.SelectSingleNode("add[@name='aspNetCore']")
+if($null -eq $handler -or $handler.path -ne '*' -or $handler.verb -ne '*' -or $handler.modules -ne 'AspNetCoreModuleV2' -or $handler.resourceType -ne 'Unspecified'){throw 'Editorial GET/POST/subpaths must reach ASP.NET Core'}
+if($documentHandlers.SelectNodes("remove[@name='aspNetCore']").Count -ne 1 -or $documentHandlers.FirstChild.LocalName -ne 'remove' -or $documentHandlers.SelectNodes("add[@name='aspNetCore']").Count -ne 1 -or $documentHandlers.SelectNodes('clear').Count -ne 0){throw 'Replace only ANCM to avoid duplicate inherited mappings; preserve other handlers'}
 if($xml.SelectNodes("/configuration/location[@path='.']/system.webServer/security/requestFiltering/hiddenSegments/add[@segment='.runtime' or @segment='.env']").Count -ne 2){throw 'Private hidden segments lost'}
 if($xml.SelectNodes("/configuration/location[@path='.']/system.webServer/aspNetCore/environmentVariables/environmentVariable[@name='LANDPORTAL_WEB_BUNDLE' and @value='1']").Count -ne 1){throw 'WebBundle environment binding lost'}
 $manifest=Get-Content -LiteralPath (Join-Path $run 'web/.runtime/manifest.json') -Raw | ConvertFrom-Json
@@ -24,6 +29,6 @@ foreach($name in @('package-uat.ps1','build-for-iis.ps1','iis-web-bundle.ps1','p
  $tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$errors)
  if($errors.Count){throw ('PowerShell parse failed: '+$name)}
 }
-$report=@{status='PASS';checks=7;ordinaryBytes=20971520;editorialRequestBytes=135266304;privateUnchanged=$true;manifestHashVerified=$true;iisExecuted=$false;sqlExecuted=$false;fixture=$run}
+$report=@{status='PASS';checks=10;ordinaryBytes=20971520;editorialRequestBytes=135266304;editorialHandlerExplicit=$true;privateUnchanged=$true;manifestHashVerified=$true;iisExecuted=$false;sqlExecuted=$false;fixture=$run}
 [IO.File]::WriteAllText((Join-Path $run 'editorial-publish-test.json'),($report|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
-Write-Output ('PASS: 7 publish/XML checks; real WebBundle transformation; no IIS/SQL. '+$run)
+Write-Output ('PASS: 10 publish/XML checks; real WebBundle transformation; no IIS/SQL. '+$run)

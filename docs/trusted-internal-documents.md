@@ -39,6 +39,18 @@ powershell -NoProfile -File tests/LandPortal.ManagedUploadHttpTests/run.ps1 -Tru
 
 ## Tiếp tục nhập 2.3.1
 
+### Gói IIS tích hợp handler tài liệu
+
+PR #26 lấy phần sửa handler từ commit `8d7f5eee947f19f947117661c30d95a7e4248cd4` của PR #22: tại `location path="admin/documents"`, chỉ `remove name="aspNetCore"` rồi `add` lại với `path="*"`, `verb="*"`, `modules="AspNetCoreModuleV2"`, `resourceType="Unspecified"`. Không `clear` các handler khác; tránh trùng tên khi kế thừa. Không cần merge riêng PR #22, #24 hoặc #25 để lấy các chức năng đã tích hợp.
+
+Giữ giới hạn request chung 20 MiB, riêng tài liệu **129 MiB (135266304 byte)** để chứa ZIP 128 MiB và phần multipart; PDF vẫn 104 MiB/2.000 trang, Office 10 MiB. Không lấy lại giới hạn request 105 MiB của bản PR #22 cũ. `web.config` được chuyển đổi WebBundle rồi tính hash vào manifest, không chỉnh cấu hình sau Publish.
+
+`scripts/test-editorial-pdf-publish.ps1` kiểm tra 10 điều kiện XML/package, bao gồm handler chỉ đăng ký một lần, GET/POST/đường dẫn con, giới hạn request, bảo vệ private và manifest. Bộ HTTP `-TrustedInternal` kiểm tra thêm PDF hiển thị trực tiếp, ZIP luôn tải xuống, danh sách `/tai-lieu` ẩn nháp và hiển thị bài đã công bố. Thử HTTP dùng Kestrel + LocalDB riêng; không thay thế nghiệm thu IIS thật.
+
+Kiểm chứng bổ sung ngày 23/11/2026: Release Web/Worker PASS (0 lỗi/cảnh báo); 10 kiểm tra package PASS; 42 kiểm tra HTTP/SQL cô lập PASS. Lượt HTTP đầu dừng do assertion mới yêu cầu header `inline` tường minh; đã sửa assertion để chấp nhận việc ASP.NET Core bỏ header khi không có tên tải xuống, đồng thời vẫn kiểm tra MIME, byte và `nosniff`. Không sửa code phục vụ PDF. Không kiểm định lại 24 PDF nguồn/32 PDF trong ZIP vì parser không đổi; không chạy full regression hoặc ghi CMS thật.
+
+Khi cập nhật máy IIS: giữ bản sao nguyên `web` đang chạy (kể cả `.runtime`) ngoài webroot để rollback; pull main, chạy lệnh build hiện hành với `.env` đã có; dừng ứng dụng theo quy trình hiện hành, thay nguyên `web` bằng gói mới và khởi động lại. Không trộn DLL, `uat.json` hoặc manifest giữa hai gói; không chạm kho dữ liệu bên ngoài `web`. Nếu khởi động/kiểm tra lỗi, dừng ứng dụng và khôi phục nguyên bản sao `web`, không rollback SQL. Chỉ bắt đầu nhập sau khi kiểm tra `/`, `/tai-lieu`, `/admin/login` và upload tài liệu bằng phiên CMS hợp lệ trên IIS mới.
+
 Bản sửa tích hợp phần ZIP của PR #24 và bộ lọc Hủy phôi GCN của PR #25 để cập nhật website một lần. Chưa tự merge/deploy hoặc nhập hồ sơ thật.
 
 1. Sau khi review/merge, dùng quy trình hiện có: pull → `scripts/build-for-iis.ps1` → cập nhật nguyên `web` gồm `.runtime`. Giữ kho dữ liệu và cấu hình private; không sửa JSON/manifest sau build.

@@ -42,6 +42,13 @@ try {
   Check(history.Length==18&&history.Last()=="20261110050000_HomeEventBanner","SQL Server exact schema18 via official migrations on new DB only");
   await RuntimeRoleInterceptor.ProvisionAsync(db,roleSecret);
   db.Categories.Add(new(){Id=1,Name="Isolated upload test",Slug="isolated-upload-test"});await db.SaveChangesAsync();
+  if(trustedMode)
+  {
+   var site=new SiteConfigurationRevision();
+   site.Categories.Add(new(){CategoryId=1,DisplayName="Isolated upload test",Slug="isolated-upload-test",ShowInNavigation=true});
+   site.Menus.Add(new(){Label="Tài liệu",TargetKind="Route",RouteKey="Materials",CategoryId=1});
+   db.Add(site);await db.SaveChangesAsync();db.Add(new SiteConfiguration{LiveRevisionId=site.Id});await db.SaveChangesAsync();
+  }
  }
  var services=new ServiceCollection();services.AddLogging();services.AddScoped(_=>new PortalDbContext(options));
  services.AddIdentityCore<PortalUser>(PortalIdentityPolicy.Configure).AddRoles<IdentityRole>().AddEntityFrameworkStores<PortalDbContext>();
@@ -83,6 +90,7 @@ try {
  byte[] Office(bool word){using var mem=new MemoryStream();using(var zip=new ZipArchive(mem,ZipArchiveMode.Create,true)){void Entry(string n,string s){using var w=new StreamWriter(zip.CreateEntry(n).Open());w.Write(s);}var main=word?"word/document.xml":"xl/workbook.xml";var type=word?OfficeDocumentPolicy.Docx+".main+xml":OfficeDocumentPolicy.Xlsx+".main+xml";Entry("[Content_Types].xml","<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/"+main+"\" ContentType=\""+type+"\"/>"+(word?"":"<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>")+"</Types>");Entry("_rels/.rels","<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\""+main+"\"/></Relationships>");Entry(main,word?"<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Fixture document</w:t></w:r></w:p></w:body></w:document>":"<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Fixture\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");if(!word){Entry("xl/_rels/workbook.xml.rels","<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>");Entry("xl/worksheets/sheet1.xml","<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Fixture</t></is></c></row></sheetData></worksheet>");}}return mem.ToArray();}
  if(trustedMode)
  {
+  Check(EditorialDocumentPolicy.PdfMaximum==104L*1024*1024&&EditorialDocumentPolicy.PdfMaximumPages==2000&&EditorialZipPolicy.Maximum==128L*1024*1024&&EditorialDocumentPolicy.RequestMaximum==129L*1024*1024,"PDF/ZIP limits remain 104 MiB/2000 pages, 128 MiB and request 129 MiB");
   stage="trusted-http-upload";var draft=await Save();var route="/admin/documents/"+Id(draft);
   Check((await Page(writer,route)).QuerySelector("input[name=trustedInternal]")!=null,"Admin sees explicit unchecked internal-source confirmation");
   using var pdfFixture=new PdfDocumentBuilder();pdfFixture.AddPage(100,100);var pdfBytes=pdfFixture.Build();
@@ -103,12 +111,17 @@ try {
   }
   using(var retry=await Upload(writer,route+"?format=json","documents.zip",EditorialZipPolicy.Mime,zipBytes,trusted:true))Check(retry.IsSuccessStatusCode&&JsonDocument.Parse(await retry.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid()==assets[1],"HTTP retry uses same ZIP Id");
   draft=await Save(draft);
+  using(var listing=await guest.GetAsync("/tai-lieu"))Check(listing.StatusCode==HttpStatusCode.OK&&!(await listing.Content.ReadAsStringAsync()).Contains("ISOLATED NOAV HTTP TEST"),"Materials HTTP hides draft internal documents");
   await using(var db=new PortalDbContext(options)){var id=Id(draft);Check(await db.DraftAssets.CountAsync(x=>x.ContentId==id)==2&&await db.MediaAssets.CountAsync()==2,"Exactly two attachments and no duplicate on HTTP retry");Check(await db.AuditLogs.CountAsync(x=>x.Action==TrustedInternalDocumentPolicy.GrantAction)==2&&await db.EditorialDocuments.AllAsync(x=>x.ScanState==InquiryScanState.NotScanned&&x.Attempts==0&&x.EngineVersion==null&&x.ScannedUtc==null),"SQL records real administrator grants, no scanner proof");}
   stage="trusted-http-workflow";draft=await Act(writer,draft,"Submit");Check(true,"HTTP Submit internal attachments");draft=await Act(reviewer,draft,"Approve");Check(true,"HTTP Reviewer approves exact revision");
   using(var hidden=await guest.GetAsync("/bai-viet/"+Id(draft)))Check(hidden.StatusCode==HttpStatusCode.NotFound,"Approved internal collection hidden until publish");
   draft=await Act(publisher,draft,"PublishApproved");Check(true,"HTTP Publisher publishes through unchanged workflow");
   using(var articlePage=await guest.GetAsync("/bai-viet/"+Id(draft)))Check(articlePage.IsSuccessStatusCode&&(await articlePage.Content.ReadAsStringAsync()).Contains("ISOLATED NOAV HTTP TEST"),"Published article HTTP 200");
   foreach(var pair in expected){using var response=await guest.GetAsync("/media/"+pair.Key+"?download=true");Check(response.IsSuccessStatusCode&&response.Content.Headers.ContentDisposition?.DispositionType=="attachment"&&response.Headers.GetValues("X-Content-Type-Options").Single()=="nosniff"&&response.Headers.GetValues("X-Media-Scan-Status").Single()=="NotScanned"&&(await response.Content.ReadAsByteArrayAsync()).SequenceEqual(pair.Value),"Public HTTP PDF/ZIP attachment with exact bytes and truthful headers");}
+  // ASP.NET Core omits Content-Disposition when no download filename is supplied; browsers render the PDF.
+  using(var preview=await guest.GetAsync("/media/"+assets[0]))Check(preview.StatusCode==HttpStatusCode.OK&&preview.Content.Headers.ContentType?.MediaType=="application/pdf"&&preview.Content.Headers.ContentDisposition?.DispositionType is (null or "inline")&&preview.Headers.GetValues("X-Content-Type-Options").Single()=="nosniff"&&(await preview.Content.ReadAsByteArrayAsync()).SequenceEqual(pdfBytes),"Published internal PDF remains viewable inline with exact bytes");
+  using(var zip=await guest.GetAsync("/media/"+assets[1]))Check(zip.StatusCode==HttpStatusCode.OK&&zip.Content.Headers.ContentDisposition?.DispositionType=="attachment","ZIP remains download-only without download query");
+  using(var listing=await guest.GetAsync("/tai-lieu"))Check(listing.StatusCode==HttpStatusCode.OK&&(await listing.Content.ReadAsStringAsync()).Contains("/bai-viet/"+Id(draft)),"Materials HTTP lists the published internal collection");
   await using(var db=new PortalDbContext(options)){var revisionId=Rev(draft);var revision=await db.Revisions.SingleAsync(x=>x.Id==revisionId);Check(revision.Metadata.PublicationDate==new DateOnly(2026,1,30),"PublicationDate preserved through review/publication");}
   stage="COMPLETE";return;
  }
