@@ -3,7 +3,21 @@
 <partial name="_PublicBreadcrumb" model='"Tài liệu"' />
 <header class="page-header page-header-search">
     <div><h1>Tài liệu</h1><p>Tra cứu và tải tài liệu đã công bố.</p></div>
-    <form class="listing-filter" method="get" role="search"><label class="sr-only" for="materials-q">Tìm tài liệu</label><input id="materials-q" type="search" name="q" value="@Model.Query" maxlength="200" placeholder="Tìm theo tiêu đề, từ khóa…" /><button class="button" type="submit">Tìm kiếm</button></form>
+    <form class="listing-filter materials-filter" method="get" role="search">
+        <label class="sr-only" for="materials-q">Tìm tài liệu</label><input id="materials-q" type="search" name="q" value="@Model.Query" maxlength="200" placeholder="Tìm theo tiêu đề, từ khóa…" />
+        @if (Model.Categories.Count > 0)
+        {
+            <label class="sr-only" for="materials-category">Danh mục tài liệu</label>
+            <select id="materials-category" name="categoryId" aria-label="Danh mục tài liệu">
+                <option value="">Tất cả tài liệu</option>
+                @foreach (var category in Model.Categories)
+                {
+                    <option value="@category.Id" selected="@(Model.CategoryId == category.Id)">@category.Name</option>
+                }
+            </select>
+        }
+        <button class="button" type="submit">Tìm kiếm</button>
+    </form>
 </header>
 <nav class="tabs" aria-label="Nhóm văn bản"><a href="/van-ban">Văn bản pháp luật</a><a href="/du-thao">Văn bản dự thảo</a><a href="/tai-lieu" aria-current="page">Tài liệu</a></nav>
 @if (Model.Items.Count == 0)
@@ -17,7 +31,7 @@ else
     @foreach (var item in Model.Items)
     {
         <article class="material-card">
-            <div><h2><a href="@item.Content.Url">@item.Content.Title</a></h2>@if(item.Content.DisplayDate is not null){<p class="article-meta">Công bố: @item.Content.DisplayDate</p>}@if(item.Content.Summary is not null){<p>@item.Content.Summary</p>}</div>
+            <div><h2><a href="@item.Content.Url">@item.Content.Title</a></h2>@if(item.Content.DisplayDate is not null){<p class="article-meta">Ngày hồ sơ: @item.Content.DisplayDate</p>}@if(item.Content.Summary is not null){<p>@item.Content.Summary</p>}</div>
             <ul class="material-files">
             @foreach(var file in item.Files)
             {
