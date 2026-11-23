@@ -56,7 +56,7 @@ static class MaterialsFilterChecks
                 site.Menus.Add(new() { Label = "Tài liệu", TargetKind = "Route", RouteKey = "Materials", CategoryId = 84 });
                 db.Add(site); await db.SaveChangesAsync(); db.Add(new SiteConfiguration { LiveRevisionId = site.Id }); await db.SaveChangesAsync();
             }
-            async Task Add(string title, int primary, int? secondary = 84, bool published = true, bool quarantined = false, ContentKind kind = ContentKind.Article)
+            async Task Add(string title, int primary, int? secondary = 84, bool published = true, bool quarantined = false, ContentKind kind = ContentKind.Article, bool trusted = false, bool grant = true)
             {
                 await using var db = new PortalDbContext(options);
                 var c = new Content { OwnerUserId = "fixture", Kind = kind, PrimaryCategoryId = primary }; db.Contents.Add(c); await db.SaveChangesAsync();
@@ -66,14 +66,21 @@ static class MaterialsFilterChecks
                 if (secondary.HasValue) db.RevisionCategories.Add(new() { RevisionId = r.Id, CategoryId = secondary.Value });
                 var m = new MediaAsset { OriginalName = title + ".pdf", StorageKey = "fixture/" + Guid.NewGuid() + ".pdf", MimeType = "application/pdf", ByteLength = 10, Sha256 = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(title))), Origin = "EditorialDocument", ScanStatus = "Clean", ValidationStatus = "Validated", IsQuarantined = quarantined };
                 // Synthetic SQL eligibility fixture only; not a scan or real media upload.
-                db.MediaAssets.Add(m); db.EditorialDocuments.Add(new() { MediaAssetId = m.Id, ContentId = c.Id, OwnerId = "fixture", ScanState = InquiryScanState.Clean, ScannedSha256 = m.Sha256, ScannedUtc = DateTimeOffset.UtcNow, EngineVersion = "SyntheticFixture" });
+                var proof = new EditorialDocument { MediaAssetId = m.Id, ContentId = c.Id, OwnerId = "fixture", ScanState = InquiryScanState.Clean, ScannedSha256 = m.Sha256, ScannedUtc = DateTimeOffset.UtcNow, EngineVersion = "SyntheticFixture" };
+                if (trusted)
+                {
+                    m.UploadedByUserId="fixture"; m.ScanStatus="NotScanned"; m.ValidationStatus=TrustedInternalDocumentPolicy.Validation;
+                    proof.ScanState=InquiryScanState.NotScanned;proof.ScannedSha256=null;proof.ScannedUtc=null;proof.EngineVersion=null;
+                    if(grant) db.AuditLogs.Add(new(){Actor="fixture",ContentId=c.Id,Action=TrustedInternalDocumentPolicy.GrantAction,Detail=TrustedInternalDocumentPolicy.Binding(m)});
+                }
+                db.MediaAssets.Add(m); db.EditorialDocuments.Add(proof);
                 db.ContentAssets.Add(new() { RevisionId = r.Id, MediaAssetId = m.Id, Usage = "Attachment" }); await db.SaveChangesAsync();
             }
             await Add("HuyPhoi",86); await Add("QHKH",77); await Add("Secondary",84,86);
             await Add("Outside",86,null); await Add("Draft",86,published:false); await Add("Quarantine",86,quarantined:true); await Add("Legal",86,kind:ContentKind.LegalDocument);
-            async Task<IActionResult> Page(int? category = null, string? q = null)
+            async Task<IActionResult> Page(int? category = null, string? q = null, bool trusted = false)
             {
-                await using var db = new PortalDbContext(options); var policy = new MediaUploadOptions(); var query = new PublicContentQuery(db,policy);
+                await using var db = new PortalDbContext(options); var policy = new MediaUploadOptions { NativeUatUploads=trusted }; var query = new PublicContentQuery(db,policy);
                 var storage = new StorageOptions { MediaRoot = Path.Combine(run,"media"), SnapshotRoot = Path.Combine(run,"snapshots"), TempRoot = Path.Combine(run,"temp"), KeysRoot = Path.Combine(run,"keys") };
                 var sites = new PublicSiteService(db,new SiteConfigurationService(db,storage,policy),query,policy,new HttpContextAccessor());
                 return await new MaterialsController(db,query,sites,policy).Index(q,categoryId:category);
@@ -88,6 +95,15 @@ static class MaterialsFilterChecks
             Check(((MaterialsModel)((ViewResult)await Page(89)).Model!).Total == 0, "Empty configured child is empty, not all documents");
             foreach(var id in new[]{87,88,999}) Check(await Page(id) is NotFoundResult,"Hidden/unrelated/unknown category denied " + id);
             Check(filtered.Items.All(x=>x.Content.DisplayDate=="30/01/2026"),"Metadata display date unchanged");
+            await Add("TrustedVerified",86,trusted:true);
+            await Add("TrustedMissingGrant",86,trusted:true,grant:false);
+            await Add("TrustedDraft",86,published:false,trusted:true);
+            await Add("TrustedQuarantined",86,quarantined:true,trusted:true);
+            Check(((MaterialsModel)((ViewResult)await Page()).Model!).Total==3,"Trusted documents hidden when policy is off");
+            var trustedPage=(MaterialsModel)((ViewResult)await Page(trusted:true)).Model!;
+            Check(trustedPage.Total==4 && trustedPage.Items.Count(x=>x.Content.Title=="TrustedVerified")==1,"SQL Server translates exact audit binding; only verified public trusted document visible");
+            await using(var db=new PortalDbContext(options)){await db.AuditLogs.Where(x=>x.Action==TrustedInternalDocumentPolicy.GrantAction).ExecuteDeleteAsync();}
+            Check(((MaterialsModel)((ViewResult)await Page(trusted:true)).Model!).Total==3,"Revoking synthetic grants removes trusted entries immediately");
             await File.WriteAllTextAsync(Path.Combine(run,"result.json"),JsonSerializer.Serialize(new{checks,productionWrites=0}));
         }
         finally { SqlConnection.ClearAllPools(); if(started) await LocalDb("stop"); }

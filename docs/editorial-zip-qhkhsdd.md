@@ -54,3 +54,6 @@ powershell -NoProfile -File scripts/build-for-iis.ps1
 ```
 
 Triển khai nguyên `web` gồm `.runtime`; không sửa JSON/manifest sau Publish. Không cần migration. Chưa triển khai từ máy Developer.
+# Cập nhật chính sách nội bộ
+
+Luồng ZIP thông thường trong tài liệu này vẫn yêu cầu scanner. Riêng PDF/ZIP nội bộ được quản trị viên xác nhận từng tệp có cơ chế độc lập tại [trusted-internal-documents.md](trusted-internal-documents.md), giữ `NotScanned` và audit thật. Không tự áp dụng ngoại lệ Hủy phôi GCN cho ZIP QHKHSDD hoặc tệp cũ.

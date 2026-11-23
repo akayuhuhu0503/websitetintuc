@@ -43,7 +43,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             || !Path.GetFullPath(files.MediaRoot).StartsWith(root, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Luồng tài liệu mới chỉ mở trên Development / SQL Test / kho Test; Production cần scanner và policy được phê duyệt.");
     }
-    public async Task<MediaAsset> UploadAsync(Guid contentId, Stream input, string name, string declaredMime, ContentActor actor, CancellationToken ct = default)
+    public async Task<MediaAsset> UploadAsync(Guid contentId, Stream input, string name, string declaredMime, ContentActor actor, CancellationToken ct = default, string? trustedInternalSource = null)
     {
         actor = await rights.GetAsync(actor.UserId);
         var content = await db.Contents.SingleOrDefaultAsync(x => x.Id == contentId, ct);
@@ -51,13 +51,18 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
         name = Path.GetFileName(name.Replace('\\', '/'));
         if (name.Length is < 1 or > 200 || name.Any(char.IsControl)) throw new InvalidOperationException("Tên tệp không hợp lệ.");
         var mime = EditorialDocumentPolicy.Mime(name);
+        var trustedInternal = trustedInternalSource is not null;
+        if (trustedInternal && (!TrustedInternalDocumentPolicy.Enabled(uploadOptions) || !TrustedInternalDocumentPolicy.AllowedActor(actor))) throw new UnauthorizedAccessException();
+        if (trustedInternal && (!TrustedInternalDocumentPolicy.AllowedMime(mime) || string.IsNullOrWhiteSpace(trustedInternalSource)
+            || trustedInternalSource.Length > 500 || trustedInternalSource.Any(char.IsControl)))
+            throw new InvalidOperationException("Xác nhận nguồn nội bộ rõ ràng (tối đa 500 ký tự), chỉ dùng cho PDF/ZIP.");
         if (uploadOptions?.ApprovedManagedDocumentsWithoutAv != true && mime == OfficeDocumentPolicy.Docx && (content.Kind != ContentKind.StaticPage || content.PrimaryCategoryId != 76 && !await db.ContentDrafts.AnyAsync(x => x.ContentId == contentId && x.PrimaryCategoryId == 76, ct)))
             throw new InvalidOperationException("DOCX dùng cho hồ sơ lịch tuần. Tạo/lưu nháp mẫu lịch tuần trước khi tải tệp.");
         if (declaredMime.Split(';')[0] is var claimed && claimed != mime && claimed != "application/octet-stream") throw new InvalidOperationException("MIME không khớp loại tài liệu.");
-        var noAv=uploadOptions?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(mime);
+        var noAv=trustedInternal || uploadOptions?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(mime);
         if (!noAv) await media.RequireUploadScannerAsync(ct, requireConfigured: mime == EditorialZipPolicy.Mime);
         var asset = new MediaAsset { Origin = "EditorialDocument",
-            ValidationStatus = noAv ? MediaUploadOptions.ManagedDocumentNoAvValidation : "PendingScan",
+            ValidationStatus = trustedInternal ? TrustedInternalDocumentPolicy.Validation : noAv ? MediaUploadOptions.ManagedDocumentNoAvValidation : "PendingScan",
             IsQuarantined = !noAv, ScanStatus = "NotScanned",
             MimeType = mime, OriginalName = name, UploadedByUserId = actor.UserId };
         asset.StorageKey = "editorial-private/" + asset.Id.ToString("N") + ".bin";
@@ -75,7 +80,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (noAv || mime == EditorialZipPolicy.Mime)
             {
                 // Format validation only, not malware scanning. Does not execute PDF/Office content.
-                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: noAv, ct);
+                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: noAv, ct, trustedInternal);
             }
             var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == asset.Sha256, ct);
             if (duplicate != null)
@@ -87,6 +92,13 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
                 {
                     actor = await rights.GetAsync(actor.UserId);
                     if (!actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();
+                    if (trustedInternal)
+                    {
+                        if (!TrustedInternalDocumentPolicy.AllowedActor(actor) || !TrustedInternalDocumentPolicy.Candidate(duplicate, uploadOptions))
+                            throw new InvalidOperationException("Tệp đã tồn tại với chính sách khác; không tự nâng trạng thái hoặc bỏ cách ly.");
+                        var oldProof = await db.EditorialDocuments.AsNoTracking().SingleAsync(d => d.MediaAssetId == duplicate.Id, ct);
+                        if (!await TrustedInternalDocumentPolicy.HasGrantAsync(db, duplicate, oldProof, ct)) throw new InvalidOperationException("Tệp thiếu xác nhận nội bộ gắn với byte hiện tại.");
+                    }
                     return duplicate; // finally removes only the uncommitted temporary copy.
                 }
                 throw new InvalidOperationException("Tệp đã có trong kho. Chọn tài liệu của bài này; không thể lấy quyền truy cập bằng cách tải lại tệp.");
@@ -94,8 +106,17 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             // Fresh resource/category permission immediately before persistence.
             actor = await rights.GetAsync(actor.UserId);
             if (!actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) throw new UnauthorizedAccessException();
+            if (trustedInternal)
+            {
+                if (!TrustedInternalDocumentPolicy.AllowedActor(actor)) throw new UnauthorizedAccessException();
+                await using var verified = File.OpenRead(path);
+                if (verified.Length != asset.ByteLength || Convert.ToHexStringLower(await SHA256.HashDataAsync(verified, ct)) != asset.Sha256)
+                    throw new InvalidOperationException("Tệp thay đổi sau kiểm định; chưa tiếp nhận.");
+                db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = TrustedInternalDocumentPolicy.GrantAction, Detail = TrustedInternalDocumentPolicy.Binding(asset) });
+                db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.trusted.confirmed", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, source = trustedInternalSource, state = "NotScanned", signatureAuthenticityVerified = false, policy = TrustedInternalDocumentPolicy.Validation }) });
+            }
             db.MediaAssets.Add(asset); db.EditorialDocuments.Add(new() { MediaAssetId = asset.Id, ContentId = contentId, OwnerId = actor.UserId });
-            db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.uploaded", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, state = "NotScanned", policy = noAv ? "OfficeValidatedNoAv" : "PendingScanner" }) });
+            db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.uploaded", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, state = "NotScanned", policy = trustedInternal ? TrustedInternalDocumentPolicy.Validation : noAv ? "OfficeValidatedNoAv" : "PendingScanner" }) });
             attempted = true; await db.SaveChangesAsync(ct); saved = true; return asset;
         }
         finally
@@ -112,11 +133,14 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
         MediaUploadOptions? policy = null)
     {
         var proof = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.MediaAssetId == asset.Id, ct);
+        var trusted = proof is not null && TrustedInternalDocumentPolicy.Candidate(asset, policy)
+            && proof.ScanState == InquiryScanState.NotScanned && proof.Attempts == 0 && proof.ScannedSha256 == null && proof.ScannedUtc == null && proof.EngineVersion == null
+            && await TrustedInternalDocumentPolicy.HasGrantAsync(db, asset, proof, ct);
         var validScan=proof is not null && asset.ScanStatus=="Clean" && asset.ValidationStatus=="Validated"
             && proof.ScanState==InquiryScanState.Clean && proof.ScannedSha256==asset.Sha256 && proof.ScannedUtc!=null
             && !string.IsNullOrWhiteSpace(proof.EngineVersion)
             && (development || !proof.EngineVersion.StartsWith("Defender/", StringComparison.Ordinal));
-        var managedNoAv=proof is not null && policy?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(asset.MimeType)
+        var managedNoAv=trusted || proof is not null && policy?.ApprovedManagedDocumentsWithoutAv==true && OfficeDocumentPolicy.IsDocument(asset.MimeType)
             && asset.ScanStatus=="NotScanned" && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
             && proof.ScanState==InquiryScanState.NotScanned && proof.Attempts==0
             && proof.ScannedSha256==null && proof.ScannedUtc==null && proof.EngineVersion==null;
@@ -145,8 +169,9 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
                     && (managedNoAv ? x.ScanState==InquiryScanState.NotScanned && x.Attempts==0 && x.ScannedSha256==null
                         : x.ScanState==InquiryScanState.Clean), ct)
                 || !await db.MediaAssets.AsNoTracking().AnyAsync(x => x.Id == asset.Id && !x.IsQuarantined && x.Sha256 == asset.Sha256
-                    && (managedNoAv ? x.ScanStatus=="NotScanned" && x.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
+                    && (managedNoAv ? x.ScanStatus=="NotScanned" && x.ValidationStatus==asset.ValidationStatus
                         : x.ScanStatus=="Clean" && x.ValidationStatus=="Validated"), ct)) { await file.DisposeAsync(); return null; }
+            if (trusted && !await TrustedInternalDocumentPolicy.HasGrantAsync(db, asset, proof!, ct)) { await file.DisposeAsync(); return null; }
             file.Position = 0; return file;
         }
         catch (Exception error) when (error is IOException or MediaUploadException or UnauthorizedAccessException) { if (file != null) await file.DisposeAsync(); return null; }
@@ -161,7 +186,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (only != null) expired = expired.Where(x => x.MediaAssetId == only);
             await expired.ExecuteUpdateAsync(x => x.SetProperty(d => d.ScanState, InquiryScanState.ScanFailed).SetProperty(d => d.Error, "LeaseExpired"), ct);
             var queue = db.EditorialDocuments.Where(x => (x.ScanState == InquiryScanState.NotScanned || x.ScanState == InquiryScanState.ScanFailed) && x.Attempts < 3 && x.AvailableUtc <= now
-                && !db.MediaAssets.Any(a => a.Id==x.MediaAssetId && a.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation));
+                && !db.MediaAssets.Any(a => a.Id==x.MediaAssetId && (a.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation || a.ValidationStatus==TrustedInternalDocumentPolicy.Validation)));
             if (only != null) queue = queue.Where(x => x.MediaAssetId == only);
             item = await queue.OrderBy(x => x.AvailableUtc).ThenBy(x => x.MediaAssetId).FirstOrDefaultAsync(ct);
             if (item == null) { await tx.CommitAsync(ct); return false; }

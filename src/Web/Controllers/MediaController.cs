@@ -40,7 +40,7 @@ public sealed class MediaController(PortalDbContext db, StorageOptions storage, 
             Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
             var managedDocumentNoAv=mediaOptions.ApprovedManagedDocumentsWithoutAv
                 && asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation && asset.ScanStatus=="NotScanned";
-            if(managedDocumentNoAv)Response.Headers["X-Media-Scan-Status"]="NotScanned";
+            if(managedDocumentNoAv || TrustedInternalDocumentPolicy.Candidate(asset,mediaOptions))Response.Headers["X-Media-Scan-Status"]="NotScanned";
             if(asset.MimeType=="application/pdf"){Response.Headers["Content-Security-Policy"]="sandbox; default-src 'none'; frame-ancestors 'self'";Response.Headers["X-Frame-Options"]="SAMEORIGIN";usage.CountDownloadWhenSuccessful(HttpContext,id,contentId,download);}
             Request.Headers.Remove("If-None-Match"); Request.Headers.Remove("If-Modified-Since"); Request.Headers.Remove("If-Range");
             // A validated public PDF may use the browser viewer, including the approved NotScanned policy.

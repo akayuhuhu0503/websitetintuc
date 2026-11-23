@@ -75,7 +75,7 @@ public sealed class MediaUploadOptions
         ? VerifiedSourceAllowed && asset.Origin == "Source" && !asset.IsQuarantined && asset.ScanStatus == "Clean"
         : asset.Origin == "EditorialDocument"
         ? !asset.IsQuarantined && EditorialDocumentPolicy.IsDocument(asset.MimeType)
-            && (asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated"
+            && (TrustedInternalDocumentPolicy.Candidate(asset, this) || asset.ScanStatus == "Clean" && asset.ValidationStatus == "Validated"
                 || ApprovedManagedDocumentsWithoutAv && OfficeDocumentPolicy.IsDocument(asset.MimeType) && asset.ScanStatus == "NotScanned" && asset.ValidationStatus == ManagedDocumentNoAvValidation)
         : !asset.IsQuarantined && (asset.Origin is "Source" or "Uploaded")
         && (asset.ScanStatus is "NotScanned" or "Clean")

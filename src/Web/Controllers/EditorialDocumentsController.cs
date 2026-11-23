@@ -9,7 +9,11 @@ using Microsoft.EntityFrameworkCore;
 namespace LandPortal.Web.Controllers;
 
 public sealed record EditorialDocumentRow(MediaAsset Asset, EditorialDocument Proof);
-public sealed record EditorialDocumentsPage(Guid ContentId, string Title, bool CanUpload, IReadOnlyList<EditorialDocumentRow> Files, IReadOnlyList<MediaAsset> LegacyPdfs, bool ManagedNoAvEnabled);
+public sealed record EditorialDocumentsPage(Guid ContentId, string Title, bool CanUpload, IReadOnlyList<EditorialDocumentRow> Files, IReadOnlyList<MediaAsset> LegacyPdfs, bool ManagedNoAvEnabled)
+{
+    public bool TrustedInternalEnabled { get; init; }
+    public bool CanConfirmTrustedInternal { get; init; }
+}
 
 [Authorize, ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPermissionService rights, EditorialDocumentService documents,
@@ -25,7 +29,8 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         var legacy = await db.MediaAssets.AsNoTracking().Where(a => a.Origin == "Uploaded" && a.MimeType == "application/pdf" && a.ScanStatus == "NotScanned" && !a.IsQuarantined && a.ValidationStatus == "Validated" && a.ByteLength <= EditorialDocumentService.Maximum
             && (db.DraftAssets.Any(x => x.ContentId == id && x.MediaAssetId == a.Id) || db.ContentAssets.Any(x => x.Revision.ContentId == id && x.MediaAssetId == a.Id))
             && !db.DraftAssets.Any(x => x.ContentId != id && x.MediaAssetId == a.Id) && !db.ContentAssets.Any(x => x.Revision.ContentId != id && x.MediaAssetId == a.Id)).Take(100).ToListAsync();
-        return View(new EditorialDocumentsPage(id, content.CurrentRevisionId == null ? "Bản nháp" : await db.Revisions.Where(x => x.Id == content.CurrentRevisionId).Select(x => x.Title).SingleAsync(), actor.Has(Permissions.ManageMedia) && await rights.CanEditAsync(actor, content), files, legacy, options.ApprovedManagedDocumentsWithoutAv));
+        return View(new EditorialDocumentsPage(id, content.CurrentRevisionId == null ? "Bản nháp" : await db.Revisions.Where(x => x.Id == content.CurrentRevisionId).Select(x => x.Title).SingleAsync(), actor.Has(Permissions.ManageMedia) && await rights.CanEditAsync(actor, content), files, legacy, options.ApprovedManagedDocumentsWithoutAv)
+        { TrustedInternalEnabled = TrustedInternalDocumentPolicy.Enabled(options), CanConfirmTrustedInternal = TrustedInternalDocumentPolicy.Enabled(options) && TrustedInternalDocumentPolicy.AllowedActor(actor) });
     }
     [HttpPost("admin/documents/{id:guid}/enqueue/{assetId:guid}")]
     public async Task<IActionResult> Enqueue(Guid id, Guid assetId, CancellationToken ct)
@@ -35,16 +40,20 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         catch (InvalidOperationException error) { return BadRequest(error.Message); }
     }
     [HttpPost("admin/documents/{id:guid}"), RequestSizeLimit(EditorialDocumentPolicy.RequestMaximum), RequestFormLimits(MultipartBodyLengthLimit = EditorialDocumentPolicy.RequestMaximum, MemoryBufferThreshold = 65536)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile? file, CancellationToken ct, string? format = null)
+    public async Task<IActionResult> Upload(Guid id, IFormFile? file, CancellationToken ct, string? format = null, bool trustedInternal = false, string? trustedSource = null)
     {
         try
         {
             EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
+            if (trustedInternal && string.IsNullOrWhiteSpace(trustedSource)) return BadRequest("Nhập nguồn tài liệu nội bộ đã kiểm soát trước khi xác nhận không quét antivirus.");
+            if (!trustedInternal && !string.IsNullOrWhiteSpace(trustedSource)) return BadRequest("Chưa chọn xác nhận tài liệu nội bộ.");
             if (file == null || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu.");
             EditorialDocumentPolicy.RequireSize(file.Length, EditorialDocumentPolicy.Mime(file.FileName));
-            await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct);
+            await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct, trustedInternal ? trustedSource : null);
             if (format == "json") return Json(Describe(asset));
-            TempData["Success"] = asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
+            TempData["Success"] = asset.ValidationStatus==TrustedInternalDocumentPolicy.Validation
+                ? "Đã tiếp nhận tài liệu nội bộ theo xác nhận quản trị, kiểm định kỹ thuật và lưu audit. CHƯA quét antivirus; chưa công khai."
+                : asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
                 ? "Đã lưu tài liệu và kiểm định định dạng (CHƯA quét antivirus). Chỉ phát hành theo quyền duyệt bài."
                 : "Đã lưu SQL và kho cách ly, trạng thái chưa quét an toàn. Chạy tác vụ nền quét thật trước khi đọc hoặc dùng tài liệu.";
             return Redirect("/admin/documents/" + id);
@@ -82,7 +91,8 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
     private object Describe(MediaAsset asset) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
         usable = options.CanServe(asset),
         previewUrl = "/admin/documents/file/" + asset.Id, url = "/media/" + asset.Id,
-        notice = asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation ? "Đã kiểm tra định dạng; chưa quét antivirus. Chưa công khai." : "Tài liệu được giữ trong bài này; chỉ đính kèm khi đạt kiểm định." };
+        notice = asset.ValidationStatus == TrustedInternalDocumentPolicy.Validation ? "Nguồn nội bộ được quản trị xác nhận; đã kiểm định kỹ thuật, chưa quét antivirus. Chưa công khai."
+            : asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation ? "Đã kiểm tra định dạng; chưa quét antivirus. Chưa công khai." : "Tài liệu được giữ trong bài này; chỉ đính kèm khi đạt kiểm định." };
     [HttpGet("admin/documents/file/{id:guid}"), HttpHead("admin/documents/file/{id:guid}")]
     public async Task<IActionResult> Download(Guid id, Guid? contentId)
     {

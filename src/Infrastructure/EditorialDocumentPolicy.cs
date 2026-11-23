@@ -8,7 +8,7 @@ public static class EditorialDocumentPolicy
     public const long RequestMaximum = EditorialZipPolicy.Maximum + 1024 * 1024; // Multipart overhead; PDF stays 104 MiB.
     public const int PdfMaximumPages = 2000;
     public const int PdfValidationSeconds = 60;
-    public const string SizeHelp = "PDF tối đa 104 MiB, 2.000 trang; DOCX/XLSX tối đa 10 MiB; ZIP tối đa 128 MiB và bắt buộc quét antivirus.";
+    public const string SizeHelp = "PDF tối đa 104 MiB, 2.000 trang; DOCX/XLSX tối đa 10 MiB; ZIP tối đa 128 MiB. ZIP cần quét antivirus hoặc xác nhận nguồn nội bộ riêng của quản trị viên.";
     private static readonly SemaphoreSlim PdfSlot = new(1, 1);
 
     public static bool IsDocument(string mime) => mime == EditorialZipPolicy.Mime || OfficeDocumentPolicy.IsDocument(mime);
@@ -19,14 +19,14 @@ public static class EditorialDocumentPolicy
         if (bytes < 1 || bytes > MaximumFor(mime)) throw new MediaUploadException(SizeHelp, 413);
     }
 
-    public static async Task<int?> ValidateAsync(string path, string mime, MediaService media, bool managedWithoutAv, CancellationToken ct = default)
+    public static async Task<int?> ValidateAsync(string path, string mime, MediaService media, bool managedWithoutAv, CancellationToken ct = default, bool trustedInternal = false)
     {
         ct.ThrowIfCancellationRequested();
         RequireSize(new FileInfo(path).Length, mime);
         if (mime == EditorialZipPolicy.Mime)
         {
-            if (managedWithoutAv) throw new MediaUploadException("ZIP không được áp dụng chính sách tài liệu không antivirus.");
-            await EditorialZipPolicy.ValidateAsync(path, ct);
+            if (managedWithoutAv && !trustedInternal) throw new MediaUploadException("ZIP không được áp dụng chính sách tài liệu không antivirus.");
+            await EditorialZipPolicy.ValidateAsync(path, ct, trustedInternal);
             return null;
         }
         if (mime != "application/pdf")
@@ -41,7 +41,8 @@ public static class EditorialDocumentPolicy
         {
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
             budget.CancelAfter(TimeSpan.FromSeconds(PdfValidationSeconds));
-            if (managedWithoutAv) ManagedPdfPolicy.Validate(path, budget.Token);
+            if (trustedInternal) { using var file = File.OpenRead(path); TrustedInternalPdfPolicy.Validate(file, budget.Token); }
+            else if (managedWithoutAv) ManagedPdfPolicy.Validate(path, budget.Token);
             var pages = MediaService.ValidatePdfContent(path, PdfMaximumPages, budget.Token);
             budget.Token.ThrowIfCancellationRequested();
             return pages;

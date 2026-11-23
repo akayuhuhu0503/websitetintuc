@@ -451,8 +451,14 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
             {
             var managedPolicy = mediaOptions ?? new MediaUploadOptions();
             if (asset.IsQuarantined || asset.ValidationStatus is not ("Validated" or "SourceValidated" or BatchMediaProof.Validation)
-                && !(managedPolicy.IsManagedImage(asset) || managedPolicy.IsManagedDocument(asset)))
+                && !(managedPolicy.IsManagedImage(asset) || managedPolicy.IsManagedDocument(asset) || TrustedInternalDocumentPolicy.Candidate(asset, managedPolicy)))
                 throw new InvalidOperationException("Tài nguyên chưa được xác minh định dạng.");
+            if (asset.ValidationStatus == TrustedInternalDocumentPolicy.Validation)
+            {
+                if (storage == null) throw new InvalidOperationException("Chưa thể xác minh tài liệu nội bộ.");
+                await using var trustedFile = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, managedPolicy.IsDevelopmentLoopback, policy: managedPolicy);
+                if (trustedFile == null) throw new InvalidOperationException("Tài liệu nội bộ chưa khớp xác nhận hoặc byte đã kiểm định.");
+            }
             if(asset.ValidationStatus==BatchMediaProof.Validation&&(storage==null||!await BatchMediaProof.ValidAsync(storage,asset,(mediaOptions??new MediaUploadOptions()).VerifiedSourceAllowed)))throw new InvalidOperationException("Tài nguyên batch Test chưa Clean đúng byte hoặc môi trường không được phép.");
             if (!AllowedMime(asset.MimeType)) throw new InvalidOperationException("Chỉ được chọn ảnh JPEG/PNG/GIF/WebP hoặc PDF.");
             }

@@ -51,14 +51,14 @@ public static class EditorialZipPolicy
         return result with { OutputSha256 = Convert.ToHexStringLower(SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { inventory, outputs }))) };
     }
 
-    public static async Task<IReadOnlyList<Entry>> ValidateAsync(string path, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<Entry>> ValidateAsync(string path, CancellationToken ct = default, bool trustedInternal = false)
     {
         if (!await Slot.WaitAsync(0, ct)) throw new MediaUploadException("Đang kiểm định một ZIP khác. Vui lòng thử lại sau.", 429);
         try
         {
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
             budget.CancelAfter(TimeSpan.FromSeconds(ValidationSeconds));
-            return Validate(path, budget.Token);
+            return Validate(path, budget.Token, trustedInternal);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new MediaUploadException("ZIP vượt thời gian kiểm định 60 giây; chưa tiếp nhận.", 408); }
@@ -67,7 +67,7 @@ public static class EditorialZipPolicy
         finally { Slot.Release(); }
     }
 
-    private static IReadOnlyList<Entry> Validate(string path, CancellationToken ct)
+    private static IReadOnlyList<Entry> Validate(string path, CancellationToken ct, bool trustedInternal)
     {
         using var input = File.OpenRead(path);
         EditorialDocumentPolicy.RequireSize(input.Length, Mime);
@@ -127,7 +127,12 @@ public static class EditorialZipPolicy
             if (bytes.Length != entry.Length || ~crc != entry.Crc32) throw new MediaUploadException("ZIP sai kích thước hoặc CRC; tệp có thể bị hỏng.");
             bytes.Position = 0;
             var mime = OfficeDocumentPolicy.Mime(entry.FullName);
-            if (mime == "application/pdf") MediaService.ValidatePdfContent(bytes, EditorialDocumentPolicy.PdfMaximumPages, ct);
+            if (mime == "application/pdf")
+            {
+                if (trustedInternal) TrustedInternalPdfPolicy.Validate(bytes, ct);
+                bytes.Position = 0;
+                MediaService.ValidatePdfContent(bytes, EditorialDocumentPolicy.PdfMaximumPages, ct);
+            }
             else OfficeDocumentPolicy.ValidateOffice(bytes, mime, managedWithoutAv: true);
             ct.ThrowIfCancellationRequested();
             result.Add(new(entry.FullName, entry.Length, Convert.ToHexStringLower(hash.GetHashAndReset())));
