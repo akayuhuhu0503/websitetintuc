@@ -13,10 +13,14 @@
     <h1 class="sr-only">Cổng thông tin điện tử Cục Quản lý đất đai</h1>
     <partial name="_HomeQuickLookup" />
     <div class="home-feature-grid @(newsItems.Length == 0 ? "home-feature-grid--no-news" : "")">
-        @if (heroItems.Length > 0) { <partial name="_HomeNewsCluster" model="heroItems" /> }
-        <partial name="_HomeHighlights" model="highlights" />
-        <partial name="_HomeServicePanel" />
-        @await Component.InvokeAsync("HomeVideos")
+        <div class="home-feature-main">
+            @if (heroItems.Length > 0) { <partial name="_HomeNewsCluster" model="heroItems" /> }
+            <partial name="_HomeServicePanel" />
+        </div>
+        <div class="home-feature-side">
+            <partial name="_HomeHighlights" model="highlights" />
+            @await Component.InvokeAsync("HomeVideos")
+        </div>
     </div>
     @if (newsItems.Length == 0) { <div class="empty-state"><h2>Chưa có tin tức công khai</h2><p>Tin tức sẽ hiển thị sau khi được duyệt và xuất bản.</p></div> }
     <div class="home-information-row">

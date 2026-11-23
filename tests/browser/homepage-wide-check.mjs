@@ -20,7 +20,7 @@ async function measure(){return page.evaluate(()=>{
  const frame=get('main'),body=getComputedStyle(document.body);
  return {innerWidth,outerWidth,clientWidth:document.documentElement.clientWidth,dpr:devicePixelRatio,scale:visualViewport.scale,zoom:body.zoom,transform:body.transform,token:body.getPropertyValue('--gdla-container'),maxWidth:getComputedStyle(document.querySelector('main')).maxWidth,scrollWidth:document.documentElement.scrollWidth,frame,left:frame.x,right:innerWidth-frame.right,
  aligned:['.masthead-inner','.main-nav>.container','.home-quick-lookup','.home-feature-grid','.home-information-row','.home-event-strip','.footer-main'].map(s=>({selector:s,rect:get(s)})),lead:get('.reference-lead'),secondary:get('.home-secondary-list'),highlights:get('.home-highlights'),service:get('.home-service-panel'),video:get('.home-video-section'),banner:get('.event-slides'),dots:get('.event-dots'),latest:get('.home-latest .news-card'),thumb:get('.home-latest .card-image'),
- columns:[...document.querySelectorAll('.home-feature-grid>section')].map(rect),
+ columns:[...document.querySelectorAll('.home-feature-main>section,.home-feature-side>section')].map(rect),
  overflow:[...document.querySelectorAll('.gdla-home article,.home-information-row>section,.home-service-panel')].filter(e=>e.clientWidth&&e.scrollWidth>e.clientWidth+2).map(e=>e.className),
  sideImages:[...document.querySelectorAll('.home-secondary-image')].map(e=>e.getBoundingClientRect().width)};
 });}
@@ -40,7 +40,8 @@ try{
     check(m.lead.w>m.secondary.w&&m.secondary.w>300&&m.highlights.w>300,'Three balanced desktop columns');
     check(m.lead.h<=420&&m.lead.h>=310,'Lead image height remains bounded');
     check(m.sideImages.every(w=>w<=97),'Secondary thumbnails stay compact');
-    check(Math.abs(m.service.y-m.video.y)<2&&!overlaps(m.service,m.video),'Services beside video');
+    check(Math.abs(m.service.bottom-m.video.bottom)<2&&!overlaps(m.service,m.video),'Services and video have aligned bottoms');
+    check(m.video.y-m.highlights.bottom>=14&&m.video.y-m.highlights.bottom<=19,'Video sits directly below highlights');
     if(width===1920)check(m.left>=80&&m.left<=100&&m.right>=80&&m.right<=100,'1920px margins within requested range');
     if(width<=1536)check(m.left>=24&&m.left<=40,'Smaller desktop retains safe padding');
    }

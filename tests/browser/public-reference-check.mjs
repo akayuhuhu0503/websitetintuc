@@ -39,7 +39,8 @@ async function measure(width,kind){
   if(width>=1200){
     check(m.lead&&m.secondary&&m.highlights&&Math.abs(m.lead.y-m.secondary.y)<3&&Math.abs(m.lead.y-m.highlights.y)<3,`${kind} ${width}px lead, secondary list and highlights align`);
     check(m.lead.w>m.secondary.w&&m.secondary.w>=200&&m.highlights.w>=200,`${kind} ${width}px lead remains largest and side columns readable`);
-    check(m.services&&m.video&&Math.abs(m.video.y-m.services.y)<3&&Math.abs(m.video.x-m.highlights.x)<3,`${kind} ${width}px services and video share the next row`);
+    check(m.services&&m.video&&Math.abs(m.video.bottom-m.services.bottom)<3&&Math.abs(m.video.x-m.highlights.x)<3,`${kind} ${width}px services and video align at the bottom`);
+    check(m.video.y-m.highlights.bottom>=14&&m.video.y-m.highlights.bottom<=19,`${kind} ${width}px video follows highlights without an empty shared row`);
     check(Math.abs(m.services.x-m.lead.x)<3&&Math.abs(m.services.right-m.secondary.right)<3,`${kind} ${width}px services span the two news columns`);
     check(m.panels.length===4&&m.panels.every(p=>Math.abs(p.y-m.panels[0].y)<2)&&Math.max(...m.panels.map(p=>p.w))-Math.min(...m.panels.map(p=>p.w))<2,`${kind} ${width}px four information panels have equal widths and aligned tops`);
     check(await page.locator('.home-secondary-story .item-meta,.home-highlights-list .item-meta').evaluateAll(es=>es.every(e=>parseFloat(getComputedStyle(e).fontSize)>=12)),`${kind} ${width}px news metadata remains legible`);
