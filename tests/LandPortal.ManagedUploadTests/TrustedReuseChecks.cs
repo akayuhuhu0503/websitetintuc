@@ -36,9 +36,13 @@ internal static class TrustedReuseChecks
         db.Contents.AddRange(source,target,other);await db.SaveChangesAsync();
         var rights=new CurrentPermissionService(db);var admin=await rights.GetAsync("reuse-admin");var writer=await rights.GetAsync("reuse-writer");
         var media=new MediaService(db,storage,policy);var docs=new EditorialDocumentService(db,storage,media,rights,policy);
-        using var builder=new PdfDocumentBuilder();builder.AddPage(100,100);var bytes=builder.Build();
+        var bytes=TrustedPdfCompatibilityChecks.Pdf("/Gs1 gs /Missing Do 0 0 20 20 re f");
         var asset=await docs.UploadAsync(source.Id,new MemoryStream(bytes),"158_original.pdf","application/pdf",admin,trustedInternalSource:"Isolated fixture source");
         var hash=Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var confirmation=await db.AuditLogs.SingleAsync(x=>x.Action=="document.trusted.confirmed");
+        Check(confirmation.Detail.Contains("PDF_UNDEFINED_GRAPHICS_STATE:1",StringComparison.Ordinal)
+            && confirmation.Detail.Contains("PDF_UNDEFINED_XOBJECT:1",StringComparison.Ordinal),"source compatibility warnings are durably audited");
+        Check(asset.ScanStatus=="NotScanned"&&asset.Sha256==hash,"accepted original retains truthful scan state and SHA");
         Check(!await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db,asset,target.Id,policy),"hash alone gives no destination grant");
         var controller=new EditorialDocumentsController(db,rights,docs,storage,new ReuseTestEnvironment(),new ConfigurationBuilder().Build(),policy){ControllerContext=new(){HttpContext=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity(new[]{new Claim(ClaimTypes.NameIdentifier,admin.UserId)},"fixture"))}}};
         Check(await controller.Result(target.Id,hash,default) is NotFoundResult,"result endpoint denies another article before grant");

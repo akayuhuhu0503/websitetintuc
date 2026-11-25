@@ -19,7 +19,10 @@ public static class EditorialDocumentPolicy
         if (bytes < 1 || bytes > MaximumFor(mime)) throw new MediaUploadException(SizeHelp, 413);
     }
 
-    public static async Task<int?> ValidateAsync(string path, string mime, MediaService media, bool managedWithoutAv, CancellationToken ct = default, bool trustedInternal = false)
+    public static Task<int?> ValidateAsync(string path, string mime, MediaService media, bool managedWithoutAv, CancellationToken ct = default, bool trustedInternal = false)
+        => ValidateWithWarningsAsync(path, mime, media, managedWithoutAv, ct, trustedInternal, null);
+
+    public static async Task<int?> ValidateWithWarningsAsync(string path, string mime, MediaService media, bool managedWithoutAv, CancellationToken ct, bool trustedInternal, ICollection<string>? warnings)
     {
         ct.ThrowIfCancellationRequested();
         RequireSize(new FileInfo(path).Length, mime);
@@ -43,7 +46,8 @@ public static class EditorialDocumentPolicy
             budget.CancelAfter(TimeSpan.FromSeconds(PdfValidationSeconds));
             if (trustedInternal) { using var file = File.OpenRead(path); TrustedInternalPdfPolicy.Validate(file, budget.Token); }
             else if (managedWithoutAv) ManagedPdfPolicy.Validate(path, budget.Token);
-            var pages = MediaService.ValidatePdfContent(path, PdfMaximumPages, budget.Token);
+            using var content = File.OpenRead(path);
+            var pages = MediaService.ValidateEditorialPdfContent(content, PdfMaximumPages, budget.Token, trustedInternal, warnings);
             budget.Token.ThrowIfCancellationRequested();
             return pages;
         }

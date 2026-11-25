@@ -22,6 +22,7 @@ public static class TrustedInternalPdfPolicy
         var seen = new HashSet<IndirectReference>();
         var fields = new HashSet<IndirectReference>();
         var count = 0;
+        var pendingObjects = new Queue<(IToken Token, int Depth)>();
         void Tick(int depth) { ct.ThrowIfCancellationRequested(); if (++count > MaximumTokens || depth > 64) throw new InvalidDataException("PDF nội bộ vượt giới hạn cấu trúc an toàn."); }
         IToken Resolve(IToken token)
         {
@@ -72,6 +73,9 @@ public static class TrustedInternalPdfPolicy
         {
             // A on a tagged StructElem is an attribute, not an annotation action.
             // Accept only the inert layout fields observed in these signed PDFs.
+            if (Resolve(value) is DictionaryToken list && Name(Get(list, "O")) == "List"
+                && list.Data.Keys.All(k => k is "O" or "ListNumbering")
+                && Name(Get(list, "ListNumbering")) is "None" or "Disc" or "Circle" or "Square" or "Decimal" or "UpperRoman" or "LowerRoman" or "UpperAlpha" or "LowerAlpha") return;
             if (Resolve(value) is not DictionaryToken d || Name(Get(d, "O")) != "Layout"
                 || d.Data.Keys.Any(k => k is not ("O" or "Placement" or "BBox"))
                 || Get(d, "Placement") is { } placement && Name(placement) is not ("Block" or "Inline" or "Before" or "Start" or "End")
@@ -112,6 +116,10 @@ public static class TrustedInternalPdfPolicy
         void Visit(IToken token, int depth)
         {
             Tick(depth);
+            pendingObjects.Enqueue((token, depth));
+        }
+        void Inspect(IToken token, int depth)
+        {
             switch (token)
             {
                 case IndirectReferenceToken r: if (seen.Add(r.Data)) Visit(pdf.Structure.GetObject(r.Data).Data, depth + 1); break;
@@ -148,6 +156,12 @@ public static class TrustedInternalPdfPolicy
             }
         }
         Visit(pdf.Structure.Catalog.CatalogDictionary, 0);
+        // PDF objects form a graph (signature /Data, StructElem /P, page /Pg).
+        // Breadth-first traversal checks each reference at its shortest distance
+        // from the catalog, instead of treating valid backlinks as deeper nesting.
+        // Every reachable object is still inspected; direct nesting and total work
+        // remain bounded by Tick and the strict token parser.
+        while (pendingObjects.TryDequeue(out var next)) Inspect(next.Token, next.Depth);
         ct.ThrowIfCancellationRequested();
     }
 }

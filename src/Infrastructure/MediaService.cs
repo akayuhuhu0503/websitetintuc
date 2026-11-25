@@ -287,6 +287,9 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         return ValidatePdfContent(file, maximumPages, cancellationToken);
     }
     internal static int ValidatePdfContent(Stream file, int maximumPages, CancellationToken cancellationToken)
+        => ValidateEditorialPdfContent(file, maximumPages, cancellationToken, trustedInternal: false, warnings: null);
+
+    internal static int ValidateEditorialPdfContent(Stream file, int maximumPages, CancellationToken cancellationToken, bool trustedInternal, ICollection<string>? warnings)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Span<byte> prefix = stackalloc byte[8];
@@ -301,16 +304,24 @@ public sealed class MediaService(PortalDbContext db, StorageOptions storage, Med
         {
             file.Position = 0;
             using var pdf = PdfDocument.Open(file, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
+            if (trustedInternal) pdf.AddPageFactory<TrustedPdfPage, TrustedPdfPageFactory>();
+            var missingGraphicsStates = 0;
+            var missingXObjects = 0;
             if (pdf.NumberOfPages < 1 || pdf.NumberOfPages > maximumPages)
                 throw new MediaUploadException("Số trang PDF vượt giới hạn hoặc không có trang hợp lệ.");
             // Resolve every page through the actual parser; a magic prefix alone never passes validation.
             for (var number = 1; number <= pdf.NumberOfPages; number++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var page = pdf.GetPage(number);
+                var compatible = trustedInternal ? pdf.GetPage<TrustedPdfPage>(number) : null;
+                var page = compatible?.Page ?? pdf.GetPage(number);
+                missingGraphicsStates += compatible?.MissingGraphicsStates ?? 0;
+                missingXObjects += compatible?.MissingXObjects ?? 0;
                 if (page.Width <= 0 || page.Height <= 0 || page.Width > 144_000 || page.Height > 144_000)
                     throw new MediaUploadException("Kích thước trang PDF không hợp lệ.");
             }
+            if (missingGraphicsStates > 0) warnings?.Add($"PDF_UNDEFINED_GRAPHICS_STATE:{missingGraphicsStates}");
+            if (missingXObjects > 0) warnings?.Add($"PDF_UNDEFINED_XOBJECT:{missingXObjects}");
             return pdf.NumberOfPages;
         }
         catch (MediaUploadException) { throw; }
