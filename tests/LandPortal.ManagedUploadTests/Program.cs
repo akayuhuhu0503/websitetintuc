@@ -18,6 +18,9 @@ using System.Text;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
+if (args.FirstOrDefault() == "--trusted-outline") { TrustedOutlineChecks.Run(); return; }
+if (args.FirstOrDefault() == "--trusted-reuse") { await TrustedReuseChecks.Run(); return; }
+if (args.FirstOrDefault() == "--trusted-pdf-compatibility") { await TrustedPdfCompatibilityChecks.Run(); return; }
 if (args.FirstOrDefault() == "--editorial-pdf-limits") { await EditorialPdfLimitChecks.RunAsync(args); return; }
 if (args.FirstOrDefault() == "--editorial-zip") { await EditorialZipChecks.RunAsync(); return; }
 if (args.FirstOrDefault() == "--trusted-internal") { await TrustedInternalChecks.Run(); return; }

@@ -173,8 +173,9 @@ public sealed partial class AdminController(PortalDbContext db, SignInManager<Po
         if (documentId != null)
         {
             if (!await permissions.CanEditAsync(actor, content) || content.State is not (WorkflowState.Draft or WorkflowState.Rejected)) return Forbid();
-            var document = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.ContentId == id && x.MediaAssetId == documentId);
+            var document = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.MediaAssetId == documentId);
             var asset = document == null ? null : await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == documentId);
+            if (asset != null && document!.ContentId != id && !await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db, asset, id, mediaOptions)) return NotFound();
             if (asset == null) return NotFound();
             await using var original = await EditorialDocumentService.OpenVerifiedAsync(db, storage, asset, environment.IsDevelopment(), policy: mediaOptions);
             if (original == null) return StatusCode(423, "Tài liệu chưa đủ điều kiện dùng trong bản xem trước.");

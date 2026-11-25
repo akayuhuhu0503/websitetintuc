@@ -434,7 +434,8 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
         if (assets.Count != selections.Count) throw new InvalidOperationException("Tài nguyên chưa tồn tại trong kho.");
         foreach (var asset in assets)
         {
-            if (asset.Origin == "EditorialDocument" && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id))
+            if (asset.Origin == "EditorialDocument" && !await db.EditorialDocuments.AnyAsync(x => x.MediaAssetId == asset.Id && x.ContentId == content.Id)
+                && !await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db, asset, content.Id, mediaOptions))
                 throw new InvalidOperationException("Tài liệu chỉ dùng trong đúng hồ sơ.");
             if(selections[asset.Id].Usage=="Subtitle")
             {

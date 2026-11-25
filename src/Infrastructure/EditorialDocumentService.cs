@@ -13,6 +13,44 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
     MediaUploadOptions? uploadOptions = null)
 {
     public const long Maximum = EditorialDocumentPolicy.OfficeMaximum; // Existing legacy/weekly callers retain their 10 MiB bound.
+    // An explicit CMS operation, not hash-based access or a duplicate-upload
+    // shortcut. Each destination remains a separate article/revision/workflow.
+    public async Task<MediaAsset> ReuseTrustedAsync(Guid contentId, Guid sourceContentId, Guid assetId, string expectedSha256,
+        byte[] contentVersion, string sourceConfirmation, ContentActor actor, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sourceConfirmation) || sourceConfirmation.Length > 500 || sourceConfirmation.Any(char.IsControl))
+            throw new InvalidOperationException("Nhập xác nhận nguồn nội bộ, tối đa 500 ký tự.");
+        if (expectedSha256.Length != 64 || expectedSha256.Any(c => !char.IsAsciiHexDigit(c)))
+            throw new InvalidOperationException("Mã toàn vẹn tài liệu không hợp lệ.");
+        async Task Authorize()
+        {
+            actor = await rights.GetAsync(actor.UserId);
+            var destination = await db.Contents.AsNoTracking().SingleOrDefaultAsync(c => c.Id == contentId, ct);
+            var source = await db.Contents.AsNoTracking().SingleOrDefaultAsync(c => c.Id == sourceContentId, ct);
+            if (!TrustedInternalDocumentPolicy.Enabled(uploadOptions) || !TrustedInternalDocumentPolicy.AllowedActor(actor)
+                || destination == null || source == null || source.IsTrashed || destination.IsTrashed
+                || !await rights.CanReadAsync(actor, source) || !await rights.CanEditAsync(actor, destination)) throw new UnauthorizedAccessException();
+            if (!destination.RowVersion.SequenceEqual(contentVersion)) throw new DbUpdateConcurrencyException("Bản nháp đã thay đổi; mở lại trước khi gắn tài liệu.");
+            if (destination.State is not (WorkflowState.Draft or WorkflowState.Rejected))
+                throw new InvalidOperationException("Mở bản nháp trước khi dùng tài liệu cho hồ sơ khác.");
+        }
+        await Authorize();
+        var proof = await db.EditorialDocuments.AsNoTracking().SingleOrDefaultAsync(d => d.MediaAssetId == assetId && d.ContentId == sourceContentId, ct);
+        var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assetId, ct);
+        if (proof == null || asset == null || asset.MimeType != "application/pdf" || !TrustedInternalDocumentPolicy.Candidate(asset, uploadOptions)
+            || !string.Equals(expectedSha256, asset.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Tài liệu không khớp hồ sơ nguồn hoặc chính sách nội bộ.");
+        await using var verified = await OpenVerifiedAsync(db, storage, asset, false, ct, uploadOptions);
+        if (verified == null) throw new InvalidOperationException("Tài liệu chưa đạt kiểm định, audit hoặc đối chiếu byte.");
+        await Authorize();
+        if (!await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db, asset, contentId, uploadOptions, ct))
+        {
+            db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = TrustedInternalDocumentPolicy.ReuseAction, Detail = TrustedInternalDocumentPolicy.Binding(asset) });
+            db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.trusted.reuse.confirmed", Detail = JsonSerializer.Serialize(new { sourceContentId, assetId, asset.Sha256, asset.ByteLength, source = sourceConfirmation, state = "NotScanned", copiedBytes = false }) });
+            await db.SaveChangesAsync(ct);
+        }
+        return asset;
+    }
     public async Task EnqueueLegacyPdfAsync(Guid contentId, Guid assetId, ContentActor actor, CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -68,6 +106,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
         asset.StorageKey = "editorial-private/" + asset.Id.ToString("N") + ".bin";
         var path = MediaService.ResolveMediaPath(storage, asset.StorageKey); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var saved = false; var attempted = false;
+        var validationWarnings = new List<string>();
         try
         {
             await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
@@ -80,7 +119,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
             if (noAv || mime == EditorialZipPolicy.Mime)
             {
                 // Format validation only, not malware scanning. Does not execute PDF/Office content.
-                await EditorialDocumentPolicy.ValidateAsync(path, mime, media, managedWithoutAv: noAv, ct, trustedInternal);
+                await EditorialDocumentPolicy.ValidateWithWarningsAsync(path, mime, media, managedWithoutAv: noAv, ct, trustedInternal, validationWarnings);
             }
             var duplicate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(x => x.Sha256 == asset.Sha256, ct);
             if (duplicate != null)
@@ -113,7 +152,7 @@ public sealed class EditorialDocumentService(PortalDbContext db, StorageOptions 
                 if (verified.Length != asset.ByteLength || Convert.ToHexStringLower(await SHA256.HashDataAsync(verified, ct)) != asset.Sha256)
                     throw new InvalidOperationException("Tệp thay đổi sau kiểm định; chưa tiếp nhận.");
                 db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = TrustedInternalDocumentPolicy.GrantAction, Detail = TrustedInternalDocumentPolicy.Binding(asset) });
-                db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.trusted.confirmed", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, source = trustedInternalSource, state = "NotScanned", signatureAuthenticityVerified = false, policy = TrustedInternalDocumentPolicy.Validation }) });
+                db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.trusted.confirmed", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, source = trustedInternalSource, state = "NotScanned", signatureAuthenticityVerified = false, policy = TrustedInternalDocumentPolicy.Validation, validationWarnings }) });
             }
             db.MediaAssets.Add(asset); db.EditorialDocuments.Add(new() { MediaAssetId = asset.Id, ContentId = contentId, OwnerId = actor.UserId });
             db.AuditLogs.Add(new() { Actor = actor.UserId, ContentId = contentId, Action = "document.uploaded", Detail = JsonSerializer.Serialize(new { asset.Id, asset.Sha256, asset.ByteLength, state = "NotScanned", policy = trustedInternal ? TrustedInternalDocumentPolicy.Validation : noAv ? "OfficeValidatedNoAv" : "PendingScanner" }) });
