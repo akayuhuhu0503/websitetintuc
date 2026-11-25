@@ -20,12 +20,31 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
     StorageOptions storage, IWebHostEnvironment environment, IConfiguration config, MediaUploadOptions options) : Controller
 {
     private Task<ContentActor> Actor() => rights.GetAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpPost("admin/documents/{id:guid}/reuse"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reuse(Guid id, Guid sourceContentId, Guid assetId, string? sha256, string? contentVersion, string? trustedSource, CancellationToken ct)
+    {
+        if (sourceContentId == Guid.Empty || assetId == Guid.Empty || string.IsNullOrWhiteSpace(contentVersion)
+            || sha256 == null || trustedSource == null) return BadRequest("Thiếu thông tin đối soát tài liệu nguồn.");
+        try
+        {
+            EditorialDocumentService.RequireTestInfrastructure(config, environment.EnvironmentName);
+            var asset = await documents.ReuseTrustedAsync(id, sourceContentId, assetId, sha256, Convert.FromBase64String(contentVersion), trustedSource, await Actor(), ct);
+            return Json(Describe(asset, id));
+        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (FormatException) { return BadRequest("Mã phiên bản không hợp lệ."); }
+        catch (DbUpdateConcurrencyException) { return Conflict("Bản nháp đã thay đổi; đọc lại trước khi tiếp tục."); }
+        catch (InvalidOperationException error) { return BadRequest(error.Message); }
+    }
     [HttpGet("admin/documents/{id:guid}")]
     public async Task<IActionResult> Index(Guid id)
     {
         var actor = await Actor(); var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
         if (content == null || !await rights.CanReadAsync(actor, content)) return NotFound();
-        var files = await (from d in db.EditorialDocuments.AsNoTracking() join a in db.MediaAssets.AsNoTracking() on d.MediaAssetId equals a.Id where d.ContentId == id orderby a.CreatedUtc descending select new EditorialDocumentRow(a, d)).Take(100).ToListAsync();
+        var files = await (from d in db.EditorialDocuments.AsNoTracking() join a in db.MediaAssets.AsNoTracking() on d.MediaAssetId equals a.Id
+            where d.ContentId == id || db.DraftAssets.Any(x => x.ContentId == id && x.MediaAssetId == a.Id)
+                || db.ContentAssets.Any(x => x.Revision.ContentId == id && x.MediaAssetId == a.Id)
+            orderby a.CreatedUtc descending select new EditorialDocumentRow(a, d)).Take(100).ToListAsync();
         var legacy = await db.MediaAssets.AsNoTracking().Where(a => a.Origin == "Uploaded" && a.MimeType == "application/pdf" && a.ScanStatus == "NotScanned" && !a.IsQuarantined && a.ValidationStatus == "Validated" && a.ByteLength <= EditorialDocumentService.Maximum
             && (db.DraftAssets.Any(x => x.ContentId == id && x.MediaAssetId == a.Id) || db.ContentAssets.Any(x => x.Revision.ContentId == id && x.MediaAssetId == a.Id))
             && !db.DraftAssets.Any(x => x.ContentId != id && x.MediaAssetId == a.Id) && !db.ContentAssets.Any(x => x.Revision.ContentId != id && x.MediaAssetId == a.Id)).Take(100).ToListAsync();
@@ -50,7 +69,7 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
             if (file == null || Request.Form.Files.Count != 1) return BadRequest("Chọn đúng một tài liệu.");
             EditorialDocumentPolicy.RequireSize(file.Length, EditorialDocumentPolicy.Mime(file.FileName));
             await using var stream = file.OpenReadStream(); var asset = await documents.UploadAsync(id, stream, file.FileName, file.ContentType, await Actor(), ct, trustedInternal ? trustedSource : null);
-            if (format == "json") return Json(Describe(asset));
+            if (format == "json") return Json(Describe(asset, id));
             TempData["Success"] = asset.ValidationStatus==TrustedInternalDocumentPolicy.Validation
                 ? "Đã tiếp nhận tài liệu nội bộ theo xác nhận quản trị, kiểm định kỹ thuật và lưu audit. CHƯA quét antivirus; chưa công khai."
                 : asset.ValidationStatus==MediaUploadOptions.ManagedDocumentNoAvValidation
@@ -70,11 +89,15 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
     {
         var actor = await Actor(); var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
         if (content == null || !actor.Has(Permissions.ManageMedia) || !await rights.CanReadAsync(actor, content)) return NotFound();
-        var assets = await db.MediaAssets.AsNoTracking().Where(a => db.EditorialDocuments.Any(d => d.ContentId == id && d.MediaAssetId == a.Id)).OrderByDescending(a => a.CreatedUtc).Take(100).ToListAsync();
-        return Json(new { items = assets.Select(Describe) });
+        var assets = await db.MediaAssets.AsNoTracking().Where(a => a.Origin == "EditorialDocument" &&
+            (db.EditorialDocuments.Any(d => d.ContentId == id && d.MediaAssetId == a.Id)
+             || db.DraftAssets.Any(x => x.ContentId == id && x.MediaAssetId == a.Id)
+             || db.ContentAssets.Any(x => x.Revision.ContentId == id && x.MediaAssetId == a.Id))).OrderByDescending(a => a.CreatedUtc).Take(100).ToListAsync();
+        return Json(new { items = assets.Select(a => Describe(a, id)) });
     }
     // Reconcile a lost upload response without receiving, storing and validating the same bytes again.
-    // Knowing a hash never grants access: only this uploader's document on this editable article is visible.
+    // Knowing a hash never grants access: require ownership on this article or
+    // an explicit administrator reuse grant bound to this destination and bytes.
     [HttpGet("admin/documents/{id:guid}/result")]
     public async Task<IActionResult> Result(Guid id, string? sha256, CancellationToken ct)
     {
@@ -83,14 +106,14 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
         var content = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (content == null || content.IsTrashed || !actor.Has(Permissions.ManageMedia) || !await rights.CanEditAsync(actor, content)) return NotFound();
         var hash = sha256.ToLowerInvariant();
-        var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(a => a.Sha256 == hash
-            && a.Origin == "EditorialDocument" && a.UploadedByUserId == actor.UserId
-            && db.EditorialDocuments.Any(d => d.MediaAssetId == a.Id && d.ContentId == id && d.OwnerId == actor.UserId), ct);
-        return asset == null ? NotFound() : Json(Describe(asset));
+        var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(a => a.Sha256 == hash && a.Origin == "EditorialDocument", ct);
+        if (asset == null) return NotFound();
+        var own = asset.UploadedByUserId == actor.UserId && await db.EditorialDocuments.AnyAsync(d => d.MediaAssetId == asset.Id && d.ContentId == id && d.OwnerId == actor.UserId, ct);
+        return own || await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db, asset, id, options, ct) ? Json(Describe(asset, id)) : NotFound();
     }
-    private object Describe(MediaAsset asset) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
+    private object Describe(MediaAsset asset, Guid contentId) => new { asset.Id, asset.OriginalName, asset.MimeType, asset.ByteLength, asset.ScanStatus,
         usable = options.CanServe(asset),
-        previewUrl = "/admin/documents/file/" + asset.Id, url = "/media/" + asset.Id,
+        previewUrl = "/admin/documents/file/" + asset.Id + "?contentId=" + contentId, url = "/media/" + asset.Id,
         notice = asset.ValidationStatus == TrustedInternalDocumentPolicy.Validation ? "Nguồn nội bộ được quản trị xác nhận; đã kiểm định kỹ thuật, chưa quét antivirus. Chưa công khai."
             : asset.ValidationStatus == MediaUploadOptions.ManagedDocumentNoAvValidation ? "Đã kiểm tra định dạng; chưa quét antivirus. Chưa công khai." : "Tài liệu được giữ trong bài này; chỉ đính kèm khi đạt kiểm định." };
     [HttpGet("admin/documents/file/{id:guid}"), HttpHead("admin/documents/file/{id:guid}")]
@@ -105,6 +128,8 @@ public sealed class EditorialDocumentsController(PortalDbContext db, CurrentPerm
             var current = await db.Contents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == target);
             if (current == null || !await rights.CanReadAsync(actor, current)) return false;
             if (target == d.ContentId) return true;
+            var candidate = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id);
+            if (candidate != null && await TrustedInternalDocumentPolicy.HasReuseGrantAsync(db, candidate, target, options)) return true;
             var readable = rights.ScopeRevisions(db.Revisions.AsNoTracking(), actor).Where(x => x.ContentId == target).Select(x => x.Id);
             return await db.DraftAssets.AnyAsync(x => x.ContentId == target && x.MediaAssetId == id) || await db.ContentAssets.AnyAsync(x => x.MediaAssetId == id && readable.Contains(x.RevisionId));
         }

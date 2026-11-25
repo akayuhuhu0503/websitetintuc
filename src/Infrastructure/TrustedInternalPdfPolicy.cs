@@ -78,6 +78,37 @@ public static class TrustedInternalPdfPolicy
                 || Get(d, "BBox") is { } box && (box is not ArrayToken a || a.Data.Count != 4 || a.Data.Select(Resolve).Any(x => x is not NumericToken n || !double.IsFinite(n.Data))))
                 throw new InvalidDataException("Thuộc tính bố cục PDF không thuộc cấu trúc an toàn được hỗ trợ.");
         }
+        void Outlines(IToken token, int depth)
+        {
+            // First/Next form a linked tree: Next is a sibling, not a deeper
+            // bookmark. Collect it without recursive sibling calls, then inspect
+            // EVERY dictionary with the normal action/file/signature guards.
+            Tick(depth);
+            if (token is not IndirectReferenceToken rootReference || Resolve(token) is not DictionaryToken root
+                || Name(Get(root, "Type")) is { } rootType && rootType != "Outlines")
+                throw new InvalidDataException("Cây mục lục PDF không hợp lệ.");
+            var references = new HashSet<IndirectReference> { rootReference.Data };
+            var nodes = new List<(DictionaryToken Value, int Depth)> { (root, depth) };
+            var pending = new Queue<(IToken Value, IndirectReference Parent, int Depth)>();
+            if (root.Data.TryGetValue("First", out var first)) pending.Enqueue((first, rootReference.Data, depth + 1));
+            while (pending.TryDequeue(out var current))
+            {
+                Tick(current.Depth);
+                if (current.Value is not IndirectReferenceToken reference || !references.Add(reference.Data)
+                    || Resolve(current.Value) is not DictionaryToken item
+                    || Get(item, "Title") is not (StringToken or HexToken)
+                    || !item.Data.TryGetValue("Parent", out var parent) || parent is not IndirectReferenceToken parentReference
+                    || !parentReference.Data.Equals(current.Parent))
+                    throw new InvalidDataException("Cây mục lục PDF có liên kết không hợp lệ hoặc tham chiếu vòng.");
+                nodes.Add((item, current.Depth));
+                if (item.Data.TryGetValue("First", out var child)) pending.Enqueue((child, reference.Data, current.Depth + 1));
+                if (item.Data.TryGetValue("Next", out var next)) pending.Enqueue((next, current.Parent, current.Depth));
+            }
+            // Parent/Prev/Last backlinks must not recurse through the collected
+            // tree. Other referenced objects still receive the normal traversal.
+            seen.UnionWith(references);
+            foreach (var node in nodes) Visit(node.Value, node.Depth);
+        }
         void Visit(IToken token, int depth)
         {
             Tick(depth);
@@ -110,7 +141,8 @@ public static class TrustedInternalPdfPolicy
                         // Catch actions encoded under nonstandard keys as well as the A entry.
                         if (entry.Key == "S" && Name(Resolve(entry.Value)) is "JavaScript" or "Launch" or "SubmitForm" or "ImportData" or "GoToR" or "GoToE" or "Rendition" or "Movie" or "Sound")
                             throw new InvalidDataException("PDF có kiểu hành động nguy hiểm.");
-                        Visit(entry.Value, depth + 1);
+                        if (entry.Key == "Outlines" && Name(Get(d, "Type")) == "Catalog") Outlines(entry.Value, depth + 1);
+                        else Visit(entry.Value, depth + 1);
                     }
                     break;
             }

@@ -9,6 +9,7 @@ public static class TrustedInternalDocumentPolicy
 {
     public const string Validation = "TrustedInternalValidatedV1";
     public const string GrantAction = "document.trusted.accepted.v1";
+    public const string ReuseAction = "document.trusted.reused.v1";
     public static bool Enabled(MediaUploadOptions? options) => options?.NativeUatUploads == true;
     public static bool AllowedActor(ContentActor actor) => actor.Has(Permissions.ManageSettings) && actor.Has(Permissions.ManageMedia);
     public static bool AllowedMime(string mime) => mime is "application/pdf" or EditorialZipPolicy.Mime;
@@ -21,5 +22,11 @@ public static class TrustedInternalDocumentPolicy
         var binding = Binding(asset);
         return db.AuditLogs.AsNoTracking().AnyAsync(a => a.Action == GrantAction && a.Actor == proof.OwnerId
             && a.Actor == asset.UploadedByUserId && a.ContentId == proof.ContentId && a.Detail == binding, ct);
+    }
+    public static Task<bool> HasReuseGrantAsync(PortalDbContext db, MediaAsset asset, Guid contentId, MediaUploadOptions? options, CancellationToken ct = default)
+    {
+        if (asset.MimeType != "application/pdf" || !Candidate(asset, options)) return Task.FromResult(false);
+        var binding = Binding(asset);
+        return db.AuditLogs.AsNoTracking().AnyAsync(a => a.Action == ReuseAction && a.ContentId == contentId && a.Detail == binding, ct);
     }
 }
