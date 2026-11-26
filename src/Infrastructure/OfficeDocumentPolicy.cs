@@ -18,7 +18,7 @@ public static class OfficeDocumentPolicy
         using var input = File.OpenRead(path);
         ValidateOffice(input, mime, managedWithoutAv);
     }
-    internal static void ValidateOffice(Stream input, string mime, bool managedWithoutAv)
+    internal static void ValidateOffice(Stream input, string mime, bool managedWithoutAv, bool trustedArchive = false)
     {
         if (mime is not (Docx or Xlsx)) throw new InvalidDataException("Loại Office không hợp lệ.");
         using var zip = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
@@ -28,12 +28,15 @@ public static class OfficeDocumentPolicy
         {
             if (!names.Add(e.FullName) || e.FullName.StartsWith('/') || e.FullName.Contains('\\') || e.FullName.Contains(':') || e.FullName.Any(char.IsControl) || e.FullName.Split('/').Any(x => x is "." or "..") || e.Length > 2 * 1024 * 1024 || e.Length > Math.Max(1024, e.CompressedLength * 100)) throw new InvalidDataException("Office ZIP không an toàn.");
             if (e.FullName.Contains("vba", StringComparison.OrdinalIgnoreCase) || e.FullName.Contains("activeX", StringComparison.OrdinalIgnoreCase) || e.FullName.Contains("embeddings/", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Không nhận macro/nhúng/ActiveX.");
+            if (trustedArchive && new[] { "macrosheets/", "dialogsheets/", "customUI/", "ctrlProps/", "connections.xml", "queryTables/", "externalLinks/" }.Any(s => e.FullName.Contains(s, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Office nội bộ không nhận macro sheet, điều khiển hoặc kết nối dữ liệu ngoài.");
             if (!e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && !e.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)) continue;
             using var reader = XmlReader.Create(e.Open(), new() { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2 * 1024 * 1024 });
             var xml = XDocument.Load(reader);
-            if (xml.Descendants().Any(x => x.Attribute("TargetMode")?.Value.Equals("External", StringComparison.OrdinalIgnoreCase) == true || x.Name.LocalName is "oleObject" or "externalLink" or "altChunk" or "instrText" or "fldSimple"
+            if (xml.Descendants().Any(x => x.Attribute("TargetMode")?.Value.Equals("External", StringComparison.OrdinalIgnoreCase) == true || x.Name.LocalName is "oleObject" or "externalLink" or "altChunk"
+                || x.Name.LocalName is "instrText" or "fldSimple" && !(trustedArchive && TrustedArchiveOfficePolicy.Allowed(x, mime))
                 || x.Attributes().Any(a => (a.Name.LocalName is "ContentType" or "Type") && new[] { "macroEnabled", "vbaProject", "oleObject", "activeX", "externalLink" }.Any(t => a.Value.Contains(t, StringComparison.OrdinalIgnoreCase)))
-                || mime == Xlsx && x.Name.LocalName is "f" or "definedName")) throw new InvalidDataException("Office có quan hệ ngoài, nội dung chủ động hoặc công thức; cần bản giá trị thuần.");
+                || mime == Xlsx && x.Name.LocalName is "f" or "definedName" && !(trustedArchive && TrustedArchiveOfficePolicy.Allowed(x, mime)))) throw new InvalidDataException("Office có quan hệ ngoài, nội dung chủ động hoặc công thức chưa được hỗ trợ an toàn.");
         }
         var main = mime == Docx ? "word/document.xml" : "xl/workbook.xml";
         var types = zip.GetEntry("[Content_Types].xml") ?? throw new InvalidDataException("Thiếu Content Types.");
