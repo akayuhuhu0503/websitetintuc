@@ -55,8 +55,19 @@ static class SourceBulkChecks
         check((await Execute(first,"PublishDirect",request)).GetProperty("outcome").GetString()=="AlreadyProcessed","Publication receipt never republishes withdrawn content");
         var dup=await Seed(910002,"Bulk fixture 910001");using(var r=await Post("preview",new{action="Draft",items=new[]{dup}}))
         {var json=JsonDocument.Parse(await r.Content.ReadAsStringAsync());check(!json.RootElement.GetProperty("items")[0].GetProperty("eligible").GetBoolean(),"Manual/existing title duplicate held without SourceId match");}
-        var partial=await Seed(910003,missingAuthor:true);var partialRequest=Guid.NewGuid();var held=await Execute(partial,"PublishDirect",partialRequest);
+        var partial=await Seed(910003,missingAuthor:true);var partialRequest=Guid.NewGuid();
+        await using(var db=new PortalDbContext(options))
+        {
+            var store=new SourceSyncStore(db);var settings=await store.SettingsAsync();settings.Cycle=new(){Categories=[75],WaitingForCapacity=true};settings.ConsecutiveFailures=0;await store.WriteSettingsAsync(settings);
+            var job=await db.Jobs.SingleAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey);job.Status="Requested";job.AvailableUtc=DateTimeOffset.UtcNow.AddMinutes(5);await db.SaveChangesAsync();
+        }
+        var held=await Execute(partial,"PublishDirect",partialRequest);
         check(held.GetProperty("outcome").GetString()=="DraftedWithError"&&held.GetProperty("editUrl").GetString()!=null,"Publication failure retains one draft and link");
+        await using(var db=new PortalDbContext(options))
+        {
+            var settings=await new SourceSyncStore(db).SettingsAsync();var job=await db.Jobs.SingleAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey);
+            check(settings.Cycle is {WaitingForCapacity:false}&&job.AvailableUtc<DateTimeOffset.UtcNow.AddSeconds(30),"Committed draft wakes capacity-blocked cycle even when publication is held");
+        }
         await Execute(partial,"PublishDirect",partialRequest);
         await using(var db=new PortalDbContext(options))check(await db.SourceRecords.CountAsync(x=>x.SourceId=="910003")==1,"Partial retry never creates duplicate draft");
         var ok=await Seed(910004);check((await Execute(ok,"Draft",Guid.NewGuid())).GetProperty("outcome").GetString()=="Drafted","Independent next item succeeds after failed publication");

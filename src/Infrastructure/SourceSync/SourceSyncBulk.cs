@@ -83,7 +83,7 @@ public sealed class SourceSyncBulk(PortalDbContext db, SourceSyncStore store, Wo
         catch (Exception error) when (error is InvalidOperationException or IOException or MediaUploadException or DbUpdateConcurrencyException or UnauthorizedAccessException)
         {
             db.ChangeTracker.Clear();
-            return new(item.Id, "DraftedWithError", "Đã giữ bản nháp; chưa công bố. " + (error is UnauthorizedAccessException ? "Quyền đã thay đổi." : error is IOException ? "Không đọc được tệp đã kiểm định." : error.Message), result.ContentId);
+            outcome = new(item.Id, "DraftedWithError", "Đã giữ bản nháp; chưa công bố. " + (error is UnauthorizedAccessException ? "Quyền đã thay đổi." : error is IOException ? "Không đọc được tệp đã kiểm định." : error.Message), result.ContentId);
         }
         await store.ResumeAfterCapacityAsync(ct);
         return outcome;

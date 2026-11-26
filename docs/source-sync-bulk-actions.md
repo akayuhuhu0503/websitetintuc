@@ -14,12 +14,12 @@ Máy chủ kiểm tra lại quyền, dấu phiên bản nguồn, SourceId/URL v�
 
 Các tệp vẫn đi qua bộ tiếp nhận/kiểm định hiện có. Không thay PDF/ZIP, chính sách no-AV, pipeline ảnh hoặc quyền công bố. Sapo nguồn được giữ; bài cũ có đoạn mở đầu trong `strong` được trích nguyên văn khi sapo trống, không tự sáng tác.
 
-Khi giải phóng hàng chờ, chu kỳ đang dừng do dung lượng sẽ được đánh thức sau 20 giây nếu còn chỗ. Giữ giới hạn 200, checkpoint, giới hạn truy cập nguồn, lease và backoff. IIS nghỉ thì tác vụ chỉ tiếp tục khi ứng dụng hoạt động lại. Chu kỳ đã bắt đầu giữ danh sách chuyên mục của nó; ánh xạ thêm áp dụng vào chu kỳ kế tiếp.
+Khi giải phóng hàng chờ, kể cả đã tạo nháp nhưng công bố bị giữ lại, chu kỳ đang dừng do dung lượng sẽ được đánh thức sau 20 giây nếu còn chỗ. Giữ giới hạn 200, checkpoint, giới hạn truy cập nguồn, lease và backoff. IIS nghỉ thì tác vụ chỉ tiếp tục khi ứng dụng hoạt động lại. Chu kỳ đã bắt đầu giữ danh sách chuyên mục của nó; ánh xạ thêm áp dụng vào chu kỳ kế tiếp.
 
 ## Kiểm tra tập trung
 
 - Release Web/Worker: PASS, 0 lỗi/cảnh báo.
-- SQL Server LocalDB riêng, schema 18, Application Role, HTTP thật: 44 kiểm tra PASS. Gồm quyền, CSRF, 100 mục, phiên nguồn cũ, trùng nội dung, mất phản hồi, nháp sửa, bài thu hồi, lịch hẹn, xử lý độc lập và tiếp tục chu kỳ.
+- SQL Server LocalDB riêng, schema 18, Application Role, HTTP thật: 45 kiểm tra PASS. Gồm quyền, CSRF, 100 mục, phiên nguồn cũ, trùng nội dung, mất phản hồi, nháp sửa, bài thu hồi, lịch hẹn, xử lý độc lập và tiếp tục chu kỳ cả khi đã tạo nháp nhưng chưa đủ điều kiện công bố.
 - Chromium/Chrome cô lập: 10 kiểm tra PASS (chọn/phân trang/tải lại/đổi bộ lọc/nháp/bỏ qua/link kết quả/mobile/JavaScript).
 - Sapo: 3 kiểm tra PASS. Không chạy full regression.
 - Bộ test không dùng SQL vận hành hoặc phiên CMS thật. Các lần sửa selector trong harness đã chạy lại trước khi ghi PASS; không chụp ảnh/quay video.
