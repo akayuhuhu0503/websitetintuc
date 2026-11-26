@@ -76,7 +76,7 @@
             @if(KnownText(site.Revision.ContactPhone)){<p>Điện thoại: @site.Revision.ContactPhone</p>}
             @if(KnownText(site.Revision.ContactHotline)){<p>Đường dây nóng: @site.Revision.ContactHotline</p>}
             @if(KnownText(site.Revision.ContactEmail)){<p>Email: @site.Revision.ContactEmail</p>}
-        </address><p class="footer-note">@(KnownText(site.Revision.FooterText) && !DeploymentCopy(site.Revision.FooterText) ? site.Revision.FooterText : "Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử Cục Quản lý đất đai.")</p></div>}
+        </address>@if(KnownText(site.Revision.FooterText) && !DeploymentCopy(site.Revision.FooterText) && !string.Equals(site.Revision.FooterText?.Trim(), "Ghi rõ nguồn khi phát hành lại thông tin từ Cổng thông tin điện tử Cục Quản lý đất đai.", StringComparison.OrdinalIgnoreCase)){<p class="footer-note">@site.Revision.FooterText</p>}</div>}
         </div>
         @if(footerLinks.Length>0){<nav class="footer-navigation" aria-label="Thông tin và tra cứu"><h3>Thông tin &amp; tra cứu</h3>@foreach(var item in footerLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label</a>}</nav>}
         @if(agencyLinks.Length>0){<nav class="footer-navigation" aria-label="Liên kết cơ quan"><h3>Liên kết cơ quan</h3>@foreach(var item in agencyLinks){<a href="@item.Url" target="@(item.NewWindow?"_blank":null)" rel="@(item.NewWindow?"noopener noreferrer":null)">@item.Label <span aria-hidden="true">↗</span></a>}</nav>}
