@@ -37,9 +37,9 @@
         finally { if (button) button.disabled = false; }
     });
     document.addEventListener('click', async event => {
-        const link = event.target.closest?.('[data-sync-results] .pagination a');
+        const link = event.target.closest?.('[data-sync-results] .pagination a, .source-sync-tabs a');
         if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
-        event.preventDefault(); history.replaceState(null, '', link.href); await refresh();
+        event.preventDefault(); history.replaceState(null, '', link.href); const tab = document.querySelector('#sync-filter [name=tab]'); if (tab) tab.value = new URL(link.href).searchParams.get('tab') || 'pending'; await refresh();
     });
     if (results) window.setInterval(refresh, 10000);
 })();

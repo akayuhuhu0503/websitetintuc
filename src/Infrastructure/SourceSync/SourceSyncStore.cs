@@ -6,13 +6,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LandPortal.Infrastructure;
 
-public sealed record SourceSyncRow(Guid Id,string Title,string Url,string Status,DateTimeOffset UpdatedUtc,string? Error);
+public sealed record SourceSyncRow(Guid Id,string Title,string Url,string Status,DateTimeOffset UpdatedUtc,string? Error,string? ContentId=null);
 public sealed record SourceSyncPage(SourceSyncSettings Settings,IReadOnlyList<SourceSyncRow> Items,int Total,int Page,string? Query,string? Status,
-    Dictionary<string,int> Counts,bool Running,DateTimeOffset? NextCheck);
+    Dictionary<string,int> Counts,bool Running,DateTimeOffset? NextCheck,string Tab="pending");
 
 public sealed class SourceSyncStore(PortalDbContext db)
 {
-    public static readonly int[] Categories = SourceCatalog.Categories.Where(c=>c.Id is not(76 or 77 or 79)).Select(c=>c.Id).ToArray();
+    public static readonly int[] Categories = SourceCatalog.Categories.Where(c=>c.Id is not(77 or 79)).Select(c=>c.Id).ToArray();
+    public static SourceSyncCycle NewCycle(SourceSyncSettings settings)=>new(){Categories=SourceCatalog.Categories.Where(x=>Categories.Contains(x.Id)&&settings.Categories.ContainsKey(x.Id)).Select(x=>x.Id).ToList()};
     public static Task LockAsync(PortalDbContext db,string key,CancellationToken ct=default) =>
         db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource={key},@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=3000; IF @r<0 THROW 51000,'Source sync busy; retry later',1;",ct);
     public async Task<ContentActor> RequireAsync(string userId,bool draft=false)
@@ -39,6 +40,7 @@ public sealed class SourceSyncStore(PortalDbContext db)
             if(!Categories.Contains(sourceCategory.Value))throw new InvalidOperationException("Chuyên mục nguồn ngoài phạm vi SYNC-01A.");
             if(targetCategory.HasValue)
             {
+                if(sourceCategory==76&&targetCategory!=76)throw new InvalidOperationException("Lịch tuần phải ánh xạ vào chuyên mục Lịch tuần GDLA (76).");
                 if(!actor.Covers([targetCategory.Value])||!await db.Categories.AnyAsync(x=>x.Id==targetCategory,ct))throw new UnauthorizedAccessException();
                 settings.Categories[sourceCategory.Value]=targetCategory.Value;
             }
@@ -56,9 +58,9 @@ public sealed class SourceSyncStore(PortalDbContext db)
         if(job.Status=="Running"&&job.LeaseUntilUtc>DateTimeOffset.UtcNow)throw new InvalidOperationException("Đang kiểm tra nguồn. Vui lòng chờ kết quả.");
         if(job.Status is "Backoff" or "Paused"&&job.AvailableUtc>DateTimeOffset.UtcNow)throw new InvalidOperationException("Nguồn đang lỗi; hệ thống đang chờ trước khi thử lại.");
         await LockAsync(db,SourceSyncPolicy.SettingsKey,ct);
-        var settings=await SettingsAsync(ct);settings.ConsecutiveFailures=0;await WriteSettingsAsync(settings,ct);
+        var settings=await SettingsAsync(ct);settings.ConsecutiveFailures=0;if(settings.Cycle is not {FinishedUtc:null})settings.Cycle=NewCycle(settings);await WriteSettingsAsync(settings,ct);
         job.Status="Requested";job.AvailableUtc=DateTimeOffset.UtcNow;job.LeaseUntilUtc=null;
-        db.AuditLogs.Add(new(){Actor=user,Action="SourceSync.Request",Detail="Bounded recent window only"});
+        db.AuditLogs.Add(new(){Actor=user,Action="SourceSync.Request",Detail="Complete enabled-category cycle, bounded resumable slices"});
         await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
     }
     public async Task SetItemAsync(Guid id,string user,string action,CancellationToken ct=default)
@@ -83,19 +85,23 @@ public sealed class SourceSyncStore(PortalDbContext db)
         item.UpdatedUtc=DateTimeOffset.UtcNow;
         db.AuditLogs.Add(new(){Actor=user,Action="SourceSync."+action,Detail=id.ToString()});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
     }
-    public async Task<SourceSyncPage> PageAsync(string? q,string? status,int page,CancellationToken ct=default)
+    public async Task<SourceSyncPage> PageAsync(string? q,string? status,int page,CancellationToken ct=default,string tab="pending")
     {
         page=Math.Clamp(page,1,10000);
+        tab=tab is "review" or "history"?tab:"pending";
         var rows=from i in db.CrawlItems.AsNoTracking() join r in db.CrawlRuns.AsNoTracking() on i.CrawlRunId equals r.Id
                  where r.Status==SourceSyncPolicy.RunStatus select new{i,r};
         var counts=await rows.GroupBy(x=>x.i.Status).Select(g=>new{Status=g.Key,Count=g.Count()}).ToDictionaryAsync(x=>x.Status,x=>x.Count,ct);
+        rows=tab=="history"?rows.Where(x=>x.i.Status=="Drafted"||x.i.Status=="Existing"||x.i.Status=="Ignored"):
+            tab=="review"?rows.Where(x=>x.i.Status=="Review"||x.i.Status=="Error"):
+            rows.Where(x=>x.i.Status=="Queued"||x.i.Status=="Ready"||x.i.Status=="Changed");
         if(!string.IsNullOrWhiteSpace(q))rows=rows.Where(x=>PortalDbContext.JsonValue(x.r.Checkpoint,"$.Title")!.Contains(q));
         if(!string.IsNullOrWhiteSpace(status))rows=rows.Where(x=>x.i.Status==status);
         var total=await rows.CountAsync(ct);
         var result=await rows.OrderByDescending(x=>x.i.UpdatedUtc).ThenBy(x=>x.i.Id).Skip((page-1)*20).Take(20)
-            .Select(x=>new SourceSyncRow(x.i.Id,PortalDbContext.JsonValue(x.r.Checkpoint,"$.Title")??"",x.i.SourceUrl,x.i.Status,x.i.UpdatedUtc,x.i.Error)).ToListAsync(ct);
+            .Select(x=>new SourceSyncRow(x.i.Id,PortalDbContext.JsonValue(x.r.Checkpoint,"$.Title")??"",x.i.SourceUrl,x.i.Status,x.i.UpdatedUtc,x.i.Error,PortalDbContext.JsonValue(x.r.Checkpoint,"$.ContentId"))).ToListAsync(ct);
         var job=await db.Jobs.AsNoTracking().SingleOrDefaultAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey,ct);
-        return new(await SettingsAsync(ct),result,total,page,q,status,counts,job?.Status=="Running"&&job.LeaseUntilUtc>DateTimeOffset.UtcNow,job?.AvailableUtc);
+        return new(await SettingsAsync(ct),result,total,page,q,status,counts,job?.Status=="Running"&&job.LeaseUntilUtc>DateTimeOffset.UtcNow,job?.AvailableUtc,tab);
     }
     public async Task<(CrawlItem Item,SourceSyncCheckpoint Data)> ReadAsync(Guid id,CancellationToken ct=default)
     {
@@ -103,10 +109,33 @@ public sealed class SourceSyncStore(PortalDbContext db)
         var run=await db.CrawlRuns.AsNoTracking().SingleAsync(x=>x.Id==item.CrawlRunId&&x.Status==SourceSyncPolicy.RunStatus,ct);
         return(item,SourceSyncPolicy.Read<SourceSyncCheckpoint>(run.Checkpoint));
     }
+    public async Task<List<Guid>> WeeklyCandidatesAsync(ParsedSource source,int category,CancellationToken ct=default)
+    {
+        if(category==0)return [];
+        var rows=await (from c in db.Contents.AsNoTracking() join r in db.Revisions.AsNoTracking() on c.CurrentRevisionId equals r.Id
+            where c.Kind==ContentKind.StaticPage&&c.PrimaryCategoryId==category
+            select new{c.Id,r.Title,r.Metadata.WeeklyYear,r.Metadata.WeeklyWeek}).ToListAsync(ct);
+        var period=SourceWeeklySchedule.Period(source.Title);
+        return rows.Where(x=>SourceWeeklySchedule.Normalize(x.Title)==SourceWeeklySchedule.Normalize(source.Title)||
+            period.HasValue&&SourceWeeklySchedule.IsDepartment(x.Title)&&
+            ((x.WeeklyYear.HasValue&&x.WeeklyWeek.HasValue?(x.WeeklyYear.Value,x.WeeklyWeek.Value):SourceWeeklySchedule.Period(x.Title))==period||SourceWeeklySchedule.CouldMatch(x.Title,period.Value)))
+            .Select(x=>x.Id).ToList();
+    }
+    public async Task<HashSet<Guid>> KnownEntriesAsync(List<Guid> entries,CancellationToken ct)
+    {
+        if(entries.Count==0)return [];
+        var rows=await db.CrawlItems.AsNoTracking().Where(x=>entries.Contains(x.Id)).Select(x=>new{x.Id,x.SourceId,x.SourceUrl}).ToListAsync(ct);
+        var ids=rows.Select(x=>x.SourceId).Distinct().ToArray();
+        var known=await db.SourceRecords.AsNoTracking().Where(x=>x.Source=="qldd.mae.gov.vn"&&ids.Contains(x.SourceId))
+            .Select(x=>x.SourceId).Distinct().ToListAsync(ct);
+        var hashes=rows.Select(x=>TextNormalizer.Hash(x.SourceUrl)).Distinct().ToArray();
+        var aliases=await db.SourceUrlAliases.AsNoTracking().Where(x=>hashes.Contains(x.UrlHash)).Select(x=>x.UrlHash).ToListAsync(ct);
+        return rows.Where(x=>known.Contains(x.SourceId)||aliases.Contains(TextNormalizer.Hash(x.SourceUrl))).Select(x=>x.Id).ToHashSet();
+    }
     public static async Task<Guid?> ExistingAsync(PortalDbContext db,ParsedSource source,CancellationToken ct=default)
     {
         var urls=new[]{source.SourceUrl,source.CanonicalUrl};var hashes=urls.Select(TextNormalizer.Hash).ToArray();
-        var ids=await db.SourceRecords.Where(x=>x.Source=="qldd.mae.gov.vn"&&x.SourceId==source.SourceId&&(x.Kind==ContentKind.Article||x.Kind==ContentKind.Announcement))
+        var ids=await db.SourceRecords.Where(x=>x.Source=="qldd.mae.gov.vn"&&x.SourceId==source.SourceId&&(x.Kind==ContentKind.Article||x.Kind==ContentKind.Announcement||source.PrimaryCategoryId==76&&x.Kind==ContentKind.StaticPage))
             .Select(x=>x.ContentId).Union(db.SourceUrlAliases.Where(x=>hashes.Contains(x.UrlHash)).Select(x=>x.ContentId)).Distinct().ToListAsync(ct);
         if(ids.Count>1)throw new InvalidDataException("ID/alias nguồn trỏ tới nhiều bài; cần đối soát.");
         return ids.Count==1?ids[0]:null;

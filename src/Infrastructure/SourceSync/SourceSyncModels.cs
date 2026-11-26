@@ -14,6 +14,25 @@ public sealed class SourceSyncSettings
     public DateTimeOffset? LastCheckedUtc { get; set; }
     public string? LastError { get; set; }
     public int ConsecutiveFailures { get; set; }
+    public SourceSyncCycle? Cycle { get; set; }
+}
+// Stored in the existing settings row: no schema migration, survives Web restarts.
+public sealed class SourceSyncCycle
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public DateTimeOffset StartedUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? FinishedUtc { get; set; }
+    public List<int> Categories { get; set; } = [];
+    public int CategoryIndex { get; set; }
+    public int ListPage { get; set; } = 1;
+    public string? NextListUrl { get; set; }
+    public List<Guid> Pending { get; set; } = [];
+    public List<Guid> Seen { get; set; } = [];
+    public int NewEntries { get; set; }
+    public int DetailsChecked { get; set; }
+    public int Errors { get; set; }
+    public bool WaitingForCapacity { get; set; }
+    public List<string> Warnings { get; set; } = [];
 }
 public sealed class SourceSyncCheckpoint
 {
@@ -27,6 +46,14 @@ public sealed class SourceSyncCheckpoint
     public List<string> Warnings { get; set; } = [];
     public Guid? ContentId { get; set; }
     public DateTimeOffset? CheckedUtc { get; set; }
+    public string AssetHash { get; set; } = "";
+    public string BaselineAssetHash { get; set; } = "";
+    public Guid? ExpectedRevisionId { get; set; }
+    public List<Guid> ReconcileContentIds { get; set; } = [];
+    public Guid? AssetCycleId { get; set; }
+    public int? WeeklyYear { get; set; }
+    public int? WeeklyWeek { get; set; }
+    public bool WeeklyReviewRequired { get; set; }
 }
 public sealed record SourceSyncAsset(string Url, string Key, string Sha256, long Bytes, string Mime, string Name);
 public static class SourceSyncPolicy
@@ -37,6 +64,16 @@ public static class SourceSyncPolicy
     public const string SweepType = "QlddSyncSweep";
     public const string RunStatus = "QlddSyncCheckpoint";
     public const int RecentWindow = 20, DetailsPerRun = 3, RequestsPerRun = 32, MaxAssets = 12, QueueLimit = 200;
+    public const int ListPagesPerCategory = 5;
+    public static string Summary(ParsedSource source)
+    {
+        var text=string.IsNullOrWhiteSpace(source.Summary)
+            ? SourceParser.Document(source.BodyHtml).QuerySelectorAll("p").Select(x=>x.TextContent.Trim()).FirstOrDefault(x=>x.Length>=30)??""
+            : SourceParser.Document(source.Summary).Body?.TextContent??source.Summary;
+        text=Regex.Replace(text,@"\s+"," ").Trim();
+        if(text.Length<=1000)return text;
+        var end=text.LastIndexOf(' ',997);return text[..(end>0?end:997)]+"…";
+    }
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value);
     public static T Read<T>(string json) where T:new() => string.IsNullOrWhiteSpace(json) ? new() : JsonSerializer.Deserialize<T>(json) ?? throw new InvalidDataException("Checkpoint trống.");
     public static string Key(string id) => "SourceSync.QLDD.news."+id;
@@ -48,7 +85,7 @@ public static class SourceSyncPolicy
             var q=Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(u.Query);
             return q.TryGetValue("ItemID",out var ids)&&ids.Count==1&&Regex.IsMatch(ids[0]??"","^[1-9][0-9]{0,9}$")?ids[0]:null;
         }
-        var m=Regex.Match(u.AbsolutePath,@"^/(?!chuyen-muc/)[a-z0-9-]+-([1-9][0-9]{0,9})\.htm$",RegexOptions.IgnoreCase);
+        var m=Regex.Match(u.AbsolutePath,@"^/(?!chuyen-muc/)(?:[a-z0-9-]+/)*[a-z0-9-]+-([1-9][0-9]{0,9})\.htm$",RegexOptions.IgnoreCase);
         return m.Success?m.Groups[1].Value:null;
     }
     public static string Hash(ParsedSource source) => TextNormalizer.Hash(Serialize(new{source.Title,source.Summary,source.BodyHtml,source.Author,source.OriginalDateText,source.PrimaryCategoryId,source.AssetUrls}));
