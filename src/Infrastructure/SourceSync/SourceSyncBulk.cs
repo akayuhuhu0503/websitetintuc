@@ -39,7 +39,9 @@ public sealed class SourceSyncBulk(PortalDbContext db, SourceSyncStore store, Wo
         if (await db.Revisions.AnyAsync(x => x.Title == data.Source.Title, ct) || await db.ContentDrafts.AnyAsync(x => x.Title == data.Source.Title, ct))
             return "Có bài cùng tiêu đề trong CMS; mở để đối soát trước khi nhập.";
         if (category == 76 && (await store.WeeklyCandidatesAsync(data.Source, mapped, ct)).Count > 0) return "Lịch tương ứng đã có; cần đối soát, không tạo trùng.";
-        if (string.IsNullOrWhiteSpace(data.Source.Title) || string.IsNullOrWhiteSpace(SourceSyncPolicy.Summary(data.Source)) || data.Source.PublishedDate == null)
+        if (string.IsNullOrWhiteSpace(data.Source.Title) ||
+            AnnouncementTemplatePolicy.RequiresArticleFields(data.Source.Kind) && string.IsNullOrWhiteSpace(SourceSyncPolicy.Summary(data.Source)) ||
+            data.Source.PublishedDate == null)
             return "Thiếu tiêu đề, sapo hoặc ngày nguồn; cần biên tập trước khi đăng hàng loạt.";
         return null;
     }

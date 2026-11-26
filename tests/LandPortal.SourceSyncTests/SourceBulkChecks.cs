@@ -10,13 +10,21 @@ static class SourceBulkChecks
 {
     public static async Task Run(HttpClient client,string token,DbContextOptions<PortalDbContext> options,SourceSyncCheckpoint template,string run,Action<bool,string> check)
     {
-        async Task<SourceBulkSelection> Seed(int number,string? title=null,bool missingAuthor=false)
+        async Task<SourceBulkSelection> Seed(int number,string? title=null,bool missingAuthor=false,bool weekly=false,bool emptySummary=false)
         {
             await using var db=new PortalDbContext(options);
             var data=SourceSyncPolicy.Read<SourceSyncCheckpoint>(SourceSyncPolicy.Serialize(template));
             var source=data.Source!;source.Title=title??"Bulk fixture "+number;source.SourceId=number.ToString();
             source.SourceUrl=source.CanonicalUrl="https://qldd.mae.gov.vn/fixture-"+number+".htm";
             if(missingAuthor)source.Author="";
+            if(emptySummary){source.Summary="";source.BodyHtml="";}
+            if(weekly)
+            {
+                source.Kind=ContentKind.StaticPage;source.PrimaryCategoryId=76;source.CategoryIds=[76];
+                data.Assets=data.Assets.Where(x=>x.Mime=="application/pdf").ToList();
+                source.AssetUrls=data.Assets.Select(x=>x.Url).ToList();source.BodyHtml="<p></p>";
+                data.WeeklyYear=2026;data.WeeklyWeek=48;data.WeeklyReviewRequired=false;data.ReconcileContentIds=[];
+            }
             for(var i=0;i<data.Assets.Count;i++)
             {
                 var asset=data.Assets[i];if(asset.Mime!="application/pdf")continue;
@@ -26,8 +34,8 @@ static class SourceBulkChecks
                 var key="source-sync/resource/"+hash+".pdf";var path=Path.Combine(run,"snapshots",key);Directory.CreateDirectory(Path.GetDirectoryName(path)!);await File.WriteAllBytesAsync(path,bytes);
                 data.Assets[i]=asset with{Key=key,Sha256=hash,Bytes=bytes.Length};
             }
-            data.Hash=SourceSyncPolicy.Hash(source);data.Title=source.Title;data.ContentId=null;
-            var id=Guid.NewGuid();var item=new CrawlItem{Id=id,CrawlRunId=id,SourceId=source.SourceId,SourceUrl=source.CanonicalUrl,Kind=ContentKind.Article,Status="Ready"};
+            data.Hash=SourceSyncPolicy.Hash(source);data.Title=source.Title;data.ContentId=null;data.AssetHash=SourceWeeklySchedule.AssetHash(data.Assets);
+            var id=Guid.NewGuid();var item=new CrawlItem{Id=id,CrawlRunId=id,SourceId=source.SourceId,SourceUrl=source.CanonicalUrl,Kind=source.Kind,Status="Ready"};
             db.CrawlRuns.Add(new(){Id=id,Status=SourceSyncPolicy.RunStatus,Checkpoint=SourceSyncPolicy.Serialize(data)});db.CrawlItems.Add(item);
             db.Jobs.Add(new(){Id=id,Type=SourceSyncPolicy.EntryType,IdempotencyKey=SourceSyncPolicy.Key(source.SourceId),Status="Ready"});await db.SaveChangesAsync();
             return new(id,SourceSyncBulk.Stamp(item,data));
@@ -96,6 +104,23 @@ static class SourceBulkChecks
         check(!(await client.GetStringAsync("/admin/source-sync?from=2026-12-01")).Contains("Bulk fixture"),"Date filter excludes older source dates");
         for(var n=0;n<24;n++)await Seed(920000+n);
         check((await client.GetStringAsync("/admin/source-sync?page=2")).Contains("source-bulk-row"),"Second selection page renders");
+        using(var r=await Post("preview",new{action="PublishDirect",items=new[]{await Seed(930001,emptySummary:true)}}))
+        {var json=JsonDocument.Parse(await r.Content.ReadAsStringAsync());check(!json.RootElement.GetProperty("items")[0].GetProperty("eligible").GetBoolean(),"News article without source sapo remains held");}
+        using(var requestMessage=new HttpRequestMessage(HttpMethod.Post,"/admin/source-sync/configure")
+            {Content=new FormUrlEncodedContent(new Dictionary<string,string>{{"sourceCategory","76"},{"targetCategory","76"}})})
+        {requestMessage.Headers.Add("X-CSRF-TOKEN",token);using var r=await client.SendAsync(requestMessage);check(r.IsSuccessStatusCode,"Weekly category mapping uses existing CMS command");}
+        var weekly=await Seed(930002,"Lịch công tác tuần 48 năm 2026 của Lãnh đạo Cục Quản lý đất đai",weekly:true,emptySummary:true);
+        using(var r=await Post("preview",new{action="PublishDirect",items=new[]{weekly}}))
+        {var json=JsonDocument.Parse(await r.Content.ReadAsStringAsync());check(json.RootElement.GetProperty("items")[0].GetProperty("eligible").GetBoolean(),"Verified PDF weekly notice does not invent a source sapo requirement");}
+        var weeklyResult=await Execute(weekly,"PublishDirect",Guid.NewGuid());
+        check(weeklyResult.GetProperty("outcome").GetString()=="Published","PDF-only weekly notice publishes through unchanged workflow");
+        await using(var db=new PortalDbContext(options))
+        {
+            var weeklyId=Guid.Parse(weeklyResult.GetProperty("editUrl").GetString()!.Split('/').Last());
+            var c=await db.Contents.SingleAsync(x=>x.Id==weeklyId);var revision=await db.Revisions.SingleAsync(x=>x.Id==c.PublishedRevisionId);
+            check(revision.Summary==""&&c.Kind==ContentKind.StaticPage&&c.PrimaryCategoryId==76&&
+                await db.ContentAssets.CountAsync(x=>x.RevisionId==revision.Id&&x.Usage=="Attachment")==1,"Weekly publication preserves empty source sapo and verified PDF attachment");
+        }
         await File.WriteAllTextAsync(Path.Combine(run,"bulk-public.json"),JsonSerializer.Serialize(new{contentId=cid}));
     }
 }

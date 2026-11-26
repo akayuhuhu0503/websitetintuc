@@ -12,14 +12,14 @@ Hộp xác nhận liệt kê số bài đủ điều kiện và lý do loại t�
 
 Máy chủ kiểm tra lại quyền, dấu phiên bản nguồn, SourceId/URL và tiêu đề đã tồn tại. Lịch tuần có ứng viên trùng hoặc cảnh báo phải đối soát riêng. Khi tạo nháp thành công nhưng công bố thất bại, trả link nháp để cán bộ bổ sung. Không công bố lại bài đã công khai, bị thu hồi, đã được sửa hoặc đang hẹn giờ. Workflow dùng revision/rowversion và command receipt; retry không tạo thêm bài.
 
-Các tệp vẫn đi qua bộ tiếp nhận/kiểm định hiện có. Không thay PDF/ZIP, chính sách no-AV, pipeline ảnh hoặc quyền công bố. Sapo nguồn được giữ; bài cũ có đoạn mở đầu trong `strong` được trích nguyên văn khi sapo trống, không tự sáng tác.
+Các tệp vẫn đi qua bộ tiếp nhận/kiểm định hiện có. Không thay PDF/ZIP, chính sách no-AV, pipeline ảnh hoặc quyền công bố. Sapo nguồn được giữ; bài cũ có đoạn mở đầu trong `strong` được trích nguyên văn khi sapo trống, không tự sáng tác. Điều kiện sapo theo đúng workflow: bài tin vẫn cần sapo, lịch tuần dạng trang thông tin chỉ có PDF không bị thêm yêu cầu sapo ngoài nguồn.
 
 Khi giải phóng hàng chờ, kể cả đã tạo nháp nhưng công bố bị giữ lại, chu kỳ đang dừng do dung lượng sẽ được đánh thức sau 20 giây nếu còn chỗ. Giữ giới hạn 200, checkpoint, giới hạn truy cập nguồn, lease và backoff. IIS nghỉ thì tác vụ chỉ tiếp tục khi ứng dụng hoạt động lại. Chu kỳ đã bắt đầu giữ danh sách chuyên mục của nó; ánh xạ thêm áp dụng vào chu kỳ kế tiếp.
 
 ## Kiểm tra tập trung
 
 - Release Web/Worker: PASS, 0 lỗi/cảnh báo.
-- SQL Server LocalDB riêng, schema 18, Application Role, HTTP thật: 45 kiểm tra PASS. Gồm quyền, CSRF, 100 mục, phiên nguồn cũ, trùng nội dung, mất phản hồi, nháp sửa, bài thu hồi, lịch hẹn, xử lý độc lập và tiếp tục chu kỳ cả khi đã tạo nháp nhưng chưa đủ điều kiện công bố.
+- SQL Server LocalDB riêng, schema 18, Application Role, HTTP thật: 51 kiểm tra PASS. Gồm quyền, CSRF, 100 mục, phiên nguồn cũ, trùng nội dung, mất phản hồi, nháp sửa, bài thu hồi, lịch hẹn, xử lý độc lập, tiếp tục chu kỳ cả khi đã tạo nháp nhưng chưa đủ điều kiện công bố, và lịch tuần chỉ có PDF không có sapo nguồn.
 - Chromium/Chrome cô lập: 10 kiểm tra PASS (chọn/phân trang/tải lại/đổi bộ lọc/nháp/bỏ qua/link kết quả/mobile/JavaScript).
 - Sapo: 3 kiểm tra PASS. Không chạy full regression.
 - Bộ test không dùng SQL vận hành hoặc phiên CMS thật. Các lần sửa selector trong harness đã chạy lại trước khi ghi PASS; không chụp ảnh/quay video.

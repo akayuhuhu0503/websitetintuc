@@ -62,7 +62,7 @@ try
         await db.Database.MigrateAsync();Check((await db.Database.GetAppliedMigrationsAsync()).Count()==18,"Schema 18, no new migration required");
         await RuntimeRoleInterceptor.ProvisionAsync(db,roleSecret);
         db.Categories.Add(new(){Id=1,Name="Fixture news",Slug="fixture-news"});
-        if(cycleOnly)db.Categories.Add(new(){Id=76,Name="Lịch tuần",Slug="lich-tuan"});
+        if(cycleOnly||bulkOnly)db.Categories.Add(new(){Id=76,Name="Lịch tuần",Slug="lich-tuan"});
         foreach(var name in new[]{"admin","reviewer","publisher","denied"})db.Users.Add(new(){Id=name,UserName=name,NormalizedUserName=name.ToUpperInvariant()});
         foreach(var p in new[]{Permissions.ManageSite,Permissions.Create,Permissions.EditOwn,Permissions.ViewOwn,Permissions.ManageMedia,Permissions.Submit})db.UserClaims.Add(new(){UserId="admin",ClaimType="permission",ClaimValue=p});
         db.UserClaims.Add(new(){UserId="reviewer",ClaimType="permission",ClaimValue=Permissions.Review});
