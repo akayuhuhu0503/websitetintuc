@@ -8,10 +8,17 @@ public sealed partial class WorkflowService
 {
     // One CMS command transaction owns the new draft, source identity, aliases
     // and queue receipt. Never delegates to the legacy published importer.
-    public Task<WorkflowResult> CreateSourceDraftAsync(Guid entryId,string expectedHash,ContentActor caller,SourceSyncMedia transfer,CancellationToken ct=default,string? assetHash=null) =>
-        ExecuteAsync(null,caller,null,entryId,"SourceSyncDraft",expectedHash+(assetHash??""),async _=>
+    public Task<WorkflowResult> CreateSourceDraftAsync(Guid entryId,string expectedHash,ContentActor caller,SourceSyncMedia transfer,CancellationToken ct=default,string? assetHash=null,SourceBulkIntent? bulk=null) =>
+        ExecuteAsync(null,caller,null,bulk?.RequestId??entryId,bulk==null?"SourceSyncDraft":"SourceSyncBulkDraft",expectedHash+(assetHash??"")+(bulk==null?"":entryId+"|"+bulk.Action+"|"+bulk.Stamp),async _=>
         {
             var actor=await new SourceSyncStore(db).RequireAsync(caller.UserId,draft:true);
+            if(bulk!=null)
+            {
+                var (_,pending)=await new SourceSyncStore(db).ReadAsync(entryId,ct);
+                await SourceSyncStore.LockAsync(db,"SourceSync.Title."+TextNormalizer.Hash((pending.Source?.Title??"").Normalize().ToUpperInvariant()),ct);
+                var reason=await new SourceSyncBulk(db,new(db),this,transfer).ReasonAsync(new(entryId,bulk.Stamp),bulk.Action,actor,ct);
+                if(reason!=null)throw new InvalidOperationException(reason);
+            }
             var item=await db.CrawlItems.SingleAsync(x=>x.Id==entryId,ct);
             var run=await db.CrawlRuns.SingleAsync(x=>x.Id==item.CrawlRunId&&x.Status==SourceSyncPolicy.RunStatus,ct);
             var checkpoint=SourceSyncPolicy.Read<SourceSyncCheckpoint>(run.Checkpoint);

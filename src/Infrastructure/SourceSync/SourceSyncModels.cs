@@ -68,7 +68,7 @@ public static class SourceSyncPolicy
     public static string Summary(ParsedSource source)
     {
         var text=string.IsNullOrWhiteSpace(source.Summary)
-            ? SourceParser.Document(source.BodyHtml).QuerySelectorAll("p").Select(x=>x.TextContent.Trim()).FirstOrDefault(x=>x.Length>=30)??""
+            ? SourceParser.Document(source.BodyHtml).QuerySelectorAll("p,strong").Select(x=>x.TextContent.Trim()).FirstOrDefault(x=>x.Length>=30)??""
             : SourceParser.Document(source.Summary).Body?.TextContent??source.Summary;
         text=Regex.Replace(text,@"\s+"," ").Trim();
         if(text.Length<=1000)return text;
