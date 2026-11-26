@@ -70,16 +70,26 @@ public static class EditorialZipPolicy
     private static IReadOnlyList<Entry> Validate(string path, CancellationToken ct, bool trustedInternal)
     {
         using var input = File.OpenRead(path);
+        var result = new List<Entry>();
+        ValidateArchive(input, ct, trustedInternal, 0, "", new ArchiveBudget(), result);
+        return result;
+    }
+
+    private sealed class ArchiveBudget { public int Entries; public long Expanded; }
+    private static void ValidateArchive(Stream input, CancellationToken ct, bool trustedInternal, int depth, string prefix, ArchiveBudget budget, List<Entry> result)
+    {
+        var initialCount = result.Count;
         EditorialDocumentPolicy.RequireSize(input.Length, Mime);
         Span<byte> magic = stackalloc byte[4];
         if (input.Read(magic) != 4 || !magic.SequenceEqual("PK\x03\x04"u8))
             throw new MediaUploadException("ZIP không đúng định dạng; không nhận tệp tự giải nén.");
         RequireBoundedDirectory(input);
         input.Position = 0;
-        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
         if (zip.Entries.Count is < 1 or > EntryMaximum) throw new MediaUploadException("ZIP cần từ 1 đến 256 mục.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        long expanded = 0;
+        budget.Entries = checked(budget.Entries + zip.Entries.Count);
+        if (budget.Entries > EntryMaximum) throw new MediaUploadException("ZIP vượt tổng 256 mục ở tất cả các tầng.");
         foreach (var entry in zip.Entries)
         {
             ct.ThrowIfCancellationRequested();
@@ -95,20 +105,19 @@ public static class EditorialZipPolicy
             if (directory && entry.Length != 0) throw new MediaUploadException("Thư mục ZIP chứa dữ liệu không hợp lệ.");
             if (directory) continue;
             var extension = Path.GetExtension(name).ToLowerInvariant();
-            if (extension == ".zip") throw new MediaUploadException("ZIP lồng chưa thuộc chính sách tài liệu được phép; giữ nguyên nguồn để rà soát.");
-            if (extension is not (".pdf" or ".docx" or ".xlsx"))
+            if (extension == ".zip" && (!trustedInternal || depth >= 1)) throw new MediaUploadException("Chỉ ZIP nội bộ được phép lồng một cấp.");
+            if (extension is not (".pdf" or ".docx" or ".xlsx") && !(trustedInternal && extension is ".zip" or ".xls"))
                 throw new MediaUploadException("ZIP chỉ nhận PDF/DOCX/XLSX; không nhận tệp thực thi, DOC/XLS cũ hoặc loại khác.");
-            var mime = OfficeDocumentPolicy.Mime(name);
-            EditorialDocumentPolicy.RequireSize(entry.Length, mime);
-            expanded = checked(expanded + entry.Length);
-            if (expanded > ExpandedMaximum || entry.Length > Math.Max(1024, entry.CompressedLength * 100))
+            var limit = extension == ".zip" ? Maximum : extension == ".xls" ? 10L * 1024 * 1024 : EditorialDocumentPolicy.MaximumFor(OfficeDocumentPolicy.Mime(name));
+            if (entry.Length < 1 || entry.Length > limit) throw new MediaUploadException("Tệp trong ZIP vượt giới hạn dung lượng.");
+            budget.Expanded = checked(budget.Expanded + entry.Length);
+            if (budget.Expanded > ExpandedMaximum || entry.Length > Math.Max(1024, entry.CompressedLength * 100))
                 throw new MediaUploadException("ZIP vượt giới hạn bung nén 512 MiB hoặc tỷ lệ nén an toàn.");
         }
         // Reject file/directory collisions independently of entry ordering.
         foreach (var entry in zip.Entries.Where(e => !e.FullName.EndsWith('/')))
             if (zip.Entries.Any(e => e.FullName.Normalize(System.Text.NormalizationForm.FormC).StartsWith(entry.FullName.Normalize(System.Text.NormalizationForm.FormC) + "/", StringComparison.OrdinalIgnoreCase)))
                 throw new MediaUploadException("ZIP có tệp trùng đường dẫn thư mục.");
-        var result = new List<Entry>();
         foreach (var entry in zip.Entries.Where(e => !e.FullName.EndsWith('/')))
         {
             ct.ThrowIfCancellationRequested();
@@ -126,19 +135,25 @@ public static class EditorialZipPolicy
             }
             if (bytes.Length != entry.Length || ~crc != entry.Crc32) throw new MediaUploadException("ZIP sai kích thước hoặc CRC; tệp có thể bị hỏng.");
             bytes.Position = 0;
-            var mime = OfficeDocumentPolicy.Mime(entry.FullName);
-            if (mime == "application/pdf")
+            var extension = Path.GetExtension(entry.FullName).ToLowerInvariant();
+            try
             {
-                if (trustedInternal) TrustedInternalPdfPolicy.Validate(bytes, ct);
-                bytes.Position = 0;
-                MediaService.ValidatePdfContent(bytes, EditorialDocumentPolicy.PdfMaximumPages, ct);
+                if (extension == ".zip") ValidateArchive(bytes, ct, trustedInternal, depth + 1, prefix + entry.FullName + "!/", budget, result);
+                else if (extension == ".xls") TrustedArchiveXlsPolicy.Validate(bytes, ct);
+                else if (extension == ".pdf")
+                {
+                    if (trustedInternal) TrustedInternalPdfPolicy.Validate(bytes, ct);
+                    bytes.Position = 0;
+                    MediaService.ValidatePdfContent(bytes, EditorialDocumentPolicy.PdfMaximumPages, ct);
+                }
+                else OfficeDocumentPolicy.ValidateOffice(bytes, OfficeDocumentPolicy.Mime(entry.FullName), managedWithoutAv: true, trustedArchive: trustedInternal);
             }
-            else OfficeDocumentPolicy.ValidateOffice(bytes, mime, managedWithoutAv: true);
+            catch (Exception error) when (error is MediaUploadException or InvalidDataException)
+            { throw new MediaUploadException("Tệp trong ZIP [" + prefix + entry.FullName + "]: " + error.Message); }
             ct.ThrowIfCancellationRequested();
-            result.Add(new(entry.FullName, entry.Length, Convert.ToHexStringLower(hash.GetHashAndReset())));
+            result.Add(new(prefix + entry.FullName, entry.Length, Convert.ToHexStringLower(hash.GetHashAndReset())));
         }
-        if (result.Count == 0) throw new MediaUploadException("ZIP không có tài liệu.");
-        return result;
+        if (result.Count == initialCount) throw new MediaUploadException("ZIP không có tài liệu.");
     }
 
     private static bool Reserved(string part)

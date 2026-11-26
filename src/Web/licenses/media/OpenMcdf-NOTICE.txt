@@ -1,0 +1,6 @@
+OpenMcdf 3.4.0 (unmodified)
+Copyright 2010-2026 Federico Blaseotto and Jeremy Powell
+License: Mozilla Public License 2.0 (OpenMcdf-LICENSE.txt)
+Corresponding Source Code:
+https://github.com/openmcdf/openmcdf/tree/687fae7286167035a2a1f2c7ab39720679a187a5
+Package: https://www.nuget.org/packages/OpenMcdf/3.4.0

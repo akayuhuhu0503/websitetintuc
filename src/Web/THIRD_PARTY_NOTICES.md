@@ -10,6 +10,7 @@
 
 - SkiaSharp 3.119.4 and matching SkiaSharp.NativeAssets.Win32/macOS 3.119.4: MIT. Copyright 2015-2016 Xamarin, Inc.; 2017-2018 Microsoft Corporation. Original package LICENSE and native THIRD-PARTY-NOTICES are preserved in `licenses/media/`; native dependencies have their own notices. Package source and version: https://www.nuget.org/packages/SkiaSharp/3.119.4
 - PdfPig 0.1.14: Apache-2.0, authored by UglyToad and contributors. License expression verified in the pinned NuGet nuspec; license text preserved in `licenses/media/`. Exact upstream source revision from package metadata: 88172af1c4d4f440949f59c94966c3880e3f6032. Package source: https://www.nuget.org/packages/PdfPig/0.1.14
+- OpenMcdf 3.4.0: MPL-2.0, copyright 2010-2026 Federico Blaseotto and Jeremy Powell. Used unmodified to read OLE compound files in trusted internal ZIP attachments; no Office execution. License: `licenses/media/OpenMcdf-LICENSE.txt`. Corresponding source: https://github.com/openmcdf/openmcdf/tree/687fae7286167035a2a1f2c7ab39720679a187a5 (package https://www.nuget.org/packages/OpenMcdf/3.4.0). The license and source notice are distributed with Web and Worker.
 
 These validators perform actual image decoding/PDF parsing, not malware scanning. Uploads remain NotScanned under an explicit Development loopback exception. Production unscanned uploads are blocked. Windows native loading was exercised locally; Linux native packaging/deployment has not been accepted. Package vulnerability audit evidence is recorded in the final Phase 2A report and is not inferred from this notice.
 

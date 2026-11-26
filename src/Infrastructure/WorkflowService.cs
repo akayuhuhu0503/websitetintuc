@@ -331,6 +331,11 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
             if (id.HasValue) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT Id FROM dbo.Contents WITH (UPDLOCK, ROWLOCK) WHERE Id={id.Value}");
             var content = id.HasValue ? await db.Contents.SingleOrDefaultAsync(x => x.Id == id) ?? throw new InvalidOperationException("Không tìm thấy bài viết.") : null;
             if (content != null) Version(content, version);
+            // Under the same content lock as scheduling/publication. A preview
+            // alone cannot protect a schedule created while the dialog was open.
+            if (bulkGuard && content != null && (content.IsTrashed || content.IsPublic ||
+                await db.PublicationJobs.AnyAsync(x => x.ContentId == content.Id && x.IsActive)))
+                throw new DbUpdateConcurrencyException("Bài đã công khai, vào thùng rác hoặc có lịch hẹn; không thay đổi hàng loạt.");
             if(content!=null&&!await new CurrentPermissionService(db).CanAccessContentAsync(actor,content.Id))throw new UnauthorizedAccessException("Bài có chuyên mục chính hoặc phụ ngoài phạm vi được giao.");
             if (before is not null) await before();
             var publicRevisionBefore = content?.IsPublic == true ? content.PublishedRevisionId : null;

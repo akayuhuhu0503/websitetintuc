@@ -1,0 +1,15 @@
+@model AdminListModel
+@if (Model.BulkActions.Count != 0)
+{
+<section class="bulk-toolbar" aria-label="Thao tác nhiều bài" data-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value">
+    @Html.AntiForgeryToken()
+    <p id="bulk-scope" class="muted">Chỉ chọn trong bộ lọc hiện tại, tối đa 100 bài. Đổi bộ lọc sẽ bỏ lựa chọn cũ. Không xử lý bài đang công khai, hẹn giờ hoặc trong thùng rác.</p>
+    <div class="bulk-controls"><strong id="bulk-count" aria-live="polite">Đã chọn 0 bài</strong>
+        <button type="button" id="bulk-clear" class="button secondary">Bỏ chọn tất cả</button>
+        <label for="bulk-action" class="sr-only">Thao tác hàng loạt</label><select id="bulk-action"><option value="">Chọn thao tác…</option>
+        @foreach (var action in Model.BulkActions) { <option value="@action.Key">@action.Value</option> }</select>
+        <button type="button" id="bulk-preview" class="button" disabled>Kiểm tra và tiếp tục</button>
+    </div>
+    <p id="bulk-notice" role="status"></p>
+</section>
+}

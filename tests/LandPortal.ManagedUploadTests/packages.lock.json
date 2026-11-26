@@ -467,6 +467,7 @@
           "HtmlSanitizer": "[9.2.1039, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.12, )",
+          "OpenMcdf": "[3.4.0, )",
           "PdfPig": "[0.1.14, )",
           "SkiaSharp": "[3.119.4, )",
           "System.Security.Cryptography.Pkcs": "[10.0.13, )"
@@ -516,6 +517,12 @@
           "Microsoft.Extensions.Configuration.Abstractions": "10.0.12",
           "Microsoft.Extensions.Logging": "10.0.12"
         }
+      },
+      "OpenMcdf": {
+        "type": "CentralTransitive",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "HO/oY3oEUJw1DEcjSxR/dMEhYbJ/psUH1mZ0OFDhqrDaZg/kEPc4Go1U7eRjYgEgsEqujYueE+0+A67VlttemQ=="
       },
       "PdfPig": {
         "type": "CentralTransitive",

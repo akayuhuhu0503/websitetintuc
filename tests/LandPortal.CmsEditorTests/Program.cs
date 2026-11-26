@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
-if(args.Length!=5 || !Regex.IsMatch(args[0],"^LPCms_[a-f0-9]{12}$") || args[4] is not ("All" or "VideoAndScreens" or "Screens" or "WeeklyOnly" or "Followup" or "VideoFollowup" or "ScheduleOnly"))throw new ArgumentException("New isolated LocalDB instance/run/host and explicit focus required");
+if(args.Length!=5 || !Regex.IsMatch(args[0],"^LPCms_[a-f0-9]{12}$") || args[4] is not ("All" or "VideoAndScreens" or "Screens" or "WeeklyOnly" or "Followup" or "VideoFollowup" or "ScheduleOnly" or "Bulk"))throw new ArgumentException("New isolated LocalDB instance/run/host and explicit focus required");
 var root=Directory.GetCurrentDirectory();var run=Path.GetFullPath(args[1]);var host=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests","cms-editor-"),StringComparison.OrdinalIgnoreCase)||!host.StartsWith(run+Path.DirectorySeparatorChar)||!File.Exists(host)||File.Exists(Path.Combine(run,"result.json")))throw new Exception("New exact test run required");
 var cs=new SqlConnectionStringBuilder{DataSource=@"(localdb)\"+args[0],InitialCatalog="LandPortal_Test",IntegratedSecurity=true,Encrypt=true,TrustServerCertificate=true,Pooling=false};
@@ -70,6 +70,11 @@ try {
  using var r=await c.PostAsync("/admin/login",new FormUrlEncodedContent(new Dictionary<string,string>{{"__RequestVerificationToken",p.QuerySelector("input[name=__RequestVerificationToken]")!.GetAttribute("value")!},{"CaptchaId",p.QuerySelector("input[name=CaptchaId]")!.GetAttribute("value")!},{"CaptchaAnswer",(question.Contains("cộng")?numbers[0]+numbers[1]:numbers[0]-numbers[1]).ToString()},{"UserName",accounts[who].User.UserName!},{"Password",accounts[who].Password}}));Check(r.StatusCode==HttpStatusCode.Redirect,"HTTP Identity/CAPTCHA login "+who);return c;}
  using var writer=await Login("writer");using var reviewer=await Login("reviewer");using var publisher=await Login("publisher");using var outsider=await Login("outsider");using var dual=await Login("dual");
  foreach(var client in new[]{writer,reviewer,publisher,outsider,dual})client.DefaultRequestHeaders.Add("X-Editor-Request","true");
+ if(args[4]=="Bulk") {
+  stage="bulk-http";
+  await BulkEditorialChecks.Run(options, dual, writer, reviewer, publisher, outsider, accounts["dual"].User.Id, accounts["writer"].User.Id, c=>Token(c), Check, run);
+  stage="COMPLETE";return;
+ }
  if(args[4] is "Followup" or "VideoFollowup" or "ScheduleOnly"){
   var followupStorage=new StorageOptions{MediaRoot=Path.Combine(run,"media"),TempRoot=Path.Combine(run,"temp"),SnapshotRoot=Path.Combine(run,"snapshots"),KeysRoot=Path.Combine(run,"keys")};
   if(args[4]!="ScheduleOnly"){stage="video-background-followup";await VideoBackgroundAttachmentChecks.RunAsync(options,followupStorage,Check);}
