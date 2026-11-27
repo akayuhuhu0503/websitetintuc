@@ -12,7 +12,7 @@ public static class SourceSyncResourcePolicy
         // Observed on QLDD articles 3758 and 3767: this host labels JPEG bytes
         // as image/png. Only tolerate this proven header pair. The caller MUST
         // still fully decode as the extension's expected JPEG before acceptance.
-        if(new Uri(response.Url).Host.Equals("media-qldd.mae.gov.vn",StringComparison.OrdinalIgnoreCase)&&
+        if(new Uri(response.Url).Host is "media-qldd.mae.gov.vn" or "media.mae.gov.vn"&&
             expectedMime=="image/jpeg"&&response.ContentType.Equals("image/png",StringComparison.OrdinalIgnoreCase))return;
         throw new SourceResourceException("CONTENT_TYPE");
     }
@@ -28,6 +28,12 @@ public sealed class SourceResourceException(string code,int? httpStatus=null):IO
         "IMAGE_INVALID"=>"Ảnh không giải mã được hoặc định dạng thực không khớp [IMAGE_INVALID].",
         "IMAGE_LIMIT"=>"Ảnh vượt giới hạn kích thước hoặc số khung hình [IMAGE_LIMIT].",
         "FILE_INVALID"=>"Tệp không đạt kiểm định hiện hành [FILE_INVALID].",
+        "PDF_STRUCTURE"=>"PDF chưa đạt kiểm tra cấu trúc an toàn; cần đối soát kiểu cấu trúc, không kết luận tệp hỏng [PDF_STRUCTURE].",
+        "DOCUMENT_FORMAT"=>"Đuôi tệp hoặc cấu trúc tài liệu chưa được hỗ trợ [DOCUMENT_FORMAT].",
+        "SOURCE_IDENTITY"=>"Định danh/canonical nguồn không khớp bài đang kiểm tra [SOURCE_IDENTITY].",
+        "IDENTITY_CONFLICT"=>"ID hoặc URL nguồn trỏ tới nhiều hồ sơ CMS; cần đối soát [IDENTITY_CONFLICT].",
+        "CATEGORY_SCOPE"=>"Chuyên mục nguồn chưa thuộc phạm vi được cấu hình [CATEGORY_SCOPE].",
+        "ARTICLE_STRUCTURE"=>"Trang nguồn thiếu tiêu đề hoặc vùng nội dung được xác minh [ARTICLE_STRUCTURE].",
         _=>"Tài nguyên chưa đạt kiểm định [RESOURCE_INVALID]."
     };
 }

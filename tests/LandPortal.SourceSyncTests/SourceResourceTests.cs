@@ -38,7 +38,8 @@ static class SourceResourceTests
         Reject(()=>Validate(Response("image/png",jpeg[..20]),"image/jpeg"),"Truncated JPEG denied");
         Reject(()=>Validate(Response("image/png",Encode(SKEncodedImageFormat.Png)),"image/jpeg"),"Actual PNG under JPG name still denied");
         Reject(()=>Validate(Response("text/html",jpeg),"image/jpeg"),"HTML Content-Type rejected even with JPEG bytes","CONTENT_TYPE");
-        Reject(()=>Validate(Response("image/png",jpeg,"media.mae.gov.vn"),"image/jpeg"),"Header exception not expanded to other hosts","CONTENT_TYPE");
+        Validate(Response("image/png",jpeg,"media.mae.gov.vn"),"image/jpeg");Check(true,"Observed Ministry media host JPEG/PNG mismatch still fully decodes");
+        Reject(()=>Validate(Response("image/png",jpeg,"outside.invalid"),"image/jpeg"),"Header exception not expanded to other hosts","CONTENT_TYPE");
         Reject(()=>Validate(Response("image/webp",jpeg),"image/jpeg"),"Unobserved MIME mismatch denied","CONTENT_TYPE");
         Reject(()=>Validate(Response("image/png",jpeg,status:404),"image/jpeg"),"HTTP failure classified before accepting bytes","HTTP_SOURCE");
         var tiny=new MediaService(db,storage,new MediaUploadOptions{MaxImagePixels=10});var file=Path.Combine(output,"limit.jpg");File.WriteAllBytes(file,jpeg);

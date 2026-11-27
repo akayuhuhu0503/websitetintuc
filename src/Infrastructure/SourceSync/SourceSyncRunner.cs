@@ -164,19 +164,21 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
     async Task ProcessAsync(Job job,Job sweep,IQlddSourceSession source,CancellationToken ct)
     {
         var existing=await store.ReadAsync(job.Id,ct);if(existing.Item.Status=="Ignored")return;
-        var data=existing.Data;var item=existing.Item;var warnings=new List<string>();string status;
+        var data=existing.Data;var item=existing.Item;var originalCheckpoint=SourceSyncPolicy.Serialize(data);var warnings=new List<string>();string status;
         try
         {
             var response=await source.FetchAsync(item.SourceUrl,2*1024*1024,true,ct);RequirePage(response);
-            if(SourceSyncPolicy.Id(response.Url)!=item.SourceId)throw new InvalidDataException("Nguồn chuyển tới bài khác.");
+            if(SourceSyncPolicy.Id(response.Url)!=item.SourceId)throw new SourceResourceException("SOURCE_IDENTITY");
             await SnapshotAsync(item.Id,response,ct);
-            var parsed=SourceParser.Parse(Encoding.UTF8.GetString(response.Bytes),response.Url,item.Kind,item.SourceId);
-            if(parsed.SourceId!=item.SourceId||SourceSyncPolicy.Id(parsed.CanonicalUrl)!=item.SourceId||
-                parsed.PrimaryCategoryId is not int category||!SourceSyncStore.Categories.Contains(category))
-                throw new InvalidDataException("Canonical hoặc chuyên mục chưa có bằng chứng thuộc phạm vi nguồn.");
+            ParsedSource parsed;
+            try{parsed=SourceParser.Parse(Encoding.UTF8.GetString(response.Bytes),response.Url,item.Kind,item.SourceId);}
+            catch(InvalidDataException){throw new SourceResourceException("ARTICLE_STRUCTURE");}
+            if(parsed.SourceId!=item.SourceId||SourceSyncPolicy.Id(parsed.CanonicalUrl)!=item.SourceId)throw new SourceResourceException("SOURCE_IDENTITY");
+            if(parsed.PrimaryCategoryId is not int category||!SourceSyncStore.Categories.Contains(category))throw new SourceResourceException("CATEGORY_SCOPE");
             parsed.Kind=category==76?ContentKind.StaticPage:category==52?ContentKind.Announcement:ContentKind.Article;
             var hash=SourceSyncPolicy.Hash(parsed);var oldHash=data.Hash;
-            data.ContentId=await SourceSyncStore.ExistingAsync(db,parsed,ct);
+            try{data.ContentId=await SourceSyncStore.ExistingAsync(db,parsed,ct);}
+            catch(InvalidDataException){throw new SourceResourceException("IDENTITY_CONFLICT");}
             if(data.BaselineHash=="")
             {
                 var previous=data.ContentId.HasValue?await PreviousHashAsync(parsed,item.Id,ct):null;
@@ -189,12 +191,10 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
             data.WeeklyYear=period?.Year;data.WeeklyWeek=period?.Week;
             var previousAssets=data.Assets.ToList();
             data.WeeklyReviewRequired=weekly&&(!SourceWeeklySchedule.IsDepartment(parsed.Title)||SourceWeeklySchedule.Period(parsed.Title)==null);
-            if(data.WeeklyReviewRequired)warnings.Add("Lịch cần đối soát đơn vị Lãnh đạo Cục và tuần/năm; không tự nhận lịch của Trung tâm hoặc đoán tuần.");
             if(weekly&&!data.ContentId.HasValue)
             {
                 var settings=await store.SettingsAsync(ct);
                 data.ReconcileContentIds=await store.WeeklyCandidatesAsync(parsed,settings.Categories.GetValueOrDefault(76),ct);
-                if(data.ReconcileContentIds.Count>0)warnings.Add("Có lịch CMS cùng tiêu đề/tuần đã nhập trước đây nhưng chưa gắn định danh nguồn. Đối soát bài hiện có; chưa tạo bài trùng.");
             }
             if(data.ContentId.HasValue&&!weekly)
             {
@@ -206,37 +206,41 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
             else
             {
                 var activeCycle=(await store.SettingsAsync(ct)).Cycle?.Id;
-                if(weekly)
+                if(data.AssetCycleId!=activeCycle||oldHash!=hash||item.Status is "Error" or "Review")
+                {data.Assets=[];data.AssetCycleId=activeCycle;}
+                if(data.Assets.Count==0||parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)).Any()||weekly)
                 {
-                    if(data.AssetCycleId!=activeCycle||oldHash!=hash){data.Assets=[];data.AssetCycleId=activeCycle;}
-                }
-                else if(oldHash!=hash||item.Status is "Error" or "Review" or "Queued")data.Assets=[];
-                if(data.Assets.Count==0||weekly)
-                {
-                    if(!weekly&&parsed.AssetUrls.Count>SourceSyncPolicy.MaxAssets)warnings.Add("Có quá nhiều tài nguyên; chỉ nhận tối đa 12 tệp/lần, cần biên tập phần còn lại.");
                     long total=data.Assets.Sum(x=>x.Bytes);
-                    foreach(var url in (weekly?parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)):parsed.AssetUrls).Take(SourceSyncPolicy.MaxAssets))
+                    foreach(var url in parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)).Take(SourceSyncPolicy.MaxAssets))
                     {
                         try
                         {
-                            if(source.RequestsUsed>=SourceSyncPolicy.RequestsPerRun-1){if(!weekly)warnings.Add("Đã đạt giới hạn truy cập; còn tài nguyên chưa nhận [REQUEST_BUDGET].");break;}
+                            if(source.RequestsUsed>=SourceSyncPolicy.RequestsPerRun-1)break;
                             var asset=await DownloadAsync(source,url,ct);total+=asset.Bytes;
                             if(total>40L*1024*1024){warnings.Add("Tài nguyên vượt 40 MiB/bài; phần còn lại cần kiểm tra.");break;}
                             var prior=previousAssets.FirstOrDefault(x=>x.Url==asset.Url&&x.Sha256==asset.Sha256);
                             data.Assets.Add(prior??asset);
                         }
                         catch(OperationCanceledException){throw;}
-                        catch(RequestBudgetException){if(!weekly)warnings.Add("Đã hết ngân sách request khi nhận tệp [REQUEST_BUDGET].");break;}
+                        catch(RequestBudgetException){break;}
                         catch(Exception e)when(e is IOException or InvalidDataException or InvalidOperationException or HttpRequestException or MediaUploadException){warnings.Add("Không nhận được tệp "+SafeName(url)+": "+SafeError(e));}
                     }
                 }
                 var settings=await store.SettingsAsync(ct);
-                if(!weekly&&parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)).Any())warnings.Add("Còn tài nguyên nguồn chưa nhận/kiểm định được; cần biên tập bổ sung.");
                 warnings.AddRange(parsed.Warnings);
                 if(!settings.Categories.TryGetValue(category,out var mapped)||!await db.Categories.AnyAsync(x=>x.Id==mapped,ct))warnings.Add("Chưa ánh xạ chuyên mục nguồn. Chọn chuyên mục đích trong Đồng bộ QLDD.");
                 if(weekly)
                 {
                     var complete=!parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)).Any();
+                    period=await SourceWeeklyEvidence.ResolveAsync(data,storage,ct);
+                    data.WeeklyYear=period?.Year;data.WeeklyWeek=period?.Week;
+                    data.WeeklyReviewRequired=period==null;
+                    if(period==null&&(complete||warnings.Count>0))warnings.Add("Lịch cần đối soát đơn vị Lãnh đạo Cục và tuần/năm; chưa có bằng chứng từ tiêu đề/PDF đã kiểm định.");
+                    if(!data.ContentId.HasValue)
+                    {
+                        data.ReconcileContentIds=await store.WeeklyCandidatesAsync(parsed,settings.Categories.GetValueOrDefault(76),ct,period);
+                        if(complete&&data.ReconcileContentIds.Count>0)warnings.Add("Có lịch CMS cùng tiêu đề/tuần đã nhập trước đây nhưng chưa gắn định danh nguồn. Đối soát bài hiện có; chưa tạo bài trùng.");
+                    }
                     if((complete||warnings.Count>0)&&!data.Assets.Any(x=>x.Mime=="application/pdf")){warnings.Add("Chưa nhận được PDF lịch tuần.");data.WeeklyReviewRequired=true;}
                     if(!complete)data.WeeklyReviewRequired=true;
                     data.AssetHash=SourceWeeklySchedule.AssetHash(data.Assets);
@@ -254,7 +258,13 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
                     if(!complete&&warnings.Count==0){status="Queued";data.WeeklyReviewRequired=true;}
                     else if(!complete){status="Review";warnings.Add("Chưa nhận đủ tài nguyên lịch tuần; cần kiểm tra trước khi chuyển CMS.");}
                 }
-                else status=warnings.Count==0?"Ready":"Review";
+                else
+                {
+                    var complete=!parsed.AssetUrls.Except(data.Assets.Select(x=>x.Url)).Any();
+                    data.AssetHash=SourceWeeklySchedule.AssetHash(data.Assets);
+                    status=warnings.Count>0?"Review":complete?"Ready":"Queued";
+                    if(!complete&&warnings.Count>0)warnings.Add("Còn tài nguyên nguồn chưa nhận/kiểm định được; cần biên tập bổ sung.");
+                }
             }
             warnings.AddRange(parsed.Warnings);data.Warnings=warnings.Distinct().ToList();
         }
@@ -266,7 +276,11 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
         var current=await db.CrawlItems.SingleAsync(x=>x.Id==job.Id,ct);
         // A manual skip or completed draft always wins over an in-flight fetch.
         if(current.Status=="Ignored"||current.Status=="Drafted"&&item.Status!="Drafted")return;
-        var run=await db.CrawlRuns.SingleAsync(x=>x.Id==job.Id,ct);run.Checkpoint=SourceSyncPolicy.Serialize(data);
+        var run=await db.CrawlRuns.SingleAsync(x=>x.Id==job.Id,ct);
+        // A binding/update committed while the network request was in flight wins.
+        // Do not restore stale identity, revision or media evidence from the fetch.
+        if(SourceSyncPolicy.Serialize(SourceSyncPolicy.Read<SourceSyncCheckpoint>(run.Checkpoint))!=originalCheckpoint)return;
+        run.Checkpoint=SourceSyncPolicy.Serialize(data);
         current.Status=status;current.Kind=data.Source?.Kind??current.Kind;current.Attempts++;current.UpdatedUtc=DateTimeOffset.UtcNow;
         current.Error=data.Warnings.Count==0?null:string.Join(" ",data.Warnings);
         var tracked=await db.Jobs.SingleAsync(x=>x.Id==job.Id,ct);tracked.Status=status;tracked.Attempts=status=="Error"?tracked.Attempts+1:0;
@@ -289,17 +303,20 @@ public sealed class SourceSyncRunner(PortalDbContext db,StorageOptions storage,M
     async Task<SourceSyncAsset> DownloadAsync(IQlddSourceSession source,string url,CancellationToken ct)
     {
         var name=SafeName(url);var extension=Path.GetExtension(name).ToLowerInvariant();
-        var mime=extension switch{".jpg" or ".jpeg"=>"image/jpeg",".png"=>"image/png",".gif"=>"image/gif",".webp"=>"image/webp",_=>OfficeDocumentPolicy.Mime(name)};
+        string mime;
+        try{mime=extension switch{".jpg" or ".jpeg"=>"image/jpeg",".png"=>"image/png",".gif"=>"image/gif",".webp"=>"image/webp",_=>OfficeDocumentPolicy.Mime(name)};}
+        catch(InvalidOperationException){throw new SourceResourceException("DOCUMENT_FORMAT");}
         var response=await source.FetchAsync(url,10*1024*1024,false,ct);
         SourceSyncResourcePolicy.ValidateResponse(response,mime);
         var key=await StoreBytesAsync(response.Bytes,"resource",ct);var path=storage.ResolveSnapshot(key);
         try
         {
             if(mime.StartsWith("image/"))media.ValidateContent(path,mime,ct);
-            else{OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv:true);if(mime=="application/pdf")ManagedPdfPolicy.Validate(path);}
+            else{OfficeDocumentPolicy.Validate(path,mime,media,managedWithoutAv:true);if(mime=="application/pdf")ManagedPdfPolicy.Validate(path,ct);}
         }
         catch(MediaUploadException e)
         {throw new SourceResourceException(mime.StartsWith("image/")?(e.StatusCode==413?"IMAGE_LIMIT":"IMAGE_INVALID"):"FILE_INVALID");}
+        catch(InvalidDataException){throw new SourceResourceException(mime=="application/pdf"?"PDF_STRUCTURE":"DOCUMENT_FORMAT");}
         return new(url,key,Convert.ToHexStringLower(SHA256.HashData(response.Bytes)),response.Bytes.Length,mime,name);
     }
     public async Task SnapshotAsync(Guid run,SourceResponse response,CancellationToken ct)

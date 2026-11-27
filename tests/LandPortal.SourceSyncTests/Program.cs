@@ -22,6 +22,11 @@ using Microsoft.Extensions.Options;
 using SkiaSharp;
 using UglyToad.PdfPig.Writer;
 
+if(args.Length==3&&args[0]=="review-probe"){await SourceReviewProbe.Run(args[1],args[2]);return;}
+if(args.Length==3&&args[0]=="review-replay"){await SourceReviewProbe.Run(args[1],args[2],offline:true);return;}
+if(args.Length==2&&args[0]=="publication-pdf-tests"){SourcePublicationPdfChecks.Run(args[1]);return;}
+if(args.Length==3&&args[0]=="ready-assets"){await SourceReadyAssets.Run(args[1],args[2]);return;}
+if(args.Length==4&&args[0]=="captured-checks"){await SourceCapturedChecks.Run(args[1],args[2],args[3]);return;}
 if(args.Length==2&&args[0]=="probe"){await SourceProbe.Run(args[1]);return;}
 if(args.Length==2&&args[0]=="image-probe"){await SourceImageProbe.Run(args[1]);return;}
 if(args.Length==2&&args[0]=="resource-tests"){await SourceResourceTests.Run(args[1]);return;}
@@ -34,11 +39,12 @@ if(args.Length==1&&args[0]=="bulk-summary-tests")
     Console.WriteLine("PASS 3 source summary checks");return;
 }
 // A new, uniquely named LocalDB instance and database; no operational config is read.
+var publicationOnly=args.Length==5&&args[4]=="--publication-only";
 var networkOnly=args.Length==5&&args[4]=="--network-only";
 var cycleOnly=args.Length==5&&args[4]=="--cycle-only";
 var bulkOnly=args.Length==5&&args[4]=="--bulk-only";
 var imageOnly=args.Length==5&&args[4]=="--image-only";
-if((args.Length!=4&&!networkOnly&&!imageOnly&&!cycleOnly&&!bulkOnly)||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
+if((args.Length!=4&&!networkOnly&&!imageOnly&&!cycleOnly&&!bulkOnly&&!publicationOnly)||!Regex.IsMatch(args[1],"^LPSync_[a-f0-9]{12}$"))throw new ArgumentException("checkout, new isolated LocalDB instance, new test directory, saved QLDD snapshot required");
 var root=Path.GetFullPath(args[0]);var run=Path.GetFullPath(args[2]);
 if(!run.StartsWith(Path.Combine(root,".local","tests")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Directory.Exists(run))throw new Exception("New isolated run required");
 Directory.CreateDirectory(run);
@@ -62,7 +68,7 @@ try
         await db.Database.MigrateAsync();Check((await db.Database.GetAppliedMigrationsAsync()).Count()==18,"Schema 18, no new migration required");
         await RuntimeRoleInterceptor.ProvisionAsync(db,roleSecret);
         db.Categories.Add(new(){Id=1,Name="Fixture news",Slug="fixture-news"});
-        if(cycleOnly||bulkOnly)db.Categories.Add(new(){Id=76,Name="Lịch tuần",Slug="lich-tuan"});
+        if(cycleOnly||bulkOnly||publicationOnly)db.Categories.Add(new(){Id=76,Name="Lịch tuần",Slug="lich-tuan"});
         foreach(var name in new[]{"admin","reviewer","publisher","denied"})db.Users.Add(new(){Id=name,UserName=name,NormalizedUserName=name.ToUpperInvariant()});
         foreach(var p in new[]{Permissions.ManageSite,Permissions.Create,Permissions.EditOwn,Permissions.ViewOwn,Permissions.ManageMedia,Permissions.Submit})db.UserClaims.Add(new(){UserId="admin",ClaimType="permission",ClaimValue=p});
         db.UserClaims.Add(new(){UserId="reviewer",ClaimType="permission",ClaimValue=Permissions.Review});
@@ -77,7 +83,7 @@ try
     var source=new FixtureSource();
     using(var bitmap=new SKBitmap(64,32)){bitmap.Erase(SKColors.Brown);using var image=SKImage.FromBitmap(bitmap);using var bytes=image.Encode(SKEncodedImageFormat.Png,100);source.Png=bytes.ToArray();}
     var pdf=new PdfDocumentBuilder();pdf.AddPage(UglyToad.PdfPig.Content.PageSize.A4).AddText("Isolated fixture",12,new(20,700),pdf.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica));source.Pdf=pdf.Build();
-    if(!networkOnly&&!imageOnly&&!cycleOnly&&!bulkOnly){
+    if(!networkOnly&&!imageOnly&&!cycleOnly&&!bulkOnly&&!publicationOnly){
     var saved=await File.ReadAllTextAsync(args[3]);var parsed=SourceParser.Parse(saved,"https://qldd.mae.gov.vn/cuc-quan-ly-dat-dai-trao-doi-huong-dan-thao-go-vuong-mac-trong-quan-ly-dat-dai-tai-son-la-3681.htm",ContentKind.Article,"3681");
     Check(parsed.Title.Length>20&&parsed.BodyHtml.Length>100&&parsed.PrimaryCategoryId!=null,"Previously saved real QLDD HTML still parses with verified identity/category");
     Check(SourceSyncPolicy.Id(parsed.CanonicalUrl)=="3681","Saved canonical identity remains correct");
@@ -115,6 +121,12 @@ try
     using(var r=await Post("/admin/source-sync/check"))Check(r.IsSuccessStatusCode&&source.Opens==0,"Manual check only enqueues; HTTP never crawls");
     await InScope(s=>s.GetRequiredService<SourceSyncRunner>().RunOnceAsync());
     var entry=await Entry();Check(entry.Item.Status=="Ready"&&entry.Data.Assets.Count==2,"Bounded discovery, full content and PNG/PDF staged privately");
+    if(publicationOnly)
+    {
+        await SourcePublicationChecks.Run(app.Services,client,token,options,storage,source,entry,run,args[3],Check);
+        await File.WriteAllTextAsync(Path.Combine(run,"result.json"),JsonSerializer.Serialize(new{passed=checks.Count,checks,operationalSqlTouched=false}));
+        Console.WriteLine("TOTAL PASS publication focused checks "+checks.Count);return;
+    }
     if(bulkOnly)
     {
         await SourceBulkChecks.Run(client,token,options,entry.Data,run,Check);

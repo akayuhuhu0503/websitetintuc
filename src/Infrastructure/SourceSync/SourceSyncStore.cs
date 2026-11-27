@@ -10,7 +10,7 @@ public sealed record SourceSyncRow(Guid Id,string Title,string Url,string Status
 public sealed record SourceSyncPage(SourceSyncSettings Settings,IReadOnlyList<SourceSyncRow> Items,int Total,int Page,string? Query,string? Status,
     Dictionary<string,int> Counts,bool Running,DateTimeOffset? NextCheck,string Tab="pending",int? SourceCategory=null,DateOnly? From=null,DateOnly? To=null);
 
-public sealed class SourceSyncStore(PortalDbContext db)
+public sealed partial class SourceSyncStore(PortalDbContext db)
 {
     public static readonly int[] Categories = SourceCatalog.Categories.Where(c=>c.Id is not(77 or 79)).Select(c=>c.Id).ToArray();
     public static SourceSyncCycle NewCycle(SourceSyncSettings settings)=>new(){Categories=SourceCatalog.Categories.Where(x=>Categories.Contains(x.Id)&&settings.Categories.ContainsKey(x.Id)).Select(x=>x.Id).ToList()};
@@ -127,13 +127,13 @@ public sealed class SourceSyncStore(PortalDbContext db)
         var run=await db.CrawlRuns.AsNoTracking().SingleAsync(x=>x.Id==item.CrawlRunId&&x.Status==SourceSyncPolicy.RunStatus,ct);
         return(item,SourceSyncPolicy.Read<SourceSyncCheckpoint>(run.Checkpoint));
     }
-    public async Task<List<Guid>> WeeklyCandidatesAsync(ParsedSource source,int category,CancellationToken ct=default)
+    public async Task<List<Guid>> WeeklyCandidatesAsync(ParsedSource source,int category,CancellationToken ct=default,(int Year,int Week)? verifiedPeriod=null)
     {
         if(category==0)return [];
         var rows=await (from c in db.Contents.AsNoTracking() join r in db.Revisions.AsNoTracking() on c.CurrentRevisionId equals r.Id
-            where c.Kind==ContentKind.StaticPage&&c.PrimaryCategoryId==category
+            where c.Kind==ContentKind.StaticPage&&r.PrimaryCategoryId==category
             select new{c.Id,r.Title,r.Metadata.WeeklyYear,r.Metadata.WeeklyWeek}).ToListAsync(ct);
-        var period=SourceWeeklySchedule.Period(source.Title);
+        var period=verifiedPeriod??SourceWeeklySchedule.Period(source.Title);
         return rows.Where(x=>SourceWeeklySchedule.Normalize(x.Title)==SourceWeeklySchedule.Normalize(source.Title)||
             period.HasValue&&SourceWeeklySchedule.IsDepartment(x.Title)&&
             ((x.WeeklyYear.HasValue&&x.WeeklyWeek.HasValue?(x.WeeklyYear.Value,x.WeeklyWeek.Value):SourceWeeklySchedule.Period(x.Title))==period||SourceWeeklySchedule.CouldMatch(x.Title,period.Value)))

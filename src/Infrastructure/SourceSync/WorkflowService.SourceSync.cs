@@ -32,8 +32,14 @@ public sealed partial class WorkflowService
             var settings=await new SourceSyncStore(db).SettingsAsync(ct);
             if(source.PrimaryCategoryId is not int sourceCategory||!settings.Categories.TryGetValue(sourceCategory,out var category)||!actor.Covers([category]))
                 throw new InvalidOperationException("Chưa có ánh xạ chuyên mục hợp lệ trong phạm vi của bạn.");
-            if(sourceCategory==76&&(await new SourceSyncStore(db).WeeklyCandidatesAsync(source,category,ct)).Count>0)
-                throw new InvalidOperationException("Lịch tương ứng đã có trong CMS; cần đối soát trước khi tạo mới.");
+            if(sourceCategory==76)
+            {
+                var period=storage==null?null:await SourceWeeklyEvidence.ResolveAsync(checkpoint,storage,ct);
+                if(period==null||period!=(checkpoint.WeeklyYear,checkpoint.WeeklyWeek))
+                    throw new InvalidOperationException("Bằng chứng năm/tuần đã thay đổi; kiểm tra lại trước khi tạo nháp.");
+                if((await new SourceSyncStore(db).WeeklyCandidatesAsync(source,category,ct,period)).Count>0)
+                    throw new InvalidOperationException("Lịch tương ứng đã có trong CMS; cần đối soát trước khi tạo mới.");
+            }
             var content=new Content{Kind=source.Kind,OwnerUserId=actor.UserId,PrimaryCategoryId=category,HasEditorialChanges=true,
                 SourcePublishedDate=source.PublishedDate,OriginalDateText=source.OriginalDateText,DatePrecision=source.DatePrecision};
             db.Contents.Add(content);await db.SaveChangesAsync(ct);

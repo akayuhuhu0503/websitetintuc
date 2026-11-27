@@ -17,6 +17,6 @@ public static class AnnouncementTemplatePolicy
     // never a posted form field or the count of selected media.
     public static string? ContentError(string plainText, bool verifiedPdf) =>
         string.IsNullOrWhiteSpace(plainText) && !verifiedPdf
-            ? "Thông báo cần nội dung hoặc PDF đính kèm đã kiểm định, đúng tệp và được phép sử dụng. Có thể lưu nháp khi chưa hoàn chỉnh."
+            ? "Thông báo cần nội dung, PDF đính kèm hoặc ảnh chụp văn bản đã kiểm định, đúng tệp và được phép sử dụng. Có thể lưu nháp khi chưa hoàn chỉnh."
             : null;
 }

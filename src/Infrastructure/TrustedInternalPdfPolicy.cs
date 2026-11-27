@@ -10,12 +10,17 @@ public static class TrustedInternalPdfPolicy
 {
     public const int MaximumTokens = 1_000_000;
     public static void Validate(Stream input, CancellationToken ct = default)
+        => ValidatePassiveStructure(input, MaximumTokens, ct);
+
+    // Structural checks only. Callers still enforce provenance, AV policy,
+    // full page decoding and receipts. This never marks a file trusted.
+    internal static void ValidatePassiveStructure(Stream input, int maximumTokens, CancellationToken ct)
     {
-        try { ValidateCore(input, ct); }
+        try { ValidateCore(input, maximumTokens, ct); }
         catch (Exception error) when (error is not (OutOfMemoryException or OperationCanceledException or InvalidDataException))
         { throw new InvalidDataException("PDF nội bộ không đọc được hoặc cấu trúc không hợp lệ.", error); }
     }
-    private static void ValidateCore(Stream input, CancellationToken ct)
+    private static void ValidateCore(Stream input, int maximumTokens, CancellationToken ct)
     {
         input.Position = 0;
         using var pdf = PdfDocument.Open(input, new ParsingOptions { UseLenientParsing = false, MaxStackDepth = 64 });
@@ -23,7 +28,7 @@ public static class TrustedInternalPdfPolicy
         var fields = new HashSet<IndirectReference>();
         var count = 0;
         var pendingObjects = new Queue<(IToken Token, int Depth)>();
-        void Tick(int depth) { ct.ThrowIfCancellationRequested(); if (++count > MaximumTokens || depth > 64) throw new InvalidDataException("PDF nội bộ vượt giới hạn cấu trúc an toàn."); }
+        void Tick(int depth) { ct.ThrowIfCancellationRequested(); if (++count > maximumTokens || depth > 64) throw new InvalidDataException("PDF nội bộ vượt giới hạn cấu trúc an toàn."); }
         IToken Resolve(IToken token)
         {
             var hops = new HashSet<IndirectReference>();
@@ -142,7 +147,8 @@ public static class TrustedInternalPdfPolicy
                         {
                             if (Resolve(entry.Value) is not DictionaryToken form || Get(form, "Fields") is not ArrayToken fs
                                 || form.Data.Keys.Any(k => k is not ("Fields" or "SigFlags" or "DA" or "DR" or "NeedAppearances"))
-                                || Get(form, "NeedAppearances") is { } appearances && appearances is not BooleanToken { Data: false })
+                                || Get(form, "NeedAppearances") is { } appearances &&
+                                    (appearances is not BooleanToken flag || flag.Data && fs.Data.Count != 0))
                                 throw new InvalidDataException("Biểu mẫu PDF không phải cấu trúc chữ ký được phép.");
                             foreach (var f in fs.Data) Field(f, null, 0);
                         }
