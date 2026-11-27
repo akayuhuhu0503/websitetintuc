@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$SavedQlddSnapshot,[string]$DotnetPath='dotnet',[switch]$WaitForBrowser,[switch]$ImagesOnly,[switch]$CycleOnly)
+﻿param([Parameter(Mandatory=$true)][string]$SavedQlddSnapshot,[string]$DotnetPath='dotnet',[switch]$WaitForBrowser,[switch]$ImagesOnly,[switch]$CycleOnly,[switch]$PublicationOnly)
 $ErrorActionPreference='Stop'
 $checkout=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $instance='LPSync_'+[Guid]::NewGuid().ToString('N').Substring(0,12)
@@ -16,6 +16,7 @@ try {
     $testArgs=@($checkout,$instance,$run,([IO.Path]::GetFullPath($SavedQlddSnapshot)))
     if($ImagesOnly){$testArgs+='--image-only'}
     if($CycleOnly){$testArgs+='--cycle-only'}
+    if($PublicationOnly){$testArgs+='--publication-only'}
     & $dotnet.Source (Join-Path $checkout 'tests\LandPortal.SourceSyncTests\bin\Release\net10.0\LandPortal.SourceSyncTests.dll') @testArgs
     $testExit=$LASTEXITCODE
     Write-Output ('Focused result directory: '+$run)

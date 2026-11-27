@@ -6,6 +6,9 @@ public static class SourceCatalog
     [
         (75,"Xây dựng, phổ biến chính sách, pháp luật","xay-dung-pho-bien-chinh-sach-phap-luat","/chuyen-muc/site-xay-dung-pho-bien-chinh-sach-phap-luat-75.htm"),
         (83,"Đo đạc và Đăng ký đất đai","do-dac-va-dang-ky-dat-dai","/chuyen-muc/site-do-dac-va-dang-ky-dat-dai-83.htm"),
+        // Current official breadcrumbs of source 3781/3788 use 80, not 83.
+        // Kept separate; an operator must explicitly map/enable this source ID.
+        (80,"Đo đạc và Đăng ký đất đai (nguồn 80)","do-dac-va-dang-ky-dat-dai-80","/chuyen-muc/do-dac-va-dang-ky-dat-dai-80.htm"),
         (82,"Dữ liệu và Thông tin đất đai","du-lieu-va-thong-tin-dat-dai","/chuyen-muc/site-co-so-du-lieu-quoc-gia-ve-dat-dai-82.htm"),
         (81,"Thống kê, kiểm kê đất đai","thong-ke-kiem-ke-dat-dai","/chuyen-muc/site-thong-ke-kiem-ke-dat-dai-81.htm"),
         (55,"Điều tra, đánh giá tài nguyên đất","dieu-tra-danh-gia-tai-nguyen-dat","/chuyen-muc/dieu-tra-danh-gia-tai-nguyen-dat-55.htm"),

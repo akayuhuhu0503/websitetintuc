@@ -140,6 +140,30 @@ public static partial class SourceParser
         if (result.PrimaryCategoryId is int primary) result.CategoryIds.Add(primary);
         var bodyDocument = Document(result.BodyHtml);
         foreach (var element in bodyDocument.QuerySelectorAll("script,style,iframe,object,embed,form")) element.Remove();
+        // A migrated first-party image can retain stale external lazy attributes.
+        // Select its real src, not both copies. The downloader still enforces DNS,
+        // HTTPS, robots, redirect and full byte decoding before it can be used.
+        foreach (var image in bodyDocument.QuerySelectorAll("img[src]"))
+        {
+            if (!Uri.TryCreate(new Uri(url), image.GetAttribute("src"), out var local)
+                || local.Scheme != "https" || !local.IsDefaultPort || local.UserInfo.Length != 0
+                || !SafeSourceClient.AllowedHosts.Contains(local.Host)
+                || !Regex.IsMatch(local.AbsolutePath, @"\.(jpe?g|png|gif|webp)$", RegexOptions.IgnoreCase)
+                || local.AbsolutePath.Contains("noimage", StringComparison.OrdinalIgnoreCase)
+                || local.AbsolutePath.Contains("placeholder", StringComparison.OrdinalIgnoreCase)) continue;
+            // Lightbox wrappers retain the same obsolete original URL as the
+            // image. A single displayed first-party copy is the source evidence.
+            var figure=image.Closest("figure");
+            if(figure?.QuerySelectorAll("img").Length==1 && Uri.TryCreate(new Uri(url),figure.GetAttribute("data-src"),out var lightbox)
+                && !SafeSourceClient.AllowedHosts.Contains(lightbox.Host))figure.RemoveAttribute("data-src");
+            foreach (var attr in new[] { "data-src", "data-original" })
+                if (Uri.TryCreate(new Uri(url), image.GetAttribute(attr), out var stale) && !SafeSourceClient.AllowedHosts.Contains(stale.Host))
+                    image.RemoveAttribute(attr);
+            var srcset = image.GetAttribute("srcset");
+            if (!string.IsNullOrEmpty(srcset) && SourceSrcset.Urls(srcset, null, null).Any(x =>
+                Uri.TryCreate(new Uri(url), x, out var candidate) && !SafeSourceClient.AllowedHosts.Contains(candidate.Host)))
+                image.RemoveAttribute("srcset");
+        }
         foreach (var element in bodyDocument.QuerySelectorAll("[src],[href],[data-src],[srcset]"))
         {
             foreach (var attr in new[] { "src", "data-src", "href" })

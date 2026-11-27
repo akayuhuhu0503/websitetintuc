@@ -32,6 +32,7 @@ public sealed partial class SourceSyncController(PortalDbContext db,SourceSyncSt
         if(!await db.Jobs.AnyAsync(x=>x.Id==id&&x.Type==SourceSyncPolicy.EntryType,ct))return NotFound();
         var (item,data)=await store.ReadAsync(id,ct);
         ViewBag.Item=item;ViewBag.CanCreate=actor.Has(Permissions.Create)&&actor.Has(Permissions.ManageMedia);
+        ViewBag.BindingCandidates=await store.BindingCandidatesAsync(data,actor,ct);
         if(data.ContentId is Guid content&&await new CurrentPermissionService(db).CanAccessContentAsync(actor,content))
         {
             var c=await db.Contents.AsNoTracking().SingleAsync(x=>x.Id==content,ct);
@@ -47,6 +48,19 @@ public sealed partial class SourceSyncController(PortalDbContext db,SourceSyncSt
     public Task<IActionResult> Configure(bool? enabled,int? sourceCategory,int? targetCategory,CancellationToken ct)=>Command(async()=>{
         await store.ConfigureAsync(UserId,enabled,sourceCategory,targetCategory,ct);return "Đã lưu lựa chọn đồng bộ. Không thay đổi chuyên mục hoặc công bố bài.";
     });
+    [HttpPost("/admin/source-sync/{id:guid}/bind-weekly")]
+    public async Task<IActionResult> BindWeekly(Guid id,Guid contentId,string hash,string assetHash,string version,Guid commandId,[FromServices] StorageOptions storage,CancellationToken ct)
+    {
+        try
+        {
+            if(hash?.Length!=64||assetHash?.Length!=64||version?.Length!=12||commandId==Guid.Empty||contentId==Guid.Empty)return BadRequest();
+            await store.BindWeeklyAsync(id,contentId,hash,assetHash,Convert.FromBase64String(version),commandId,UserId,storage,ct);
+            return Json(new{message="Đã nối định danh nguồn, giữ nguyên bài và lịch sử. Tải lại trang để xem các PDF cần bổ sung."});
+        }
+        catch(UnauthorizedAccessException){return Forbid();}
+        catch(FormatException){return BadRequest();}
+        catch(Exception e)when(e is InvalidOperationException or IOException or DbUpdateException){return Conflict(new{message=SafeMessage(e)});}
+    }
     [HttpPost("/admin/source-sync/check")]
     public Task<IActionResult> Check(CancellationToken ct)=>Command(async()=>{await store.RequestAsync(UserId,ct);return "Đã nhận yêu cầu. Tiến trình nền sẽ kiểm tra nguồn; bạn có thể rời trang.";});
     [HttpPost("/admin/source-sync/{id:guid}/state")]
@@ -84,5 +98,5 @@ public sealed partial class SourceSyncController(PortalDbContext db,SourceSyncSt
         catch(UnauthorizedAccessException){return Forbid();}
         catch(InvalidOperationException e){return Conflict(new{message=SafeMessage(e)});}
     }
-    static string SafeMessage(Exception e)=>e is DbUpdateConcurrencyException?"Dữ liệu đã thay đổi, vui lòng tải lại.":e is IOException or InvalidDataException?"Tệp/định danh nguồn chưa đầy đủ hoặc không còn khớp. Kiểm tra lại hàng chờ.":e.Message;
+    static string SafeMessage(Exception e)=>e is DbUpdateConcurrencyException?"Dữ liệu đã thay đổi, vui lòng tải lại.":e is DbUpdateException?"Không lưu được đối soát; tải lại dữ liệu và thử lại.":e is IOException or InvalidDataException?"Tệp/định danh nguồn chưa đầy đủ hoặc không còn khớp. Kiểm tra lại hàng chờ.":e.Message;
 }

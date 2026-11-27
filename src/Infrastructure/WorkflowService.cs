@@ -614,7 +614,8 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
         {
             var text = html.PlainText(body);
             var verifiedPdf = string.IsNullOrWhiteSpace(text) && await HasVerifiedAnnouncementPdfAsync(attachmentIds);
-            var error = AnnouncementTemplatePolicy.ContentError(text, verifiedPdf);
+            var verifiedImages = string.IsNullOrWhiteSpace(text) && !verifiedPdf && await HasVerifiedAnnouncementImagesAsync(body);
+            var error = AnnouncementTemplatePolicy.ContentError(text, verifiedPdf || verifiedImages);
             if(error != null) errors["BodyHtml"] = error;
         }
         else if(string.IsNullOrWhiteSpace(html.PlainText(body))&&assets==0) errors["BodyHtml"]="Bổ sung nội dung hoặc tài liệu hợp lệ trước khi gửi duyệt hoặc đăng.";
@@ -629,8 +630,9 @@ public sealed partial class WorkflowService(PortalDbContext db, HtmlPolicy html,
             var hasBody=!string.IsNullOrWhiteSpace(html.PlainText(body))||new HtmlParser().ParseDocument(body).QuerySelector("img[src],video[src],a[href^='/media/']")!=null;
             if(!hasBody&&(source==null||!string.IsNullOrWhiteSpace(html.PlainText(source.BodyHtml))))errors["BodyHtml"]="Nhập nội dung bài trước khi gửi duyệt hoặc đăng; ảnh đại diện không thay nội dung bài.";
             if(string.IsNullOrWhiteSpace(summary)&&(source==null||!string.IsNullOrWhiteSpace(source.Summary)))errors["Summary"]="Nhập sapo (mô tả ngắn) trước khi gửi duyệt hoặc đăng.";
-            if(string.IsNullOrWhiteSpace(author)&&(source==null||!string.IsNullOrWhiteSpace(source.Author)))errors["Author"]="Nhập tên tác giả trước khi gửi duyệt hoặc đăng.";
-            if(cover==null&&(source==null||source.CoverAssetId!=null))errors["CoverAssetId"]="Chọn ảnh đại diện được phép sử dụng trước khi gửi duyệt hoặc đăng.";
+            var collected = await PublicationSourceAsync(content.Id);
+            if(string.IsNullOrWhiteSpace(author)&&(source==null||!string.IsNullOrWhiteSpace(source.Author)) && (collected==null||!string.IsNullOrWhiteSpace(collected.Author)))errors["Author"]="Nguồn có tác giả hoặc chưa có bằng chứng nguồn; bổ sung tác giả đúng thông tin đã xác minh.";
+            if(cover==null&&(source==null||source.CoverAssetId!=null) && (collected==null||LandPortal.MigrationCli.SourceParser.Document(collected.BodyHtml).QuerySelector("img")!=null))errors["CoverAssetId"]="Nguồn có ảnh hoặc chưa có bằng chứng nguồn; chọn ảnh đại diện đã kiểm định.";
         }
         if(errors.Count>0) throw new EditorialValidationException(errors);
     }

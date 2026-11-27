@@ -14,6 +14,13 @@
 @if(ViewBag.ExistingId is Guid id){<p><a class="button" href="/admin/edit/@id">Mở bài hiện có trong CMS</a></p>}
 else if(item.Status is "Ready" or "Review" && (bool)ViewBag.CanCreate && !Model.WeeklyReviewRequired && Model.ReconcileContentIds.Count==0){<form method="post" action="/admin/source-sync/@item.Id/draft" data-sync-form>@Html.AntiForgeryToken()<input type="hidden" name="hash" value="@Model.Hash"/><input type="hidden" name="assetHash" value="@Model.AssetHash"/><button class="button">Chuyển vào bản nháp biên tập</button></form>}
 @if(Model.ReconcileContentIds.Count>0){<p>Lịch này có thể đã được nhập từ Excel. Cần đối soát bài hiện có trước khi tiếp nhận; hệ thống không tạo thêm bài.</p>}
+@if(ViewBag.BindingCandidates is List<WeeklyBindingCandidate> candidates && candidates.Count>0){
+<section><h2>Nối lịch nguồn với hồ sơ đã có</h2><p>Chỉ nối khi cùng Lãnh đạo Cục, năm và tuần. Không thay đổi tiêu đề, ngày, bản công khai hoặc lịch hẹn. PDF khác hash sẽ được đề nghị bổ sung qua bản sửa nháp.</p>
+@foreach(var candidate in candidates){<div class="settings-panel"><a href="/admin/edit/@candidate.Id" target="_blank" rel="noopener">@candidate.Title</a><p>@(candidate.Year.HasValue?$"Tuần {candidate.Week}/{candidate.Year}":"Năm/tuần trong hồ sơ chưa nhất quán; cần đối soát trước khi nối.")</p>
+@if(candidate.CanBind && (bool)ViewBag.CanCreate){<form method="post" action="/admin/source-sync/@item.Id/bind-weekly" data-sync-form>@Html.AntiForgeryToken()
+<input type="hidden" name="contentId" value="@candidate.Id"/><input type="hidden" name="hash" value="@Model.Hash"/><input type="hidden" name="assetHash" value="@Model.AssetHash"/><input type="hidden" name="version" value="@candidate.Version"/><input type="hidden" name="commandId" value="@Guid.NewGuid()"/>
+<button class="button secondary">Nối với hồ sơ này</button></form>}</div>}
+</section>}
 @if(item.Status=="Changed" && Model.Source?.PrimaryCategoryId==76 && !Model.WeeklyReviewRequired && ViewBag.ExistingId is Guid updateId && (bool)ViewBag.CanCreate){
 <form method="post" action="/admin/source-sync/@item.Id/update" data-sync-form>@Html.AntiForgeryToken()
 <input type="hidden" name="contentId" value="@updateId"/><input type="hidden" name="hash" value="@Model.Hash"/><input type="hidden" name="assetHash" value="@Model.AssetHash"/>
