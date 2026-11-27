@@ -9,16 +9,17 @@ namespace LandPortal.Web.Controllers;
 
 [Authorize(Policy=Permissions.ManageSite),AutoValidateAntiforgeryToken]
 [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class SourceSyncController(PortalDbContext db,SourceSyncStore store,WorkflowService workflow,SourceSyncMedia transfer):Controller
+public sealed partial class SourceSyncController(PortalDbContext db,SourceSyncStore store,WorkflowService workflow,SourceSyncMedia transfer):Controller
 {
     string UserId=>User.FindFirstValue(ClaimTypes.NameIdentifier)??throw new UnauthorizedAccessException();
     [HttpGet("/admin/source-sync")]
-    public async Task<IActionResult> Index(string? q,string? status,int page=1,bool fragment=false,CancellationToken ct=default,string tab="pending")
+    public async Task<IActionResult> Index(string? q,string? status,int page=1,bool fragment=false,CancellationToken ct=default,string tab="pending",int? sourceCategory=null,DateOnly? from=null,DateOnly? to=null)
     {
-        if(q?.Length>200||status?.Length>30)return BadRequest();
+        if(!ModelState.IsValid||q?.Length>200||status?.Length>30||from>to||sourceCategory.HasValue&&!SourceSyncStore.Categories.Contains(sourceCategory.Value))return BadRequest();
         ContentActor actor;
         try{actor=await store.RequireAsync(UserId);}catch(UnauthorizedAccessException){return Forbid();}
-        var model=await store.PageAsync(q,status,page,ct,tab);
+        var model=await store.PageAsync(q,status,page,ct,tab,sourceCategory,from,to);
+        ViewBag.SourceBulkActions=SourceSyncBulk.Actions.Where(x=>SourceSyncBulk.Allowed(actor,x)).ToArray();
         if(fragment)return PartialView("_Results",model);
         ViewBag.Categories=await db.Categories.AsNoTracking().Where(x=>actor.CategoryIds==null||actor.CategoryIds.Contains(x.Id)).OrderBy(x=>x.SortOrder).ToListAsync(ct);
         return View(model);

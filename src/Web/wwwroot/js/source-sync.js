@@ -3,16 +3,17 @@
     const results = document.querySelector('[data-sync-results]');
     let refreshing = false;
     async function refresh() {
-        if (!results || refreshing || document.hidden) return;
+        if (!results || refreshing || document.hidden || document.documentElement.dataset.sourceBulkBusy === 'true') return;
         refreshing = true;
         try {
             const url = new URL(location.href); url.searchParams.set('fragment', 'true');
             const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
-            if (response.ok && !response.redirected) results.innerHTML = await response.text();
+            if (response.ok && !response.redirected) { results.innerHTML = await response.text(); document.dispatchEvent(new Event('source-sync-refreshed')); }
         } catch { /* Keep the last real result; do not report a successful check. */ }
         finally { refreshing = false; }
     }
     document.addEventListener('submit', async event => {
+        if (document.documentElement.dataset.sourceBulkBusy === 'true' && event.target.closest?.('[data-sync-form], #sync-filter')) { event.preventDefault(); return; }
         const form = event.target;
         if (form instanceof HTMLFormElement && form.id === 'sync-filter') {
             event.preventDefault();
@@ -39,7 +40,9 @@
     document.addEventListener('click', async event => {
         const link = event.target.closest?.('[data-sync-results] .pagination a, .source-sync-tabs a');
         if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+        if (document.documentElement.dataset.sourceBulkBusy === 'true') { event.preventDefault(); return; }
         event.preventDefault(); history.replaceState(null, '', link.href); const tab = document.querySelector('#sync-filter [name=tab]'); if (tab) tab.value = new URL(link.href).searchParams.get('tab') || 'pending'; await refresh();
     });
     if (results) window.setInterval(refresh, 10000);
+    document.addEventListener('source-sync-refresh', refresh);
 })();

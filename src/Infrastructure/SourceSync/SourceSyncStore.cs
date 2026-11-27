@@ -6,9 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LandPortal.Infrastructure;
 
-public sealed record SourceSyncRow(Guid Id,string Title,string Url,string Status,DateTimeOffset UpdatedUtc,string? Error,string? ContentId=null);
+public sealed record SourceSyncRow(Guid Id,string Title,string Url,string Status,DateTimeOffset UpdatedUtc,string? Error,string? ContentId=null,string Stamp="");
 public sealed record SourceSyncPage(SourceSyncSettings Settings,IReadOnlyList<SourceSyncRow> Items,int Total,int Page,string? Query,string? Status,
-    Dictionary<string,int> Counts,bool Running,DateTimeOffset? NextCheck,string Tab="pending");
+    Dictionary<string,int> Counts,bool Running,DateTimeOffset? NextCheck,string Tab="pending",int? SourceCategory=null,DateOnly? From=null,DateOnly? To=null);
 
 public sealed class SourceSyncStore(PortalDbContext db)
 {
@@ -85,7 +85,7 @@ public sealed class SourceSyncStore(PortalDbContext db)
         item.UpdatedUtc=DateTimeOffset.UtcNow;
         db.AuditLogs.Add(new(){Actor=user,Action="SourceSync."+action,Detail=id.ToString()});await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
     }
-    public async Task<SourceSyncPage> PageAsync(string? q,string? status,int page,CancellationToken ct=default,string tab="pending")
+    public async Task<SourceSyncPage> PageAsync(string? q,string? status,int page,CancellationToken ct=default,string tab="pending",int? sourceCategory=null,DateOnly? from=null,DateOnly? to=null)
     {
         page=Math.Clamp(page,1,10000);
         tab=tab is "review" or "history"?tab:"pending";
@@ -97,11 +97,29 @@ public sealed class SourceSyncStore(PortalDbContext db)
             rows.Where(x=>x.i.Status=="Queued"||x.i.Status=="Ready"||x.i.Status=="Changed");
         if(!string.IsNullOrWhiteSpace(q))rows=rows.Where(x=>PortalDbContext.JsonValue(x.r.Checkpoint,"$.Title")!.Contains(q));
         if(!string.IsNullOrWhiteSpace(status))rows=rows.Where(x=>x.i.Status==status);
+        if(sourceCategory.HasValue){var category=sourceCategory.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);rows=rows.Where(x=>PortalDbContext.JsonValue(x.r.Checkpoint,"$.Source.PrimaryCategoryId")==category);}
+        if(from.HasValue){var date=from.Value.ToString("yyyy-MM-dd");rows=rows.Where(x=>string.Compare(PortalDbContext.JsonValue(x.r.Checkpoint,"$.Source.PublishedDate"),date)>=0);}
+        if(to.HasValue){var date=to.Value.ToString("yyyy-MM-dd");rows=rows.Where(x=>string.Compare(PortalDbContext.JsonValue(x.r.Checkpoint,"$.Source.PublishedDate"),date)<=0);}
         var total=await rows.CountAsync(ct);
-        var result=await rows.OrderByDescending(x=>x.i.UpdatedUtc).ThenBy(x=>x.i.Id).Skip((page-1)*20).Take(20)
-            .Select(x=>new SourceSyncRow(x.i.Id,PortalDbContext.JsonValue(x.r.Checkpoint,"$.Title")??"",x.i.SourceUrl,x.i.Status,x.i.UpdatedUtc,x.i.Error,PortalDbContext.JsonValue(x.r.Checkpoint,"$.ContentId"))).ToListAsync(ct);
+        var materialized=await rows.OrderByDescending(x=>x.i.UpdatedUtc).ThenBy(x=>x.i.Id).Skip((page-1)*20).Take(20).ToListAsync(ct);
+        var result=materialized.Select(x=>{var data=SourceSyncPolicy.Read<SourceSyncCheckpoint>(x.r.Checkpoint);return new SourceSyncRow(x.i.Id,data.Title,x.i.SourceUrl,x.i.Status,x.i.UpdatedUtc,x.i.Error,data.ContentId?.ToString(),SourceSyncBulk.Stamp(x.i,data));}).ToList();
         var job=await db.Jobs.AsNoTracking().SingleOrDefaultAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey,ct);
-        return new(await SettingsAsync(ct),result,total,page,q,status,counts,job?.Status=="Running"&&job.LeaseUntilUtc>DateTimeOffset.UtcNow,job?.AvailableUtc,tab);
+        return new(await SettingsAsync(ct),result,total,page,q,status,counts,job?.Status=="Running"&&job.LeaseUntilUtc>DateTimeOffset.UtcNow,job?.AvailableUtc,tab,sourceCategory,from,to);
+    }
+    // Wake only an existing unfinished capacity-blocked cycle. Never reset backoff,
+    // a live lease, source checkpoint or request budget.
+    public async Task ResumeAfterCapacityAsync(CancellationToken ct=default)
+    {
+        db.ChangeTracker.Clear();await using var tx=await db.Database.BeginTransactionAsync(ct);
+        await LockAsync(db,SourceSyncPolicy.SweepKey,ct);await LockAsync(db,SourceSyncPolicy.SettingsKey,ct);
+        var settings=await SettingsAsync(ct);
+        var job=await db.Jobs.SingleOrDefaultAsync(x=>x.IdempotencyKey==SourceSyncPolicy.SweepKey,ct);
+        if(settings.Cycle is {FinishedUtc:null,WaitingForCapacity:true} cycle && settings.ConsecutiveFailures==0 && job is {Status:"Requested" or "Waiting"})
+        {
+            var count=await (from i in db.CrawlItems join r in db.CrawlRuns on i.CrawlRunId equals r.Id where r.Status==SourceSyncPolicy.RunStatus && (i.Status=="Queued"||i.Status=="Ready"||i.Status=="Review"||i.Status=="Error") select i.Id).CountAsync(ct);
+            if(count<SourceSyncPolicy.QueueLimit){cycle.WaitingForCapacity=false;job.Status="Requested";job.AvailableUtc=DateTimeOffset.UtcNow.AddSeconds(20);await WriteSettingsAsync(settings,ct);await db.SaveChangesAsync(ct);}
+        }
+        await tx.CommitAsync(ct);
     }
     public async Task<(CrawlItem Item,SourceSyncCheckpoint Data)> ReadAsync(Guid id,CancellationToken ct=default)
     {
